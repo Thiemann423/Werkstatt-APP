@@ -58,26 +58,35 @@
       if (pdfGenerated) return;
       pdfGenerated = true;
 
-      // Zeige Bestätigung zuerst
       const confirmation = document.getElementById("confirmationMessage");
       confirmation.style.display = "block";
 
-      // Werte einsammeln
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       const auftragID = document.getElementById("auftragID").value;
       const name = document.getElementById("name").value;
-      const geraet = document.getElementById("gerät").value;
+      const techniker1 = document.getElementById("techniker1").value;
+      const techniker2 = document.getElementById("techniker2").value;
+      const maschinenausfall = document.querySelector('input[name="ausfall"]:checked')?.value || "";
+      const ausfallzeit = document.getElementById("ausfallzeit").value;
+      const maschine = document.getElementById("maschine").value;
+      const anlagenteil = document.getElementById("anlagenteil").value;
+      const sonstiges = document.getElementById("sonstiges").value;
       const beschreibung = document.getElementById("beschreibung").value;
 
       doc.text("Reparaturauftrag", 10, 10);
       doc.text(`Auftrags-ID: ${auftragID}`, 10, 20);
       doc.text(`Name: ${name}`, 10, 30);
-      doc.text(`Gerät: ${geraet}`, 10, 40);
-      doc.text("Fehlerbeschreibung:", 10, 50);
-      doc.text(beschreibung, 10, 60);
+      doc.text(`Techniker 1: ${techniker1}`, 10, 40);
+      doc.text(`Techniker 2: ${techniker2}`, 10, 50);
+      doc.text(`Maschinenausfall: ${maschinenausfall}`, 10, 60);
+      doc.text(`Ausfallzeit: ${ausfallzeit}`, 10, 70);
+      doc.text(`Maschine: ${maschine}`, 10, 80);
+      doc.text(`Anlagenteil: ${anlagenteil}`, 10, 90);
+      doc.text(`Sonstiges: ${sonstiges}`, 10, 100);
+      doc.text("Fehlerbeschreibung:", 10, 110);
+      doc.text(beschreibung, 10, 120);
 
-      // PDF speichern nach kurzer Verzögerung
       setTimeout(() => {
         doc.save(`${auftragID}.pdf`);
         setTimeout(() => {
@@ -103,8 +112,29 @@
     <label for="name">Name:</label>
     <input type="text" id="name" name="name" required><br><br>
 
-    <label for="gerät">Gerät:</label>
-    <input type="text" id="gerät" name="gerät" required><br><br>
+    <label for="techniker1">Techniker 1:</label>
+    <input type="text" id="techniker1" name="techniker1" required><br><br>
+
+    <label for="techniker2">Techniker 2 (optional):</label>
+    <input type="text" id="techniker2" name="techniker2"><br><br>
+
+    <label>Maschinenausfall:</label>
+    <input type="radio" id="ausfallJa" name="ausfall" value="Ja">
+    <label for="ausfallJa">Ja</label>
+    <input type="radio" id="ausfallNein" name="ausfall" value="Nein">
+    <label for="ausfallNein">Nein</label><br><br>
+
+    <label for="ausfallzeit">Ausfallzeit:</label>
+    <input type="text" id="ausfallzeit" name="ausfallzeit"><br><br>
+
+    <label for="maschine">Maschine:</label>
+    <input type="text" id="maschine" name="maschine"><br><br>
+
+    <label for="anlagenteil">Anlagenteil:</label>
+    <input type="text" id="anlagenteil" name="anlagenteil"><br><br>
+
+    <label for="sonstiges">Sonstiges:</label>
+    <input type="text" id="sonstiges" name="sonstiges"><br><br>
 
     <label for="beschreibung">Fehlerbeschreibung:</label>
     <textarea id="beschreibung" name="beschreibung" required></textarea><br><br>
