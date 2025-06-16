@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reparaturauftrag speichern</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.32.0/js/msal-browser.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea { width: 100%; height: 120px; }
+    button { margin-top: 10px; padding: 10px; font-size: 16px; }
+    pre { margin-top: 15px; background: #f0f0f0; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h2>📄 Reparaturauftrag</h2>
+  <textarea id="desc" placeholder="Beschreibung der Reparatur..."></textarea><br>
+  <button onclick="uploadPDF()">✅ Auftrag abschließen & speichern</button>
+  <pre id="log" style="color: green;"></pre>
+
+  <script>
+    const msalConfig = {
+      auth: {
+        clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+        authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+        redirectUri: "https://thiemann423.github.io/Werkstatt-APP/index_onedrive_integriert.html"
+      }
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    const loginRequest = { scopes: ["Files.ReadWrite"] };
+    const log = msg => document.getElementById("log").textContent += "\n" + msg;
+
+    async function uploadPDF() {
+      log("🟢 Starte PDF-Erstellung...");
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const text = document.getElementById("desc").value || "(leer)";
+      doc.setFontSize(16);
+      doc.text("Reparaturauftrag", 20, 20);
+      doc.setFontSize(12);
+      doc.text("Beschreibung:", 20, 30);
+      doc.text(text, 20, 40);
+
+      const pdfBlob = doc.output("blob");
+      const timestamp = Date.now();
+      const filename = `Reparaturauftrag_${timestamp}.pdf`;
+
+      try {
+        log("🟡 Starte Authentifizierung...");
+        const loginResp = await msalInstance.loginPopup(loginRequest);
+        const account = loginResp.account;
+        msalInstance.setActiveAccount(account);
+
+        const tokenResp = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
+        const accessToken = tokenResp.accessToken;
+
+        log("📤 Lade PDF zu OneDrive hoch...");
+        const uploadUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/" + filename + ":/content";
+        const response = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            Authorization: "Bearer " + accessToken,
+            "Content-Type": "application/pdf"
+          },
+          body: pdfBlob
+        });
+
+        if (response.ok) {
+          log("✅ Erfolgreich in OneDrive gespeichert als " + filename);
+          setTimeout(() => window.close(), 3000);
+        } else {
+          const errText = await response.text();
+          log("❌ Fehler beim Upload: " + errText);
+        }
+      } catch (error) {
+        log("❌ Fehler: " + (error.message || error));
+      }
+    }
+  </script>
+</body>
+</html>
