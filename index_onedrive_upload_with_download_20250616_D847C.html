@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>Reparaturauftrag</title>
+    <script src="https://alcdn.msauth.net/browser/2.34.0/js/msal-browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>Reparaturauftrag erfassen</h1>
+    <label for="description">Beschreibung:</label><br>
+    <textarea id="description" rows="5" cols="50" placeholder="Beschreibung der Reparatur..."></textarea><br><br>
+    <button onclick="saveReport()">✅ Auftrag abschließen & speichern</button>
+
+    <div id="status" style="margin-top: 20px; font-family: monospace;"></div>
+
+    <script>
+        const statusBox = document.getElementById("status");
+        const CLIENT_ID = "800b6d33-1917-4b4f-abf4-162094f8c862";
+        const TENANT_ID = "f54f53bb-d0ff-4b78-bcf4-4aeeeb924428";
+        const REDIRECT_URI = "https://thiemann423.github.io/Werkstatt-APP/index_onedrive_upload_with_download_20250616_D847C.html";
+
+        function logStatus(text, color = "black") {
+            const el = document.createElement("div");
+            el.textContent = text;
+            el.style.color = color;
+            statusBox.appendChild(el);
+        }
+
+        async function saveReport() {
+            logStatus("🟦 PDF-Erstellung gestartet...");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const beschreibung = document.getElementById("description").value;
+            const auftragsId = "REP-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+            doc.text("Reparaturauftrag", 10, 10);
+            doc.text("Auftrags-ID: " + auftragsId, 10, 20);
+            doc.text("Beschreibung:", 10, 30);
+            doc.text(beschreibung || "(keine Angabe)", 10, 40);
+
+            const blob = doc.output("blob");
+            const fileName = auftragsId + ".pdf";
+
+            // Lokalen Download starten
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            link.click();
+            logStatus("✅ PDF wurde lokal gespeichert.", "green");
+
+            // Placeholder für OneDrive Upload
+            logStatus("📦 PDF-Blob erzeugt, bereite OneDrive-Upload vor...");
+            // Hier wäre die OneDrive API Integration (getToken + Upload)
+        }
+    </script>
+</body>
+</html>
