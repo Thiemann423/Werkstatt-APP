@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>OneDrive PDF Upload Test</title>
+  <script src="https://alcdn.msauth.net/browser/2.32.0/js/msal-browser.min.js"></script>
+</head>
+<body>
+  <h2>📄 OneDrive PDF Upload Test</h2>
+  <textarea id="desc" rows="5" cols="40" placeholder="Beschreibung..."></textarea><br>
+  <button onclick="saveToOneDrive()">PDF erzeugen & hochladen</button>
+  <pre id="log" style="color:green;"></pre>
+
+  <script>
+    const msalConfig = {
+      auth: {
+        clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+        authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+        redirectUri: "https://thiemann423.github.io/Werkstatt-APP/index_onedrive_upload_test_20250616_084303.html"
+      }
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    const loginRequest = {
+      scopes: ["Files.ReadWrite"]
+    };
+
+    function log(msg) {
+      document.getElementById("log").textContent += "\n" + msg;
+    }
+
+    async function saveToOneDrive() {
+      log("🟢 Starte PDF-Erstellung...");
+      const text = document.getElementById("desc").value;
+      const pdfBlob = new Blob([`Reparaturbeschreibung:\n\n${text}`], { type: "application/pdf" });
+
+      log("📦 PDF erstellt, beginne Login...");
+
+      try {
+        const loginResponse = await msalInstance.loginPopup(loginRequest);
+        const account = loginResponse.account;
+        msalInstance.setActiveAccount(account);
+
+        const tokenResponse = await msalInstance.acquireTokenSilent({
+          ...loginRequest,
+          account
+        });
+
+        log("🔐 Token erhalten. Sende an OneDrive...");
+
+        const uploadUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/UploadTest_" + Date.now() + ".pdf:/content";
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${tokenResponse.accessToken}`,
+            "Content-Type": "application/pdf"
+          },
+          body: pdfBlob
+        });
+
+        if (uploadResponse.ok) {
+          log("✅ PDF erfolgreich in OneDrive gespeichert!");
+        } else {
+          const err = await uploadResponse.text();
+          log("❌ Fehler beim Upload: " + err);
+        }
+      } catch (err) {
+        log("❌ Fehler: " + err.message || err.toString());
+      }
+    }
+  </script>
+</body>
+</html>
