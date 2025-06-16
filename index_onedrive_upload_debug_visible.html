@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Reparaturauftrag</title>
+    <script src="https://alcdn.msauth.net/browser/2.33.0/js/msal-browser.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; }
+        #status { margin-top: 1rem; color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Reparaturauftrag</h1>
+    <p>Auftrags-ID: <span id="auftragId"></span></p>
+    <textarea id="text" rows="5" cols="50">Beschreibung der Reparatur...</textarea><br><br>
+    <button onclick="abschliessen()">Auftrag abschließen & hochladen</button>
+    <div id="status"></div>
+
+    <script>
+        const msalConfig = {
+            auth: {
+                clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+                authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+                redirectUri: window.location.href
+            }
+        };
+        const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+        async function login() {
+            const result = await msalInstance.loginPopup({
+                scopes: ["Files.ReadWrite.All", "User.Read", "offline_access"]
+            });
+            return result.accessToken;
+        }
+
+        function generateAuftragsId() {
+            const date = new Date();
+            const ymd = date.toISOString().slice(0, 10).replace(/-/g, '');
+            const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+            return `REP-${ymd}-${suffix}`;
+        }
+
+        async function abschliessen() {
+            const auftragsId = generateAuftragsId();
+            document.getElementById("auftragId").textContent = auftragsId;
+
+            const text = document.getElementById("text").value;
+            const blob = new Blob([`Auftrags-ID: ${auftragsId}\n\n${text}`], { type: "application/pdf" });
+            const fileName = `${auftragsId}.pdf`;
+
+            try {
+                const token = await login();
+                const date = new Date();
+                const jahr = date.getFullYear();
+                const monat = String(date.getMonth() + 1).padStart(2, '0');
+                const pfad = `/drive/root:/Reparatur-Aufträge/${jahr}/${monat}/${fileName}:/content`;
+
+                const res = await fetch("https://graph.microsoft.com/v1.0" + pfad, {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/pdf"
+                    },
+                    body: blob
+                });
+
+                if (res.ok) {
+                    document.getElementById("status").textContent = "✅ PDF erfolgreich in OneDrive gespeichert!";
+                } else {
+                    const error = await res.json();
+                    console.error("Graph API Fehler:", error);
+                    document.getElementById("status").textContent = "❌ Fehler beim Hochladen: " + error.error.message;
+                }
+            } catch (e) {
+                console.error("Login oder Upload-Fehler:", e);
+                document.getElementById("status").textContent = "❌ Fehler: " + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
