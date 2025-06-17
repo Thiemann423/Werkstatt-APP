@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Reparaturauftrag Upload</title>
+  <script src="https://alcdn.msauth.net/browser/2.32.0/js/msal-browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <h1>✅ Reparaturauftrag abschließen</h1>
+  <p>Bitte klicke auf den Button, um den Auftrag als PDF zu speichern und auf OneDrive hochzuladen.</p>
+  <button id="uploadBtn">📤 Auftrag speichern & hochladen</button>
+  <div id="statusMessage" style="margin-top: 20px; font-weight: bold;"></div>
+
+  <script>
+    const msalConfig = {
+      auth: {
+        clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+        authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+        redirectUri: "https://thiemann423.github.io/Werkstatt-APP/"
+      }
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    const loginRequest = { scopes: ["Files.ReadWrite", "User.Read"] };
+
+    async function uploadToOneDrive(fileName, blob) {
+      try {
+        const loginResponse = await msalInstance.loginPopup(loginRequest);
+        msalInstance.setActiveAccount(loginResponse.account);
+        const tokenResponse = await msalInstance.acquireTokenSilent({
+          ...loginRequest,
+          account: loginResponse.account
+        });
+
+        const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${fileName}:/content`;
+        const response = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            Authorization: "Bearer " + tokenResponse.accessToken,
+            "Content-Type": "application/pdf"
+          },
+          body: blob
+        });
+
+        return response.ok;
+      } catch (error) {
+        document.getElementById("statusMessage").textContent = "❌ Fehler: " + error.message;
+        throw error;
+      }
+    }
+
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const canvas = await html2canvas(document.body);
+      const imgData = canvas.toDataURL("image/png");
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      const width = pdf.internal.pageSize.getWidth();
+      const height = width / (canvas.width / canvas.height);
+      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+      const blob = pdf.output("blob");
+      const fileName = "auftrag_" + new Date().toISOString().split("T")[0] + ".pdf";
+
+      document.getElementById("statusMessage").textContent = "⏳ Hochladen…";
+
+      const success = await uploadToOneDrive(fileName, blob);
+      document.getElementById("statusMessage").textContent = success
+        ? "✅ Erfolgreich in OneDrive gespeichert!"
+        : "❌ Upload fehlgeschlagen.";
+    });
+  </script>
+</body>
+</html>
