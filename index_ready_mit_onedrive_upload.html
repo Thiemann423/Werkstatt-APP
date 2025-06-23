@@ -865,10 +865,7 @@ async function uploadToOneDrive(filename, blob) {
     try {
       const accounts = msalInstance.getAllAccounts();
       if (accounts.length === 0) {
-        const loginResponse = await msalInstance.loginPopup({
-          scopes: ["Files.ReadWrite.All"]
-        });
-        console.log("Login success", loginResponse);
+        await msalInstance.loginPopup({ scopes: ["Files.ReadWrite.All"] });
       }
       const account = msalInstance.getAllAccounts()[0];
       const tokenResponse = await msalInstance.acquireTokenSilent({
@@ -876,7 +873,6 @@ async function uploadToOneDrive(filename, blob) {
         account: account
       });
       accessToken = tokenResponse.accessToken;
-      console.log("Token acquired");
     } catch (error) {
       console.error("Token acquisition failed", error);
       alert("Anmeldung bei Microsoft fehlgeschlagen.");
@@ -892,24 +888,64 @@ async function uploadToOneDrive(filename, blob) {
       alert("Kein Zugriffstoken verfügbar.");
       return false;
     }
-    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`;
 
-    const response = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/pdf"
-      },
-      body: blob
-    });
+    try {
+      const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`;
 
-    if (!response.ok) {
-      console.error("Upload fehlgeschlagen", await response.text());
+      const response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/pdf"
+        },
+        body: blob
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Upload fehlgeschlagen", errorText);
+        alert("❌ Upload fehlgeschlagen:
+" + errorText);
+        return false;
+      }
+
+      console.log("✅ Upload erfolgreich");
+      return true;
+    } catch (err) {
+      console.error("Fehler beim Upload:", err);
+      alert("❌ Fehler beim Upload:
+" + err.message);
       return false;
     }
-
-    return true;
   }
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const startTimeInput = document.getElementById("startzeit");
+    const endTimeInput = document.getElementById("endzeit");
+    const durationInput = document.getElementById("dauer");
+
+    function calculateDuration() {
+        const start = startTimeInput.value;
+        const end = endTimeInput.value;
+        if (start && end) {
+            const [startHours, startMinutes] = start.split(":").map(Number);
+            const [endHours, endMinutes] = end.split(":").map(Number);
+            const startDate = new Date(0, 0, 0, startHours, startMinutes);
+            const endDate = new Date(0, 0, 0, endHours, endMinutes);
+            let diff = (endDate - startDate) / (1000 * 60 * 60);
+            if (diff < 0) diff += 24; // Über Mitternacht
+            durationInput.value = diff.toFixed(2) + " Stunden";
+        }
+    }
+
+    if (startTimeInput && endTimeInput && durationInput) {
+        startTimeInput.addEventListener("input", calculateDuration);
+        endTimeInput.addEventListener("input", calculateDuration);
+    }
+});
 </script>
 
 </body>
