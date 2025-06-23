@@ -856,9 +856,8 @@ const msalConfig = {
     redirectUri: window.location.href
   }
 };
-
 const msalInstance = new msal.PublicClientApplication(msalConfig);
-let accessToken;
+let accessToken = "";
 
 async function signInAndAcquireToken() {
   try {
@@ -872,17 +871,17 @@ async function signInAndAcquireToken() {
       account: account
     });
     accessToken = tokenResponse.accessToken;
-  } catch (error) {
+  } catch (e) {
     alert("❌ Anmeldung bei Microsoft fehlgeschlagen.");
   }
 }
 
-window.addEventListener("load", () => {
-  signInAndAcquireToken();
-  initSignaturePad("unterschrift_abnahme");
-  initSignaturePad("unterschrift_technik");
-  setupTimeDurationCalc();
-});
+function isCanvasEmpty(canvas) {
+  const blank = document.createElement("canvas");
+  blank.width = canvas.width;
+  blank.height = canvas.height;
+  return canvas.toDataURL() === blank.toDataURL();
+}
 
 function initSignaturePad(id) {
   const canvas = document.getElementById(id);
@@ -892,7 +891,6 @@ function initSignaturePad(id) {
   canvas.height = canvas.offsetHeight;
   let drawing = false;
   canvas.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
     drawing = true;
     const rect = canvas.getBoundingClientRect();
     ctx.beginPath();
@@ -910,64 +908,51 @@ function initSignaturePad(id) {
 }
 
 function setupTimeDurationCalc() {
-  const startTimeInput = document.getElementById("startzeit");
-  const endTimeInput = document.getElementById("endzeit");
-  const durationInput = document.getElementById("dauer");
-  function calculateDuration() {
-    const start = startTimeInput.value;
-    const end = endTimeInput.value;
-    if (start && end) {
-      const [startHours, startMinutes] = start.split(":").map(Number);
-      const [endHours, endMinutes] = end.split(":").map(Number);
-      const startDate = new Date(0, 0, 0, startHours, startMinutes);
-      const endDate = new Date(0, 0, 0, endHours, endMinutes);
-      let diff = (endDate - startDate) / (1000 * 60 * 60);
+  const start = document.getElementById("startzeit");
+  const end = document.getElementById("endzeit");
+  const result = document.getElementById("dauer");
+  if (!(start && end && result)) return;
+
+  function calc() {
+    const s = start.value, e = end.value;
+    if (s && e) {
+      const [sh, sm] = s.split(":").map(Number);
+      const [eh, em] = e.split(":").map(Number);
+      let startDate = new Date(0,0,0,sh,sm);
+      let endDate = new Date(0,0,0,eh,em);
+      let diff = (endDate - startDate) / (1000*60*60);
       if (diff < 0) diff += 24;
-      durationInput.value = diff.toFixed(2) + " Stunden";
+      result.value = diff.toFixed(2) + " Stunden";
     }
   }
-  startTimeInput.addEventListener("input", calculateDuration);
-  endTimeInput.addEventListener("input", calculateDuration);
-}
 
-function isCanvasEmpty(canvas) {
-  const blank = document.createElement("canvas");
-  blank.width = canvas.width;
-  blank.height = canvas.height;
-  return canvas.toDataURL() === blank.toDataURL();
+  start.addEventListener("change", calc);
+  end.addEventListener("change", calc);
 }
 
 async function uploadToOneDrive(filename, blob) {
-  if (!accessToken) {
-    alert("Kein Zugriffstoken verfügbar.");
-    return false;
-  }
+  if (!accessToken) return false;
   try {
-    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`;
-    const response = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/pdf"
-      },
-      body: blob
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      alert("❌ Upload fehlgeschlagen:
-" + err);
-      return false;
-    }
-    return true;
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/pdf"
+        },
+        body: blob
+      }
+    );
+    return res.ok;
   } catch (err) {
-    alert("❌ Fehler beim Upload:
-" + err.message);
+    console.error("Upload Fehler:", err);
     return false;
   }
 }
 
 async function generatePDFAndFinish() {
-  const requiredFields = [
+  const required = [
     { id: "bearbeitet_am", name: "Bearbeitet am" },
     { id: "techniker1", name: "Techniker 1" },
     { id: "maschine", name: "Maschine" },
@@ -979,46 +964,47 @@ async function generatePDFAndFinish() {
     { id: "reinigungsart_zusatz", name: "Reinigungsart" },
     { id: "ort_datum", name: "Ort / Datum" }
   ];
+
   const missing = [];
-  for (const field of requiredFields) {
-    const el = document.getElementById(field.id);
+  required.forEach(f => {
+    const el = document.getElementById(f.id);
     if (!el || !el.value || el.value.trim() === "" || el.value === "Bitte auswählen") {
-      missing.push(field.name);
+      missing.push(f.name);
     }
-  }
-  const sigTech = document.getElementById("unterschrift_technik");
-  const sigAbnahme = document.getElementById("unterschrift_abnahme");
-  if (isCanvasEmpty(sigTech)) missing.push("Unterschrift MA Technik");
-  if (isCanvasEmpty(sigAbnahme)) missing.push("Unterschrift MA Abnahme");
+  });
+
+  const canvas1 = document.getElementById("unterschrift_technik");
+  const canvas2 = document.getElementById("unterschrift_abnahme");
+  if (isCanvasEmpty(canvas1)) missing.push("Unterschrift MA Technik");
+  if (isCanvasEmpty(canvas2)) missing.push("Unterschrift MA Abnahme");
+
   if (missing.length > 0) {
-    alert("❌ Auftrag kann nicht abgeschlossen werden. Fehlende Eingaben:
+    alert("❌ Auftrag kann nicht abgeschlossen werden. Fehlende Angaben:
 
 " + missing.join("\n"));
     return;
   }
 
-  const formElement = document.getElementById("pdfExportContainer");
+  const el = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
 
-  const images = formElement.querySelectorAll("img");
-  await Promise.all(Array.from(images).map(img => {
-    if (img.complete) return Promise.resolve();
-    return new Promise(resolve => {
-      img.onload = img.onerror = resolve;
-    });
-  }));
+  const imgs = el.querySelectorAll("img");
+  await Promise.all(Array.from(imgs).map(img => img.complete ? Promise.resolve() : new Promise(r => {
+    img.onload = img.onerror = r;
+  })));
 
   const opt = {
     margin: 5,
-    filename: `${auftragId}.pdf`,
+    filename: auftragId + ".pdf",
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, scrollY: 0 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
-  const pdfBlob = await html2pdf().set(opt).from(formElement).outputPdf('blob');
-  const success = await uploadToOneDrive(`${auftragId}.pdf`, pdfBlob);
+  const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
+  const success = await uploadToOneDrive(auftragId + ".pdf", blob);
+
   if (success) {
     document.getElementById("pdfExportContainer").style.display = "none";
     document.getElementById("abschlussScreen").style.display = "flex";
@@ -1028,37 +1014,19 @@ async function generatePDFAndFinish() {
       msg.innerText = "✅ Auftrag erfolgreich in OneDrive gespeichert!";
       msg.style.display = "block";
     }
+  } else {
+    alert("❌ Upload nach OneDrive fehlgeschlagen.");
   }
 }
-</script>
 
+document.addEventListener("DOMContentLoaded", () => {
+  signInAndAcquireToken();
+  initSignaturePad("unterschrift_technik");
+  initSignaturePad("unterschrift_abnahme");
+  setupTimeDurationCalc();
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const startInput = document.getElementById("startzeit");
-    const endInput = document.getElementById("endzeit");
-    const durationField = document.getElementById("dauer");
-
-    function calculateDuration() {
-        const start = startInput.value;
-        const end = endInput.value;
-        if (start && end) {
-            const [sH, sM] = start.split(":").map(Number);
-            const [eH, eM] = end.split(":").map(Number);
-            const startDate = new Date(0, 0, 0, sH, sM);
-            const endDate = new Date(0, 0, 0, eH, eM);
-            let diff = (endDate - startDate) / (1000 * 60 * 60);
-            if (diff < 0) diff += 24;
-            durationField.value = diff.toFixed(2) + " Stunden";
-        } else {
-            durationField.value = "";
-        }
-    }
-
-    if (startInput && endInput && durationField) {
-        startInput.addEventListener("change", calculateDuration);
-        endInput.addEventListener("change", calculateDuration);
-    }
+  const btn = document.getElementById("closeOrderButton");
+  if (btn) btn.addEventListener("click", generatePDFAndFinish);
 });
 </script>
 
