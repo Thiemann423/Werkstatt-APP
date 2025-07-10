@@ -669,11 +669,69 @@ window.addEventListener('load', function() {
     const auftragsID = generateReadableID();
     document.getElementById('auftrag_id').value = auftragsID;
 });
+
 </script>
+
+<!-- ✅ HIER den Login-Hinweis-Block einfügen -->
+<div id="loginNotice" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: #fffbe6; border: 1px solid #e6c200; padding: 1rem 2rem; border-radius: 8px; font-weight: bold; z-index: 10000; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+⚠️ Um in OneDrive speichern zu können, bitte bei Microsoft anmelden.<br/>
+<button onclick="signInAndAcquireToken(true)" style="margin-top: 10px; background-color: #0078d4; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🔐 Jetzt anmelden</button>
+</div>
+<!-- ✅ Ende Login-Hinweis -->
+
 <button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
 <button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
-
 <button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
+
+<!-- ✅ Login-Hinweis-Block -->
+<div id="loginNotice" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: #fffbe6; border: 1px solid #e6c200; padding: 1rem 2rem; border-radius: 8px; font-weight: bold; z-index: 10000; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+⚠️ Um in OneDrive speichern zu können, bitte bei Microsoft anmelden.<br/>
+<button onclick="signInAndAcquireToken(true)" style="margin-top: 10px; background-color: #0078d4; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🔐 Jetzt anmelden</button>
+</div>
+
+<!-- ✅ MSAL Konfiguration & Login Logik -->
+<script>
+const msalConfig = {
+  auth: {
+    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862", // ✅ Deine Client-ID
+    authority: "https://login.microsoftonline.com/common",
+    redirectUri: window.location.href
+  }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+let accessToken = "";
+
+function showLoginNotice() {
+  document.getElementById("loginNotice").style.display = "block";
+}
+
+async function signInAndAcquireToken(interactive = false) {
+  try {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length === 0 && interactive) {
+      await msalInstance.loginPopup({ scopes: ["Files.ReadWrite.All"] });
+    }
+    const account = msalInstance.getAllAccounts()[0];
+    if (!account) {
+      showLoginNotice();
+      return;
+    }
+    const tokenResponse = await msalInstance.acquireTokenSilent({
+      scopes: ["Files.ReadWrite.All"],
+      account
+    });
+    accessToken = tokenResponse.accessToken;
+    document.getElementById("loginNotice").style.display = "none";
+  } catch (e) {
+    console.error(e);
+    showLoginNotice();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  signInAndAcquireToken();
+});
+</script>
 
 
 
@@ -733,37 +791,7 @@ async function generatePDFAndFinish() {
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
-const msalConfig = {
-  auth: {
-    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
-    authority: "https://login.microsoftonline.com/common",
-    redirectUri: window.location.href
-  }
-};
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-let accessToken = "";
 
-async function signInAndAcquireToken(interactive = false) {
-  try {
-    const accounts = msalInstance.getAllAccounts();
-    if (accounts.length === 0 && interactive) {
-      await msalInstance.loginPopup({ scopes: ["Files.ReadWrite.All"] });
-    }
-    const account = msalInstance.getAllAccounts()[0];
-    if (!account) return;
-    const tokenResponse = await msalInstance.acquireTokenSilent({
-      scopes: ["Files.ReadWrite.All"],
-      account
-    });
-    accessToken = tokenResponse.accessToken;
-  } catch (e) {
-    alert("❌ Anmeldung fehlgeschlagen. Bitte erneut versuchen.");
-  }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  signInAndAcquireToken();
-});
 
 // ====================
 // Draft-Funktionen
