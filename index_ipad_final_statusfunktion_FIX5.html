@@ -727,22 +727,7 @@ async function generatePDFAndFinish() {
 }
 </script>
 <script>
-async function uploadToOneDrive(filename, blob) {
-  try {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    return true;
-  } catch (e) {
-    console.error("Fehler beim Speichern:", e);
-    return false;
-  }
-}
+
 </script>
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <script>
