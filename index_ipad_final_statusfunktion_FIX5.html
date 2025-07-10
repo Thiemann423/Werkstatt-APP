@@ -690,10 +690,14 @@ window.addEventListener('load', function() {
 </div>
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
+</script>
+<script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
 <script>
 const msalConfig = {
   auth: {
-    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862", // ✅ Deine Client-ID
+    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
     authority: "https://login.microsoftonline.com/common",
     redirectUri: window.location.href
   }
@@ -732,6 +736,7 @@ document.addEventListener("DOMContentLoaded", () => {
   signInAndAcquireToken();
 });
 </script>
+
 
 
 
@@ -787,10 +792,7 @@ async function generatePDFAndFinish() {
 </script>
 <script>
 
-</script>
-<script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script>
+
 
 
 // ====================
