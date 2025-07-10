@@ -672,6 +672,7 @@ window.addEventListener('load', function() {
 </script>
 <button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
 <button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
+
 <button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
 
 
@@ -1040,6 +1041,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   
 <script>
+<script>
 const folderPath = "Reparatur-Aufträge/Reparatur-Entwürfe";
 const fieldIds = [
     "bearbeitet_am", "techniker1", "techniker2", "maschine", "sonstige_maschine",
@@ -1109,6 +1111,7 @@ async function listDraftsFromOneDrive() {
         }
     } catch (err) {
         console.error("Listen Fehler:", err);
+        alert("❌ Fehler beim Auflisten der Entwürfe.");
     }
     return [];
 }
@@ -1143,9 +1146,7 @@ async function loadDraftFromOneDrive(fileId) {
         alert("❌ Fehler beim Laden des Entwurfs.");
     }
 }
-<!-- viele andere Scripte -->
 
-<script>
 async function showDraftList() {
     const drafts = await listDraftsFromOneDrive();
     if (drafts.length === 0) {
@@ -1167,6 +1168,5 @@ async function showDraftList() {
     }
 }
 </script>
-
 </body>
 </html>
