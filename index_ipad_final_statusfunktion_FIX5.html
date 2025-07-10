@@ -392,8 +392,10 @@
 </div>
 <div class="section">
 <label for="ort_datum">Ort / Datum:</label>
-<input 11="" id="ort_datum" name="ort_datum" type="text"/>.
-./div&gt;<div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">Erstellt: M.Thiemann       Datum: 18.06.2025
+<input id="ort_datum" name="ort_datum" type="text"/>
+</div>
+<div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">Erstellt: M.Thiemann       Datum: 18.06.2025
+
 Geprüft: M. Hafermalz       Datum: 24.06.2025
 Freigegeben: F. Pieper  Datum: 24.06.2025</div>
 <style>
@@ -499,39 +501,7 @@ button.clear-signature {
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-function initSignaturePad(id) {
-  const canvas = document.getElementById(id);
-  if (!canvas) return;
-  const clearBtn = document.getElementById(id + "_clear");
-  const ctx = canvas.getContext("2d");
-  function resizeCanvas() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-  }
-  resizeCanvas();
-  let drawing = false;
-  canvas.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    drawing = true;
-    const rect = canvas.getBoundingClientRect();
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if (!drawing) return;
-    const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
-  });
-  canvas.addEventListener("pointerup", () => {
-    drawing = false;
-  });
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
-  }
-}
+
 window.onload = () => {
   initSignaturePad("unterschrift_abnahme");
   initSignaturePad("unterschrift_technik");
@@ -583,9 +553,27 @@ document.getElementById("foto").addEventListener("change", function(event) {
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    const startTimeInput = document.getElementById("startTime");
-    const endTimeInput = document.getElementById("endTime");
-    const durationInput = document.getElementById("duration");
+    // ========================
+    // 🟢 Felder speichern
+    // ========================
+    const fieldIds = [
+        "bearbeitet_am", "techniker1", "techniker2", "maschine", "sonstige_maschine",
+        "anlagenteil", "sonstige_anlagenteil", "startzeit", "endzeit", "dauer", "abschlussdatum",
+        "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
+    ];
+
+    // Beispiel für deine Speicher-Logik
+    // (hier nur Struktur, du hast schon Details oben!)
+    // const jsonStr = JSON.stringify(data, null, 2);
+    // ...
+
+    // ========================
+    // 🟢 Zeitberechnung hinzufügen
+    // ========================
+    const startTimeInput = document.getElementById("startzeit");
+    const endTimeInput = document.getElementById("endzeit");
+    const durationInput = document.getElementById("dauer");
+
     function calculateDuration() {
         const start = startTimeInput.value;
         const end = endTimeInput.value;
@@ -599,11 +587,14 @@ document.addEventListener("DOMContentLoaded", function () {
             durationInput.value = diff.toFixed(2);
         }
     }
+
     if (startTimeInput && endTimeInput && durationInput) {
         startTimeInput.addEventListener("input", calculateDuration);
         endTimeInput.addEventListener("input", calculateDuration);
     }
 });
+</script>
+
 </script>
 <script>
 window.addEventListener("load", function () {
@@ -639,31 +630,6 @@ document.addEventListener("DOMContentLoaded", function() {
         reader.onload = function(e) {
           previewImage.src = e.target.result;
           previewImage.style.display = "block";
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-    deleteButton.addEventListener("click", function() {
-      previewImage.src = "";
-      previewImage.style.display = "none";
-      fileInput.value = "";
-    });
-  }
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-  const fileInput = document.getElementById("photo");
-  const previewImage = document.getElementById("photoPreview");
-  const deleteButton = document.getElementById("deletePhoto");
-  if (fileInput && previewImage && deleteButton) {
-    fileInput.addEventListener("change", function() {
-      const file = fileInput.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          previewImage.src = e.target.result;
-          previewImage.style.display = "block";
           deleteButton.style.display = "inline";
         };
         reader.readAsDataURL(file);
@@ -677,6 +643,7 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 });
+
 </script>
 <script>
 // UUID Generator (v4)
@@ -703,104 +670,17 @@ window.addEventListener('load', function() {
     document.getElementById('auftrag_id').value = auftragsID;
 });
 </script>
-<button type="button" id="saveDraftJsonButton">💾 Entwurf speichern (JSON)</button>
-<button type="button" id="loadDraftJsonButton">📂 Entwurf laden (JSON)</button>
-<button id="closeOrderButton" type="button">Auftrag abschließen & als PDF speichern</button>
-
-<!-- 👉 Hier deine neuen Buttons für OneDrive -->
 <button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
 <button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
+<button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
 
 
-<button id="closeOrderButton" type="button">Auftrag abschließen &amp; als PDF speichern</button><script>
-document.getElementById("generatePDF").addEventListener("click", () => {
-    const element = document.body;
-    const auftragsID = document.getElementById("auftrag_id").value || "Reparaturauftrag";
-    
-const opt = {
-    margin: 0,
-    filename: auftragsID + '.pdf',
-    image: { type: 'jpeg', quality: 1 },
-    html2canvas: { scale: 3, useCORS: true, scrollY: 0 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-};
-    
-    // BLOCKIERT: html2pdf außerhalb der validierten Funktion
-  const uploadSuccess = await // BLOCKIERT: upload außerhalb der validierten Funktion
 
-  if (uploadSuccess) {
-    document.getElementById("pdfExportContainer").style.display = "none";
-    document.getElementById("abschlussScreen").style.display = "flex";
-    localStorage.setItem("auftrag_abgeschlossen", "true");
 
-    const msg = document.getElementById("confirmationMessage");
-    if (msg) {
-      msg.innerText = "✅ Auftrag erfolgreich in OneDrive gespeichert!";
-      msg.style.display = "block";
-    }
-  } else {
-    const msg = document.getElementById("confirmationMessage");
-    if (msg) {
-      msg.innerText = "❌ Upload fehlgeschlagen, bitte später erneut versuchen.";
-      msg.style.display = "block";
-    }
-  }
-}
-</script>
+
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const button = document.getElementById("closeOrderButton");
-  if (!button) return;
 
-  button.addEventListener("click", async () => {
-    const requiredFields = [
-      { id: "bearbeitet_am", name: "Bearbeitet am" },
-      { id: "techniker1", name: "Techniker 1" },
-      { id: "maschine", name: "Maschine" },
-      { id: "anlagenteil", name: "Anlagenteil" },
-      { id: "startzeit", name: "Startzeit" },
-      { id: "endzeit", name: "Endzeit" },
-      { id: "abschlussdatum", name: "Abschlussdatum" },
-      { id: "fehlerbeschreibung", name: "Fehlerbeschreibung" },
-      { id: "reinigungsart_zusatz", name: "Reinigungsart" },
-      { id: "ort_datum", name: "Ort / Datum" }
-    ];
 
-    let missing = [];
-
-    for (const field of requiredFields) {
-      const el = document.getElementById(field.id);
-      if (!el || !el.value || el.value.trim() === "" || el.value === "Bitte auswählen") {
-        missing.push(field.name);
-      }
-    }
-
-    function isCanvasEmpty(canvas) {
-      const blank = document.createElement("canvas");
-      blank.width = canvas.width;
-      blank.height = canvas.height;
-      return canvas.toDataURL() === blank.toDataURL();
-    }
-
-    const sigTech = document.getElementById("unterschrift_technik");
-    const sigAbnahme = document.getElementById("unterschrift_abnahme");
-
-    if (!sigTech || isCanvasEmpty(sigTech)) {
-      missing.push("Unterschrift MA Technik");
-    }
-    if (!sigAbnahme || isCanvasEmpty(sigAbnahme)) {
-      missing.push("Unterschrift MA Abnahme");
-    }
-
-    if (missing.length > 0) {
-      alert("❌ Auftrag kann nicht abgeschlossen werden. Fehlende Eingaben:\n\n" + missing.join("\n"));
-      return;
-    }
-
-    await generatePDFAndFinish();
-  });
-});
 </script>
 <script>
 async function generatePDFAndFinish() {
@@ -900,29 +780,7 @@ function isCanvasEmpty(canvas) {
   return canvas.toDataURL() === blank.toDataURL();
 }
 
-function initSignaturePad(id) {
-  const canvas = document.getElementById(id);
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  canvas.width = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
-  let drawing = false;
-  canvas.addEventListener("pointerdown", (e) => {
-    drawing = true;
-    const rect = canvas.getBoundingClientRect();
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if (!drawing) return;
-    const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
-  });
-  canvas.addEventListener("pointerup", () => {
-    drawing = false;
-  });
-}
+
 
 function setupTimeDurationCalc() {
   const start = document.getElementById("startzeit");
@@ -1163,244 +1021,13 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 </div></div>
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        function update() {
-            if (select.value === "Sonstige") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsausfuehrung", "sonstige_reinigungsausfuehrung");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        function update() {
-            if (select.value === "Sonstige") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsausfuehrung", "sonstige_reinigungsausfuehrung");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstige") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsausfuehrung", "sonstige_reinigungsausfuehrung");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstige") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsausfuehrung", "sonstige_reinigungsausfuehrung");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstiges") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsart_zusatz", "sonstige_reinigungsart_zusatz");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstige" || select.value === "Sonstiges") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsart_zusatz", "sonstige_reinigungsart_zusatz");
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstige" || select.value === "Sonstiges") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
 
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsart_zusatz", "sonstige_reinigungsart_zusatz");
-
-    // Ersetze oder erweitere bestehende Save-Logik:
-    const saveButton = document.getElementById("saveButton");
-    if (saveButton) {
-        saveButton.addEventListener("click", function () {
-            const abgeschlossen = document.getElementById("auftrag_abgeschlossen").checked;
-            const dateStatus = abgeschlossen ? "abgeschlossen" : "offen";
-            const maschine = document.getElementById("maschine")?.value || "Unbekannt";
-            const datum = new Date().toISOString().split("T")[0];
-            const dateiname = `Reparatur_${maschine}_${datum}_${dateStatus}.pdf`;
-
-            // Setze den Dateinamen im versteckten Feld, falls vorhanden
-            const filenameInput = document.getElementById("filename");
-            if (filenameInput) filenameInput.value = dateiname;
-
-            // Optional: Zeige Dateiname in Konsole für Debug
-            console.log("Dateiname gesetzt auf:", dateiname);
-        });
-    }
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function toggleInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        if (!select || !input) return;
-        function update() {
-            if (select.value === "Sonstige" || select.value === "Sonstiges") {
-                input.style.display = "block";
-            } else {
-                input.style.display = "none";
-                input.value = "";
-            }
-        }
-        select.addEventListener("change", update);
-        update();
-    }
-
-    toggleInput("maschine", "sonstige_maschine");
-    toggleInput("anlagenteil", "sonstige_anlagenteil");
-    toggleInput("reinigungsart_zusatz", "sonstige_reinigungsart_zusatz");
-
-    function generateFilename(status) {
-        const maschine = document.getElementById("maschine")?.value || "Unbekannt";
-        const datum = new Date().toISOString().split("T")[0];
-        return `Reparatur_${maschine}_${datum}_${status}.pdf`;
-    }
-
-    function simulateSave(filename) {
-        const filenameInput = document.getElementById("filename");
-        if (filenameInput) filenameInput.value = filename;
-        console.log("Dateiname gesetzt auf:", filename);
-        alert("Dateiname: " + filename + " – Auftrag gespeichert!");
-    }
-
-    // Entwurf speichern (ignoriert Pflichtfelder)
-    const saveDraftBtn = document.getElementById("saveDraftButton");
-    if (saveDraftBtn) {
-        saveDraftBtn.addEventListener("click", function () {
-            const filename = generateFilename("offen_ENTWURF");
-            simulateSave(filename);
-        });
-    }
-
-    // Final speichern (mit Prüfung)
-    const saveFinalBtn = document.getElementById("saveFinalButton");
-    if (saveFinalBtn) {
-        saveFinalBtn.addEventListener("click", function () {
-            const form = document.querySelector("form");
-            if (!form.checkValidity()) {
-                alert("Bitte alle Pflichtfelder ausfüllen!");
-                return;
-            }
-            const abgeschlossen = document.getElementById("auftrag_abgeschlossen").checked;
-            const status = abgeschlossen ? "abgeschlossen" : "offen";
-            const filename = generateFilename(status);
-            simulateSave(filename);
-        });
-    }
-});
-</script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     // Felder, die wir speichern wollen
@@ -1410,15 +1037,7 @@ document.addEventListener("DOMContentLoaded", function () {
         "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
     ];
 
-    // Entwurf speichern
-    document.getElementById("saveDraftJsonButton").addEventListener("click", function () {
-        let data = {};
-        fieldIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                data[id] = el.value;
-            }
-        });
+
 
         const jsonStr = JSON.stringify(data, null, 2);
         const blob = new Blob([jsonStr], { type: "application/json" });
@@ -1434,35 +1053,7 @@ document.addEventListener("DOMContentLoaded", function () {
         alert("✅ Entwurf wurde lokal gespeichert. Danach kannst du ihn auf OneDrive hochladen.");
     });
 
-    // Entwurf laden
-    document.getElementById("loadDraftJsonButton").addEventListener("click", function () {
-        const fileInput = document.createElement("input");
-        fileInput.type = "file";
-        fileInput.accept = ".json";
-        fileInput.onchange = e => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                try {
-                    const data = JSON.parse(event.target.result);
-                    fieldIds.forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el && data[id] !== undefined) {
-                            el.value = data[id];
-                        }
-                    });
-                    alert("✅ Entwurf erfolgreich geladen.");
-                } catch (err) {
-                    alert("❌ Fehler beim Laden der Datei: " + err.message);
-                }
-            };
-            reader.readAsText(file);
-        };
-        fileInput.click();
-    });
-});
+  
 <script>
 const folderPath = "Reparatur-Aufträge/Reparatur-Entwürfe";
 const fieldIds = [
