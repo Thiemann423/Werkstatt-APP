@@ -439,37 +439,6 @@ button.clear-signature {
 <script>
 function initSignaturePad(id) {
   const canvas = document.getElementById(id);
-  const clearBtn = document.getElementById(id + "_clear");
-  const ctx = canvas.getContext("2d");
-  function resizeCanvas() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-  }
-  resizeCanvas();
-  let drawing = false;
-  canvas.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    drawing = true;
-    const rect = canvas.getBoundingClientRect();
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if (!drawing) return;
-    const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
-  });
-  canvas.addEventListener("pointerup", () => {
-    drawing = false;
-  });
-  clearBtn.addEventListener("click", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  });
-}
-<script>
-function initSignaturePad(id) {
-  const canvas = document.getElementById(id);
   const ctx = canvas.getContext("2d");
   
   function resizeCanvas() {
@@ -496,6 +465,10 @@ function initSignaturePad(id) {
   });
 
   canvas.addEventListener("pointerup", () => {
+    drawing = false;
+  });
+
+  canvas.addEventListener("pointerleave", () => {
     drawing = false;
   });
 }
