@@ -705,6 +705,12 @@ window.addEventListener('load', function() {
 </script>
 <button type="button" id="saveDraftJsonButton">💾 Entwurf speichern (JSON)</button>
 <button type="button" id="loadDraftJsonButton">📂 Entwurf laden (JSON)</button>
+<button id="closeOrderButton" type="button">Auftrag abschließen & als PDF speichern</button>
+
+<!-- 👉 Hier deine neuen Buttons für OneDrive -->
+<button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
+<button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
+
 
 <button id="closeOrderButton" type="button">Auftrag abschließen &amp; als PDF speichern</button><script>
 document.getElementById("generatePDF").addEventListener("click", () => {
@@ -1457,6 +1463,133 @@ document.addEventListener("DOMContentLoaded", function () {
         fileInput.click();
     });
 });
+<script>
+const folderPath = "Reparatur-Aufträge/Reparatur-Entwürfe";
+const fieldIds = [
+    "bearbeitet_am", "techniker1", "techniker2", "maschine", "sonstige_maschine",
+    "anlagenteil", "sonstige_anlagenteil", "startzeit", "endzeit", "dauer", "abschlussdatum",
+    "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
+];
+
+async function saveDraftToOneDrive() {
+    const data = {};
+    fieldIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) data[id] = el.value;
+    });
+
+    const filename = `Entwurf_${new Date().toISOString().split("T")[0]}_${Math.random().toString(36).substring(2,6).toUpperCase()}.json`;
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+
+    if (!accessToken) {
+        alert("❌ Nicht bei Microsoft angemeldet.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${filename}:/content`,
+            {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json"
+                },
+                body: blob
+            }
+        );
+
+        if (response.ok) {
+            alert("✅ Entwurf erfolgreich in OneDrive gespeichert!");
+        } else {
+            alert("❌ Fehler beim Hochladen in OneDrive.");
+        }
+    } catch (err) {
+        console.error("Upload Fehler:", err);
+        alert("❌ Fehler beim Hochladen in OneDrive.");
+    }
+}
+
+async function listDraftsFromOneDrive() {
+    if (!accessToken) {
+        alert("❌ Nicht bei Microsoft angemeldet.");
+        return [];
+    }
+
+    try {
+        const response = await fetch(
+            `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}:/children`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        const data = await response.json();
+        if (data.value) {
+            return data.value.filter(file => file.name.endsWith(".json"));
+        }
+    } catch (err) {
+        console.error("Listen Fehler:", err);
+    }
+    return [];
+}
+
+async function loadDraftFromOneDrive(fileId) {
+    if (!accessToken) {
+        alert("❌ Nicht bei Microsoft angemeldet.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        const text = await response.text();
+        const data = JSON.parse(text);
+
+        for (const [key, value] of Object.entries(data)) {
+            const el = document.getElementById(key);
+            if (el) el.value = value;
+        }
+
+        alert("✅ Entwurf erfolgreich geladen!");
+    } catch (err) {
+        console.error("Lade Fehler:", err);
+        alert("❌ Fehler beim Laden des Entwurfs.");
+    }
+}
+<!-- viele andere Scripte -->
+
+<script>
+async function showDraftList() {
+    const drafts = await listDraftsFromOneDrive();
+    if (drafts.length === 0) {
+        alert("⚠️ Keine Entwürfe im OneDrive-Ordner gefunden.");
+        return;
+    }
+
+    let listText = "Wähle die Nummer eines Entwurfs aus:\n\n";
+    drafts.forEach((file, index) => {
+        listText += `${index + 1}: ${file.name}\n`;
+    });
+
+    const choice = prompt(listText);
+    const index = parseInt(choice) - 1;
+    if (index >= 0 && index < drafts.length) {
+        await loadDraftFromOneDrive(drafts[index].id);
+    } else {
+        alert("❌ Ungültige Auswahl.");
+    }
+}
 </script>
 
 </body>
