@@ -279,8 +279,7 @@
 <label for="anlagenteil_sonstiges" style="display:none">Sonstiges (Anlagenteil):</label>
 <input id="anlagenteil_sonstiges" name="anlagenteil_sonstiges" style="width: 100%; padding: 6px; margin-bottom: 10px;display:none" type="text"/>
 </div>
-<div style="margin-top: 20px;"><label style="font-weight: bold; display: block;">Dauer der Reparatur (von - bis Uhrzeit):</label><input id="startzeit" name="start_time" onchange="berechneDauer()" style="margin-right: 10px;" type="time"/><input id="endzeit" name="end_time" onchange="berechneDauer()" style="margin-right: 10px;" type="time"/><input id="dauer" name="dauer" placeholder="Dauer in Stunden" readonly="true" type="text"/></div><div class="section">
-
+c
 
 </div>
 <div class="section">
@@ -289,6 +288,13 @@
 <div class="section">
 <label for="unterschrift_produktion"></label>
 </div>
+    <div style="margin-top: 20px;">
+  <label style="font-weight: bold; display: block;">Dauer der Reparatur (von - bis Uhrzeit):</label>
+  <input id="startzeit" name="start_time" style="margin-right: 10px;" type="time"/>
+  <input id="endzeit" name="end_time" style="margin-right: 10px;" type="time"/>
+  <input id="dauer" name="dauer" placeholder="Dauer in Stunden" readonly="true" type="text"/>
+</div>
+
 <div class="section">
 <label for="abschlussdatum">Abschlussdatum der Ausführung:</label>
 <input id="abschlussdatum" name="abschlussdatum" type="date"/>
@@ -515,13 +521,8 @@ document.addEventListener("DOMContentLoaded", function () {
         "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
     ];
 
-    // Beispiel für deine Speicher-Logik
-    // (hier nur Struktur, du hast schon Details oben!)
-    // const jsonStr = JSON.stringify(data, null, 2);
-    // ...
-
     // ========================
-    // 🟢 Zeitberechnung hinzufügen
+    // 🟢 Zeitberechnung
     // ========================
     const startTimeInput = document.getElementById("startzeit");
     const endTimeInput = document.getElementById("endzeit");
@@ -536,7 +537,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const startDate = new Date(0, 0, 0, startHours, startMinutes);
             const endDate = new Date(0, 0, 0, endHours, endMinutes);
             let diff = (endDate - startDate) / 1000 / 60 / 60;
-            if (diff < 0) diff += 24; // über Mitternacht hinaus
+            if (diff < 0) diff += 24;
             durationInput.value = diff.toFixed(2);
         }
     }
@@ -545,31 +546,36 @@ document.addEventListener("DOMContentLoaded", function () {
         startTimeInput.addEventListener("input", calculateDuration);
         endTimeInput.addEventListener("input", calculateDuration);
     }
+
+    // ========================
+    // 🟢 "Sonstige"-Felder anzeigen
+    // ========================
+    const maschineSelect = document.getElementById("maschine");
+    const sonstigeMaschineInput = document.getElementById("sonstige_maschine");
+
+    const anlagenteilSelect = document.getElementById("anlagenteil");
+    const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
+
+    maschineSelect.addEventListener("change", function () {
+        if (maschineSelect.value === "Sonstige") {
+            sonstigeMaschineInput.style.display = "block";
+        } else {
+            sonstigeMaschineInput.style.display = "none";
+        }
+    });
+
+    anlagenteilSelect.addEventListener("change", function () {
+        if (anlagenteilSelect.value === "Sonstige") {
+            sonstigeAnlagenteilInput.style.display = "block";
+        } else {
+            sonstigeAnlagenteilInput.style.display = "none";
+        }
+    });
 });
-</script>
 
 </script>
-<script>
-window.addEventListener("load", function () {
-  const startInput = document.getElementById("startTime");
-  const endInput = document.getElementById("endTime");
-  const durationField = document.getElementById("duration");
-  function calculateDuration() {
-    if (startInput?.value && endInput?.value) {
-      const start = new Date("1970-01-01T" + startInput.value + ":00");
-      const end = new Date("1970-01-01T" + endInput.value + ":00");
-      if (end > start) {
-        const diffHours = (end - start) / (1000 * 60 * 60);
-        durationField.value = diffHours.toFixed(2) + " Stunden";
-      } else {
-        durationField.value = "Ungültig";
-      }
-    }
-  }
-  startInput?.addEventListener("change", calculateDuration);
-  endInput?.addEventListener("change", calculateDuration);
-});
-</script>
+
+
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   const fileInput = document.getElementById("photo");
