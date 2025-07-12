@@ -279,7 +279,7 @@
 <label for="anlagenteil_sonstiges" style="display:none">Sonstiges (Anlagenteil):</label>
 <input id="anlagenteil_sonstiges" name="anlagenteil_sonstiges" style="width: 100%; padding: 6px; margin-bottom: 10px;display:none" type="text"/>
 </div>
-c
+
 
 </div>
 <div class="section">
@@ -556,6 +556,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const anlagenteilSelect = document.getElementById("anlagenteil");
     const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
 
+    const reinigungsartSelect = document.getElementById("reinigungsart_zusatz");
+    const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart_zusatz");
+
     maschineSelect.addEventListener("change", function () {
         if (maschineSelect.value === "Sonstige") {
             sonstigeMaschineInput.style.display = "block";
@@ -571,7 +574,16 @@ document.addEventListener("DOMContentLoaded", function () {
             sonstigeAnlagenteilInput.style.display = "none";
         }
     });
+
+    reinigungsartSelect.addEventListener("change", function () {
+        if (reinigungsartSelect.value === "Sonstiges") {
+            sonstigeReinigungsartInput.style.display = "block";
+        } else {
+            sonstigeReinigungsartInput.style.display = "none";
+        }
+    });
 });
+
 
 </script>
 
