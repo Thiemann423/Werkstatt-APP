@@ -528,19 +528,41 @@ document.addEventListener("DOMContentLoaded", function () {
     const endTimeInput = document.getElementById("endzeit");
     const durationInput = document.getElementById("dauer");
 
-    function calculateDuration() {
-        const start = startTimeInput.value;
-        const end = endTimeInput.value;
-        if (start && end) {
-            const [startHours, startMinutes] = start.split(":").map(Number);
-            const [endHours, endMinutes] = end.split(":").map(Number);
-            const startDate = new Date(0, 0, 0, startHours, startMinutes);
-            const endDate = new Date(0, 0, 0, endHours, endMinutes);
-            let diff = (endDate - startDate) / 1000 / 60 / 60;
-            if (diff < 0) diff += 24;
-            durationInput.value = diff.toFixed(2);
+function calculateDuration() {
+    const start = startTimeInput.value;
+    const end = endTimeInput.value;
+    if (start && end) {
+        const [startHours, startMinutes] = start.split(":").map(Number);
+        const [endHours, endMinutes] = end.split(":").map(Number);
+
+        let startDate = new Date(0, 0, 0, startHours, startMinutes);
+        let endDate = new Date(0, 0, 0, endHours, endMinutes);
+
+        let diffMs = endDate - startDate;
+        if (diffMs < 0) {
+            // Falls die Zeit über Mitternacht geht
+            diffMs += 24 * 60 * 60 * 1000;
         }
+
+        let totalMinutes = Math.floor(diffMs / 1000 / 60);
+        let hours = Math.floor(totalMinutes / 60);
+        let minutes = totalMinutes % 60;
+
+        let durationText = "";
+        if (hours > 0) {
+            durationText += `${hours} h `;
+        }
+        if (minutes > 0) {
+            durationText += `${minutes} min`;
+        }
+        if (hours === 0 && minutes === 0) {
+            durationText = "0 min";
+        }
+
+        durationInput.value = durationText.trim();
     }
+}
+
 
     if (startTimeInput && endTimeInput && durationInput) {
         startTimeInput.addEventListener("input", calculateDuration);
