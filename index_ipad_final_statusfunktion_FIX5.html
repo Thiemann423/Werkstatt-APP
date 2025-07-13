@@ -326,7 +326,8 @@
 </div>
 <div class="section">
 <label for="unterschrift_abnahme">Unterschrift MA Abnahme (Produktkreisfreigabe):</label>
-<canvas class="signature-pad" id="unterschrift_abnahme"></canvas><button onclick="generatePDFAndFinish();clearSignature(0)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+<canvas class="signature-pad" id="unterschrift_abnahme"></canvas><button onclick="clearSignature(0)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+
 </div>
 <div class="section">
 <label for="unterschrift_technik">Unterschrift MA Technik:</label>
@@ -394,14 +395,14 @@
         fileInput.value = '';
     });
 </script>
-<img id="fotoPreview" style="max-width: 100%; display: none; border: 1px solid #ccc; margin-top: 10px;"/></div><button onclick="generatePDFAndFinish();clearSignature(1)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+<img id="fotoPreview" style="max-width: 100%; display: none; border: 1px solid #ccc; margin-top: 10px;"/></div><button onclick="clearSignature(1)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+
 </div>
 <div class="section">
 <label for="ort_datum">Ort / Datum:</label>
 <input id="ort_datum" name="ort_datum" type="text"/>
 </div>
 <div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">Erstellt: M.Thiemann       Datum: 18.06.2025
-
 Geprüft: M. Hafermalz       Datum: 24.06.2025
 Freigegeben: F. Pieper  Datum: 24.06.2025</div>
 <style>
@@ -528,41 +529,40 @@ document.addEventListener("DOMContentLoaded", function () {
     const endTimeInput = document.getElementById("endzeit");
     const durationInput = document.getElementById("dauer");
 
-function calculateDuration() {
-    const start = startTimeInput.value;
-    const end = endTimeInput.value;
-    if (start && end) {
-        const [startHours, startMinutes] = start.split(":").map(Number);
-        const [endHours, endMinutes] = end.split(":").map(Number);
+    function calculateDuration() {
+        const start = startTimeInput.value;
+        const end = endTimeInput.value;
+        if (start && end) {
+            const [startHours, startMinutes] = start.split(":").map(Number);
+            const [endHours, endMinutes] = end.split(":").map(Number);
 
-        let startDate = new Date(0, 0, 0, startHours, startMinutes);
-        let endDate = new Date(0, 0, 0, endHours, endMinutes);
+            let startDate = new Date(0, 0, 0, startHours, startMinutes);
+            let endDate = new Date(0, 0, 0, endHours, endMinutes);
 
-        let diffMs = endDate - startDate;
-        if (diffMs < 0) {
-            // Falls die Zeit über Mitternacht geht
-            diffMs += 24 * 60 * 60 * 1000;
+            let diffMs = endDate - startDate;
+            if (diffMs < 0) {
+                // Falls über Mitternacht
+                diffMs += 24 * 60 * 60 * 1000;
+            }
+
+            let totalMinutes = Math.floor(diffMs / 1000 / 60);
+            let hours = Math.floor(totalMinutes / 60);
+            let minutes = totalMinutes % 60;
+
+            let durationText = "";
+            if (hours > 0) {
+                durationText += `${hours} h `;
+            }
+            if (minutes > 0) {
+                durationText += `${minutes} min`;
+            }
+            if (hours === 0 && minutes === 0) {
+                durationText = "0 min";
+            }
+
+            durationInput.value = durationText.trim();
         }
-
-        let totalMinutes = Math.floor(diffMs / 1000 / 60);
-        let hours = Math.floor(totalMinutes / 60);
-        let minutes = totalMinutes % 60;
-
-        let durationText = "";
-        if (hours > 0) {
-            durationText += `${hours} h `;
-        }
-        if (minutes > 0) {
-            durationText += `${minutes} min`;
-        }
-        if (hours === 0 && minutes === 0) {
-            durationText = "0 min";
-        }
-
-        durationInput.value = durationText.trim();
     }
-}
-
 
     if (startTimeInput && endTimeInput && durationInput) {
         startTimeInput.addEventListener("input", calculateDuration);
@@ -581,33 +581,41 @@ function calculateDuration() {
     const reinigungsartSelect = document.getElementById("reinigungsart_zusatz");
     const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart_zusatz");
 
-    maschineSelect.addEventListener("change", function () {
+    function updateMaschineField() {
         if (maschineSelect.value === "Sonstige") {
             sonstigeMaschineInput.style.display = "block";
         } else {
             sonstigeMaschineInput.style.display = "none";
         }
-    });
+    }
 
-    anlagenteilSelect.addEventListener("change", function () {
+    function updateAnlagenteilField() {
         if (anlagenteilSelect.value === "Sonstige") {
             sonstigeAnlagenteilInput.style.display = "block";
         } else {
             sonstigeAnlagenteilInput.style.display = "none";
         }
-    });
+    }
 
-    reinigungsartSelect.addEventListener("change", function () {
+    function updateReinigungsartField() {
         if (reinigungsartSelect.value === "Sonstiges") {
             sonstigeReinigungsartInput.style.display = "block";
         } else {
             sonstigeReinigungsartInput.style.display = "none";
         }
-    });
+    }
+
+    maschineSelect.addEventListener("change", updateMaschineField);
+    anlagenteilSelect.addEventListener("change", updateAnlagenteilField);
+    reinigungsartSelect.addEventListener("change", updateReinigungsartField);
+
+    // ✅ Direkt beim Laden prüfen
+    updateMaschineField();
+    updateAnlagenteilField();
+    updateReinigungsartField();
 });
-
-
 </script>
+
 
 
 <script>
@@ -798,6 +806,14 @@ const fieldIds = [
   "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
 ];
 
+// ====================
+// Variable global speichern
+// ====================
+let currentDraftId = null;
+
+// ====================
+// Entwurf speichern
+// ====================
 async function saveDraftToOneDrive() {
   const data = {};
   fieldIds.forEach(id => {
@@ -834,6 +850,9 @@ async function saveDraftToOneDrive() {
   }
 }
 
+// ====================
+// Entwürfe auflisten
+// ====================
 async function listDraftsFromOneDrive() {
   if (!accessToken) {
     alert("❌ Nicht bei Microsoft angemeldet.");
@@ -855,6 +874,9 @@ async function listDraftsFromOneDrive() {
   }
 }
 
+// ====================
+// Entwurf laden
+// ====================
 async function loadDraftFromOneDrive(fileId) {
   if (!accessToken) {
     alert("❌ Nicht bei Microsoft angemeldet.");
@@ -873,6 +895,7 @@ async function loadDraftFromOneDrive(fileId) {
       const el = document.getElementById(key);
       if (el) el.value = value;
     }
+    currentDraftId = fileId; // 👈 ID merken
     alert("✅ Entwurf geladen!");
   } catch (err) {
     console.error(err);
@@ -880,6 +903,31 @@ async function loadDraftFromOneDrive(fileId) {
   }
 }
 
+// ====================
+// Entwurf löschen
+// ====================
+async function deleteDraftFromOneDrive(fileId) {
+  if (!accessToken || !fileId) return false;
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    );
+    return res.ok;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+// ====================
+// Entwürfe anzeigen
+// ====================
 async function showDraftList() {
   const drafts = await listDraftsFromOneDrive();
   if (drafts.length === 0) {
@@ -917,15 +965,31 @@ async function generatePDFAndFinish() {
   const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
   const res = await uploadToOneDrive(`${auftragId}.pdf`, blob);
 
-  if (res) {
-    document.getElementById("pdfExportContainer").style.display = "none";
-    document.getElementById("abschlussScreen").style.display = "flex";
-    alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
-  } else {
-    alert("❌ Fehler beim Upload.");
+ if (res) {
+  // ✅ Nach Upload: Entwurf löschen
+  if (currentDraftId) {
+    const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
+    if (deleteSuccess) {
+      alert("✅ Entwurf wurde erfolgreich gelöscht.");
+      console.log("✅ Entwurf erfolgreich gelöscht.");
+    } else {
+      alert("⚠️ Entwurf konnte nicht gelöscht werden.");
+      console.warn("⚠️ Entwurf konnte nicht gelöscht werden.");
+    }
+    currentDraftId = null; // zurücksetzen
   }
+
+  document.getElementById("pdfExportContainer").style.display = "none";
+  document.getElementById("abschlussScreen").style.display = "flex";
+  alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
+} else {
+  alert("❌ Fehler beim Upload.");
+}
 }
 
+// ====================
+// Datei in OneDrive hochladen
+// ====================
 async function uploadToOneDrive(filename, blob) {
   if (!accessToken) return false;
   try {
@@ -946,6 +1010,7 @@ async function uploadToOneDrive(filename, blob) {
     return false;
   }
 }
+
 </script>
 
 </body>
