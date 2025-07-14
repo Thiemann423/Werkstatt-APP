@@ -744,61 +744,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-<script>
 
-
-</script>
-<script>
-async function generatePDFAndFinish() {
-  // Canvas zuerst in Bilder umwandeln
-  replaceCanvasWithImage();
-
-  document.getElementById("pdfExportContainer").style.display = "block";
-
-  const el = document.getElementById("pdfExportContainer");
-  const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
-
-  const opt = {
-    margin: 5,
-    filename: `${auftragId}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, scrollY: 0 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-
-  // PDF als Blob erzeugen
-  const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
-
-  // ✅ Hier Vorschau öffnen
-  const url = URL.createObjectURL(blob);
-  window.open(url);
-
-  // Hochladen
-  const res = await uploadToOneDrive(`${auftragId}.pdf`, blob);
-
-  if (res) {
-    if (currentDraftId) {
-      const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
-      if (deleteSuccess) {
-        alert("✅ Entwurf wurde erfolgreich gelöscht.");
-      } else {
-        alert("⚠️ Entwurf konnte nicht gelöscht werden.");
-      }
-      currentDraftId = null;
-    }
-
-    document.getElementById("pdfExportContainer").style.display = "none";
-    document.getElementById("abschlussScreen").style.display = "flex";
-    alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
-  } else {
-    alert("❌ Fehler beim Upload.");
-  }
-}
-
-
-
-</script>
+ 
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
 
@@ -848,27 +795,11 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
-  const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
-  const res = await uploadToOneDrive(`${auftragId}.pdf`, blob);
-
-  if (res) {
-    if (currentDraftId) {
-      const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
-      if (deleteSuccess) {
-        alert("✅ Entwurf wurde erfolgreich gelöscht.");
-      } else {
-        alert("⚠️ Entwurf konnte nicht gelöscht werden.");
-      }
-      currentDraftId = null;
-    }
-
-    document.getElementById("pdfExportContainer").style.display = "none";
-    document.getElementById("abschlussScreen").style.display = "flex";
-    alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
-  } else {
-    alert("❌ Fehler beim Upload.");
-  }
+  // Optionale Logik zum Erzeugen oder Speichern des PDFs kannst du hier einbauen
 }
+
+
+ 
 
 // ====================
 // Datei in OneDrive hochladen
