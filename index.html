@@ -804,26 +804,44 @@ async function generatePDFAndFinish() {
 // ====================
 // Datei in OneDrive hochladen
 // ====================
-async function uploadToOneDrive(filename, blob) {
-  if (!accessToken) return false;
+async function generatePDFAndFinish() {
+  // Canvas zuerst in Bilder umwandeln
+  replaceCanvasWithImage();
+
+  document.getElementById("pdfExportContainer").style.display = "block";
+
+  const el = document.getElementById("pdfExportContainer");
+  const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
+
+  const opt = {
+    margin: 5,
+    filename: `${auftragId}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, scrollY: 0 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+
   try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/pdf"
-        },
-        body: blob
-      }
-    );
-    return res.ok;
+    // PDF erzeugen und als Blob ausgeben
+    const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
+
+    // In OneDrive hochladen
+    const success = await uploadToOneDrive(opt.filename, pdfBlob);
+
+    if (success) {
+      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+      // Optional: Abschlussscreen anzeigen
+      document.getElementById("abschlussScreen").style.display = "flex";
+    } else {
+      alert("⚠️ Fehler beim Hochladen in OneDrive.");
+    }
   } catch (err) {
     console.error(err);
-    return false;
+    alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 function forceUpdate() {
   if ('serviceWorker' in navigator) {
