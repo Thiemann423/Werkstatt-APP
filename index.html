@@ -750,9 +750,16 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 <script>
 async function generatePDFAndFinish() {
+  // 🟢 Canvas (Unterschriften) in Bilder umwandeln
+  replaceCanvasWithImage();
+
+  // 🟢 Container sicher anzeigen
+  document.getElementById("pdfExportContainer").style.display = "block";
+
   const formElement = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
 
+  // 🟢 Warten bis alle Bilder geladen sind
   const images = formElement.querySelectorAll("img");
   await Promise.all(Array.from(images).map(img => {
     if (img.complete) return Promise.resolve();
@@ -770,13 +777,16 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
-  const pdfBlob = await html2pdf().set(opt).from(formElement).outputPdf('blob');
-  const uploadSuccess = await uploadToOneDrive(`${auftragId}.pdf`, pdfBlob);
+  // 🟢 PDF erzeugen
+  const blob = await html2pdf().set(opt).from(formElement).outputPdf('blob');
+
+  // 🟢 Hochladen
+  const uploadSuccess = await uploadToOneDrive(`${auftragId}.pdf`, blob);
 
   if (uploadSuccess) {
+    // Nach dem Upload Container ausblenden oder Abschlussanzeige zeigen
     document.getElementById("pdfExportContainer").style.display = "none";
     document.getElementById("abschlussScreen").style.display = "flex";
-    localStorage.setItem("auftrag_abgeschlossen", "true");
 
     const msg = document.getElementById("confirmationMessage");
     if (msg) {
@@ -791,11 +801,10 @@ async function generatePDFAndFinish() {
     }
   }
 }
+
 </script>
+<!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
-
-
-
 
 // ====================
 // Draft-Funktionen
@@ -807,153 +816,33 @@ const fieldIds = [
   "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
 ];
 
-// ====================
-// Variable global speichern
-// ====================
 let currentDraftId = null;
 
 // ====================
-// Entwurf speichern
+// ✅ HIER NEU EINFÜGEN: Canvas-Funktion
 // ====================
-async function saveDraftToOneDrive() {
-  const data = {};
-  fieldIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) data[id] = el.value;
-  });
-  const filename = `Entwurf_${new Date().toISOString().split("T")[0]}_${Math.random().toString(36).substring(2,6).toUpperCase()}.json`;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-
-  if (!accessToken) {
-    alert("❌ Nicht bei Microsoft angemeldet.");
-    return;
-  }
-  try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${filename}:/content`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: blob
-      }
-    );
-    if (res.ok) {
-      alert("✅ Entwurf erfolgreich gespeichert!");
-    } else {
-      alert("❌ Fehler beim Speichern.");
-    }
-  } catch (err) {
-    console.error(err);
-    alert("❌ Fehler beim Upload.");
-  }
-}
-
-// ====================
-// Entwürfe auflisten
-// ====================
-async function listDraftsFromOneDrive() {
-  if (!accessToken) {
-    alert("❌ Nicht bei Microsoft angemeldet.");
-    return [];
-  }
-  try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}:/children`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
-    const data = await res.json();
-    return data.value?.filter(file => file.name.endsWith(".json")) || [];
-  } catch (err) {
-    console.error(err);
-    alert("❌ Fehler beim Laden der Liste.");
-    return [];
-  }
-}
-
-// ====================
-// Entwurf laden
-// ====================
-async function loadDraftFromOneDrive(fileId) {
-  if (!accessToken) {
-    alert("❌ Nicht bei Microsoft angemeldet.");
-    return;
-  }
-  try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
-    const text = await res.text();
-    const data = JSON.parse(text);
-    for (const [key, value] of Object.entries(data)) {
-      const el = document.getElementById(key);
-      if (el) el.value = value;
-    }
-    currentDraftId = fileId; // 👈 ID merken
-    alert("✅ Entwurf geladen!");
-  } catch (err) {
-    console.error(err);
-    alert("❌ Fehler beim Laden.");
-  }
-}
-
-// ====================
-// Entwurf löschen
-// ====================
-async function deleteDraftFromOneDrive(fileId) {
-  if (!accessToken || !fileId) return false;
-  try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
-    );
-    return res.ok;
-  } catch (err) {
-    console.error(err);
-    return false;
-  }
-}
-
-// ====================
-// Entwürfe anzeigen
-// ====================
-async function showDraftList() {
-  const drafts = await listDraftsFromOneDrive();
-  if (drafts.length === 0) {
-    alert("⚠️ Keine Entwürfe gefunden.");
-    return;
-  }
-  let listText = "Wähle die Nummer eines Entwurfs:\n\n";
-  drafts.forEach((file, i) => {
-    listText += `${i + 1}: ${file.name}\n`;
-  });
-  const choice = prompt(listText);
-  const index = parseInt(choice) - 1;
-  if (index >= 0 && index < drafts.length) {
-    await loadDraftFromOneDrive(drafts[index].id);
-  } else {
-    alert("❌ Ungültige Auswahl.");
-  }
+function replaceCanvasWithImage() {
+    document.querySelectorAll('canvas').forEach((canvas) => {
+        const img = document.createElement('img');
+        img.src = canvas.toDataURL();
+        img.style.width = canvas.style.width;
+        img.style.height = canvas.style.height;
+        canvas.parentNode.replaceChild(img, canvas);
+    });
 }
 
 // ====================
 // Auftrag abschließen
 // ====================
 async function generatePDFAndFinish() {
+  // Canvas zuerst in Bilder umwandeln
+  replaceCanvasWithImage();
+
+  document.getElementById("pdfExportContainer").style.display = "block";
+
   const el = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
+
   const opt = {
     margin: 5,
     filename: `${auftragId}.pdf`,
@@ -966,26 +855,23 @@ async function generatePDFAndFinish() {
   const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
   const res = await uploadToOneDrive(`${auftragId}.pdf`, blob);
 
- if (res) {
-  // ✅ Nach Upload: Entwurf löschen
-  if (currentDraftId) {
-    const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
-    if (deleteSuccess) {
-      alert("✅ Entwurf wurde erfolgreich gelöscht.");
-      console.log("✅ Entwurf erfolgreich gelöscht.");
-    } else {
-      alert("⚠️ Entwurf konnte nicht gelöscht werden.");
-      console.warn("⚠️ Entwurf konnte nicht gelöscht werden.");
+  if (res) {
+    if (currentDraftId) {
+      const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
+      if (deleteSuccess) {
+        alert("✅ Entwurf wurde erfolgreich gelöscht.");
+      } else {
+        alert("⚠️ Entwurf konnte nicht gelöscht werden.");
+      }
+      currentDraftId = null;
     }
-    currentDraftId = null; // zurücksetzen
-  }
 
-  document.getElementById("pdfExportContainer").style.display = "none";
-  document.getElementById("abschlussScreen").style.display = "flex";
-  alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
-} else {
-  alert("❌ Fehler beim Upload.");
-}
+    document.getElementById("pdfExportContainer").style.display = "none";
+    document.getElementById("abschlussScreen").style.display = "flex";
+    alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
+  } else {
+    alert("❌ Fehler beim Upload.");
+  }
 }
 
 // ====================
@@ -1011,6 +897,7 @@ async function uploadToOneDrive(filename, blob) {
     return false;
   }
 }
+
 function forceUpdate() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -1029,7 +916,9 @@ function forceUpdate() {
     });
   }
 }
+
 </script>
+
 
 </body>
 </html>
