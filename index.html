@@ -750,16 +750,15 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 <script>
 async function generatePDFAndFinish() {
-  // 🟢 Canvas (Unterschriften) in Bilder umwandeln
+  // Canvas in Bilder umwandeln
   replaceCanvasWithImage();
 
-  // 🟢 Container sicher anzeigen
   document.getElementById("pdfExportContainer").style.display = "block";
 
   const formElement = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
 
-  // 🟢 Warten bis alle Bilder geladen sind
+  // Warten bis Bilder fertig
   const images = formElement.querySelectorAll("img");
   await Promise.all(Array.from(images).map(img => {
     if (img.complete) return Promise.resolve();
@@ -777,30 +776,18 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
-  // 🟢 PDF erzeugen
+  // PDF erzeugen
   const blob = await html2pdf().set(opt).from(formElement).outputPdf('blob');
-
-  // 🟢 Hochladen
   const uploadSuccess = await uploadToOneDrive(`${auftragId}.pdf`, blob);
 
   if (uploadSuccess) {
-    // Nach dem Upload Container ausblenden oder Abschlussanzeige zeigen
     document.getElementById("pdfExportContainer").style.display = "none";
     document.getElementById("abschlussScreen").style.display = "flex";
-
-    const msg = document.getElementById("confirmationMessage");
-    if (msg) {
-      msg.innerText = "✅ Auftrag erfolgreich in OneDrive gespeichert!";
-      msg.style.display = "block";
-    }
   } else {
-    const msg = document.getElementById("confirmationMessage");
-    if (msg) {
-      msg.innerText = "❌ Upload fehlgeschlagen, bitte später erneut versuchen.";
-      msg.style.display = "block";
-    }
+    alert("❌ Upload fehlgeschlagen");
   }
 }
+
 
 </script>
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
