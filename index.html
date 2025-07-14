@@ -750,22 +750,13 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 <script>
 async function generatePDFAndFinish() {
-  // Canvas in Bilder umwandeln
+  // Canvas zuerst in Bilder umwandeln
   replaceCanvasWithImage();
 
   document.getElementById("pdfExportContainer").style.display = "block";
 
-  const formElement = document.getElementById("pdfExportContainer");
+  const el = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
-
-  // Warten bis Bilder fertig
-  const images = formElement.querySelectorAll("img");
-  await Promise.all(Array.from(images).map(img => {
-    if (img.complete) return Promise.resolve();
-    return new Promise(resolve => {
-      img.onload = img.onerror = resolve;
-    });
-  }));
 
   const opt = {
     margin: 5,
@@ -776,17 +767,35 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
-  // PDF erzeugen
-  const blob = await html2pdf().set(opt).from(formElement).outputPdf('blob');
-  const uploadSuccess = await uploadToOneDrive(`${auftragId}.pdf`, blob);
+  // PDF als Blob erzeugen
+  const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
 
-  if (uploadSuccess) {
+  // ✅ Hier Vorschau öffnen
+  const url = URL.createObjectURL(blob);
+  window.open(url);
+
+  // Hochladen
+  const res = await uploadToOneDrive(`${auftragId}.pdf`, blob);
+
+  if (res) {
+    if (currentDraftId) {
+      const deleteSuccess = await deleteDraftFromOneDrive(currentDraftId);
+      if (deleteSuccess) {
+        alert("✅ Entwurf wurde erfolgreich gelöscht.");
+      } else {
+        alert("⚠️ Entwurf konnte nicht gelöscht werden.");
+      }
+      currentDraftId = null;
+    }
+
     document.getElementById("pdfExportContainer").style.display = "none";
     document.getElementById("abschlussScreen").style.display = "flex";
+    alert("✅ Auftrag abgeschlossen & PDF gespeichert!");
   } else {
-    alert("❌ Upload fehlgeschlagen");
+    alert("❌ Fehler beim Upload.");
   }
 }
+
 
 
 </script>
