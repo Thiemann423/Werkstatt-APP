@@ -683,6 +683,7 @@ window.addEventListener('load', function() {
 <button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
 <button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
 <button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
+<button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
 
 <!-- ✅ Login-Hinweis-Block -->
 <div id="loginNotice" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: #fffbe6; border: 1px solid #e6c200; padding: 1rem 2rem; border-radius: 8px; font-weight: bold; z-index: 10000; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
@@ -1010,7 +1011,24 @@ async function uploadToOneDrive(filename, blob) {
     return false;
   }
 }
-
+function forceUpdate() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+      for (let registration of registrations) {
+        registration.unregister();
+      }
+    }).then(function() {
+      caches.keys().then(function(names) {
+        for (let name of names) {
+          caches.delete(name);
+        }
+      });
+    }).then(function() {
+      alert("✅ Cache & Service Worker gelöscht. Seite wird neu geladen.");
+      location.reload(true);
+    });
+  }
+}
 </script>
 
 </body>
