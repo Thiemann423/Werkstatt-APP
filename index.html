@@ -853,12 +853,16 @@ async function generatePDFAndFinish() {
 
     const success = await uploadToOneDrive(opt.filename, pdfBlob);
 
-    if (success) {
-      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-      document.getElementById("abschlussScreen").style.display = "flex";
-    } else {
-      alert("⚠️ Fehler beim Hochladen in OneDrive.");
-    }
+   if (success) {
+  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+
+  await deleteDraftFile(); // ✅ Entwurf löschen, falls vorhanden
+
+  document.getElementById("abschlussScreen").style.display = "flex";
+} else {
+  alert("⚠️ Fehler beim Hochladen in OneDrive.");
+}
+
   } catch (err) {
     console.error("Fehler beim Erstellen/Hochladen:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
@@ -965,7 +969,7 @@ async function showDraftList() {
   }
 
   try {
-    // Liste aller Dateien im Entwürfe-Ordner abrufen
+    // Dateien abrufen
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe:/children`,
       {
@@ -981,25 +985,59 @@ async function showDraftList() {
       return;
     }
 
-    // Eine einfache Auswahl-Liste anzeigen
+    // Nur JSON-Dateien filtern
     const fileNames = data.value
       .filter(item => item.name.endsWith(".json"))
       .map(item => item.name);
 
-    const selectedFile = prompt(
-      "Bitte Dateinamen eingeben (z. B. kopieren):\n\n" + fileNames.join("\n")
-    );
+    // Liste mit Nummern anzeigen
+    let list = "Verfügbare Entwürfe:\n\n";
+    fileNames.forEach((name, index) => {
+      list += `${index + 1}: ${name}\n`;
+    });
 
-    if (selectedFile && fileNames.includes(selectedFile)) {
-      await loadDraftFromOneDrive(selectedFile);
-    } else if (selectedFile) {
-      alert("⚠️ Datei nicht gefunden oder ungültig.");
+    const numberInput = prompt("Bitte die Nummer des Entwurfs eingeben:\n\n" + list);
+
+    const selectedIndex = parseInt(numberInput, 10) - 1;
+    if (!isNaN(selectedIndex) && fileNames[selectedIndex]) {
+      await loadDraftFromOneDrive(fileNames[selectedIndex]);
+
+      // 💡 Speichere den gewählten Dateinamen, um ihn später zu löschen
+      window.currentDraftFileName = fileNames[selectedIndex];
+    } else {
+      alert("⚠️ Ungültige Nummer.");
     }
   } catch (err) {
     console.error("Fehler beim Abrufen der Liste:", err);
     alert("❌ Fehler beim Abrufen der Entwürfe.");
   }
 }
+
+// =========================
+// ✅ Entwurfsdatei nach Abschluss löschen
+// =========================
+async function deleteDraftFile() {
+  if (!accessToken || !window.currentDraftFileName) {
+    return;
+  }
+
+  try {
+    await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${window.currentDraftFileName}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    );
+    console.log("✅ Entwurfsdatei erfolgreich gelöscht:", window.currentDraftFileName);
+    window.currentDraftFileName = null;
+  } catch (err) {
+    console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
+  }
+}
+
 
 
 
