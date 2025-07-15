@@ -13,11 +13,12 @@
         font-family: Arial, sans-serif;
         margin: 20px;
     }
-    .header, .footer {
-        display: flex;async function generatePDFAndFinish() {
-        justify-content: space-between;
-        align-items: center;
-    }
+.header, .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
     .header div, .footer div {
         margin: 5px;
     }
@@ -772,7 +773,13 @@ function replaceCanvasWithImage() {
         img.style.height = canvas.style.height;
         canvas.parentNode.replaceChild(img, canvas);
     });
+
+    // Neu ergänzt: Vorschau-Bilder sichtbar machen!
+    document.querySelectorAll('.preview-container img').forEach(img => {
+        img.style.display = 'block';
+    });
 }
+
 
 async function uploadToOneDrive(filename, blob) {
   if (!accessToken) {
@@ -857,6 +864,44 @@ function forceUpdate() {
       location.reload(true);
     });
   }
+}
+async function saveDraftToOneDrive() {
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
+
+  const draftData = {};
+  fieldIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) draftData[id] = el.value;
+  });
+
+  const draftJson = JSON.stringify(draftData, null, 2);
+  const blob = new Blob([draftJson], { type: "application/json" });
+
+  const draftFilename = `Entwurf-${document.getElementById('auftrag_id').value}.json`;
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${draftFilename}:/content`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: blob
+    }
+  );
+
+  if (res.ok) {
+    alert("✅ Entwurf erfolgreich gespeichert!");
+  } else {
+    alert("⚠️ Fehler beim Speichern des Entwurfs.");
+  }
+}
+
+async function showDraftList() {
+  alert("⚠️ Diese Funktion muss noch implementiert werden. Ich kann dir helfen, den vollständigen Code zu schreiben, falls du willst.");
 }
 
 </script>
