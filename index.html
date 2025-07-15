@@ -812,33 +812,39 @@ async function uploadToOneDrive(filename, blob) {
 // Auftrag abschließen
 // ====================
 async function generatePDFAndFinish() {
-  // Canvas zuerst in Bilder umwandeln
   replaceCanvasWithImage();
 
-  document.getElementById("pdfExportContainer").style.display = "block";
+  const container = document.getElementById("pdfExportContainer");
+  container.style.display = "block";
+  container.style.height = "auto";
+  container.style.overflow = "visible";
 
-  const el = document.getElementById("pdfExportContainer");
+  // Warte 300 ms, bis Browser alles fertig rendert
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  const el = container;
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
-const opt = {
-  margin: 5,
-  filename: `${auftragId}.pdf`,
-  image: { type: 'jpeg', quality: 0.98 },
-  html2canvas: { scale: 2, scrollY: 0 },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-  pagebreak: { mode: ['css', 'legacy'] }   // ✅ Wichtige Anpassung!
-};
-
+  const opt = {
+    margin: 5,
+    filename: `${auftragId}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      scrollY: 0,
+      useCORS: true,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
 
   try {
-    // PDF erzeugen und als Blob ausgeben
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
-
-    // In OneDrive hochladen
     const success = await uploadToOneDrive(opt.filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-      // Optional: Abschlussscreen anzeigen
       document.getElementById("abschlussScreen").style.display = "flex";
     } else {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
