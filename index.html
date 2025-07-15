@@ -323,47 +323,62 @@
 </div>
 </div>
 <div class="section">
-<p>Die Reparatur ist abgeschlossen und alle eingesetzten Werkzeuge wurden komplett entfernt.</p>
+  <p>Die Reparatur ist abgeschlossen und alle eingesetzten Werkzeuge wurden komplett entfernt.</p>
 </div>
-<div class="section">
-<label for="unterschrift_abnahme">Unterschrift MA Abnahme (Produktkreisfreigabe):</label>
-<canvas class="signature-pad" id="unterschrift_abnahme"></canvas><button onclick="clearSignature(0)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
 
-</div>
+<div class="page-break"></div>
+
 <div class="section">
-<label for="unterschrift_technik">Unterschrift MA Technik:</label>
-<canvas class="signature-pad" id="unterschrift_technik"></canvas><div style="margin-top: 24px;"><label for="foto" style="font-weight: bold;">Fehlerstelle / Schaden (optional):</label>
-<h2>Fotos für Reparaturauftrag</h2>
-<input accept="image/*" id="fileInput" multiple="" type="file"/>
-<div class="preview-container" id="previewContainer"></div>
+  <label for="unterschrift_abnahme">Unterschrift MA Abnahme (Produktkreisfreigabe):</label>
+  <canvas class="signature-pad" id="unterschrift_abnahme"></canvas>
+  <button onclick="clearSignature(0)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+  <label for="unterschrift_technik">Unterschrift MA Technik:</label>
+  <canvas class="signature-pad" id="unterschrift_technik"></canvas>
+  <div style="margin-top: 24px;">
+    <label for="foto" style="font-weight: bold;">Fehlerstelle / Schaden (optional):</label>
+    <h2>Fotos für Reparaturauftrag</h2>
+    <input accept="image/*" id="fileInput" multiple="" type="file"/>
+    <div class="preview-container" id="previewContainer"></div>
+  </div>
+</div>
+
 <style>
-    .preview-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 20px;
-    }
-    .image-wrapper {
-        position: relative;
-        display: inline-block;
-    }
-    .delete-button {
-        position: absolute;
-        top: 5px;
-        right: 5px;
-        background-color: red;
-        color: white;
-        border: none;
-        padding: 5px;
-        cursor: pointer;
-        border-radius: 5px;
-    }
-    img {
-        max-width: 200px;
-        max-height: 200px;
-        border: 1px solid #ccc;
-    }
+  .page-break {
+    page-break-before: always;
+  }
+  .preview-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .image-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .delete-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: red;
+    color: white;
+    border: none;
+    padding: 5px;
+    cursor: pointer;
+    border-radius: 5px;
+  }
+  img {
+    max-width: 200px;
+    max-height: 200px;
+    border: 1px solid #ccc;
+  }
 </style>
+
 <script>
     const fileInput = document.getElementById('fileInput');
     const previewContainer = document.getElementById('previewContainer');
@@ -419,19 +434,6 @@ canvas.signature-pad {
   border: 1px solid #000;
   background: #fff;
   touch-action: none;
-}
-.signature-container {
-  margin-bottom: 20px;
-}
-button.clear-signature {
-  margin-top: 5px;
-}
-</style>
-<style>
-canvas.signature-pad {
-  border: 1px solid #000;
-  background: #fff;
-  touch-action: none;
   width: 100%;
   max-width: 600px;
   height: 200px;
@@ -443,6 +445,7 @@ button.clear-signature {
   margin-top: 5px;
 }
 </style>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 function initSignaturePad(id) {
@@ -816,15 +819,15 @@ async function generatePDFAndFinish() {
 
   const el = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
+const opt = {
+  margin: 5,
+  filename: `${auftragId}.pdf`,
+  image: { type: 'jpeg', quality: 0.98 },
+  html2canvas: { scale: 2, scrollY: 0 },
+  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+  pagebreak: { mode: ['css', 'legacy'] }   // ✅ Wichtige Anpassung!
+};
 
-  const opt = {
-    margin: 5,
-    filename: `${auftragId}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, scrollY: 0 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
 
   try {
     // PDF erzeugen und als Blob ausgeben
@@ -899,10 +902,90 @@ async function saveDraftToOneDrive() {
     alert("⚠️ Fehler beim Speichern des Entwurfs.");
   }
 }
+async function loadDraftFromOneDrive(fileName) {
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
+
+  try {
+    // Hole Datei-Inhalt (JSON) aus OneDrive
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${fileName}:/content`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    );
+
+    if (!res.ok) {
+      alert("⚠️ Fehler beim Laden des Entwurfs.");
+      return;
+    }
+
+    const draftData = await res.json();
+
+    // Felder wieder befüllen
+    fieldIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && draftData[id] !== undefined) {
+        el.value = draftData[id];
+      }
+    });
+
+    alert("✅ Entwurf erfolgreich geladen!");
+  } catch (err) {
+    console.error("Fehler beim Laden:", err);
+    alert("❌ Fehler beim Laden des Entwurfs.");
+  }
+}
 
 async function showDraftList() {
-  alert("⚠️ Diese Funktion muss noch implementiert werden. Ich kann dir helfen, den vollständigen Code zu schreiben, falls du willst.");
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
+
+  try {
+    // Liste aller Dateien im Entwürfe-Ordner abrufen
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe:/children`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    );
+
+    const data = await res.json();
+    if (!data.value || data.value.length === 0) {
+      alert("⚠️ Keine Entwürfe gefunden.");
+      return;
+    }
+
+    // Eine einfache Auswahl-Liste anzeigen
+    const fileNames = data.value
+      .filter(item => item.name.endsWith(".json"))
+      .map(item => item.name);
+
+    const selectedFile = prompt(
+      "Bitte Dateinamen eingeben (z. B. kopieren):\n\n" + fileNames.join("\n")
+    );
+
+    if (selectedFile && fileNames.includes(selectedFile)) {
+      await loadDraftFromOneDrive(selectedFile);
+    } else if (selectedFile) {
+      alert("⚠️ Datei nicht gefunden oder ungültig.");
+    }
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Liste:", err);
+    alert("❌ Fehler beim Abrufen der Entwürfe.");
+  }
 }
+
+
 
 </script>
 
