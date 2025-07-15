@@ -3,91 +3,107 @@
 
 <html lang="de">
 <head>
-<!-- Build-Version: 1.0.1 - Cache-Bypass -->
-<link href="icon-192.png" rel="apple-touch-icon"/>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>TE 15 Reparaturauftrag 03</title>
+  <!-- Build-Version: 1.0.1 - Cache-Bypass -->
+  <link href="icon-192.png" rel="apple-touch-icon"/>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>TE 15 Reparaturauftrag 03</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 20px;
-    }
-.header, .footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-    .header div, .footer div {
-        margin: 5px;
-    }
-    .section {
-        margin-bottom: 20px;
-    }
-    .section label {
-        display: block;
-        margin-bottom: 5px;
-    }
-    .section input, .section select, .section textarea {
-        width: 100%;
-        padding: 5px;
-        margin-bottom: 10px;
-    }
-    .signature {
-        border: 1px solid #000;
-        height: 100px;
-        margin-bottom: 20px;
-    }
-
-    /* ✅ Hier ergänzt: Style für die Buttons */
-    button#saveDraftJsonButton,
-    button#loadDraftJsonButton,
-    button#closeOrderButton {
-        margin: 5px;
-        padding: 8px 15px;
-        font-size: 16px;
-        cursor: pointer;
-        border: none;
-        background-color: #0078d4;
-        color: white;
-        border-radius: 5px;
-        transition: background-color 0.3s;
-    }
-    button#saveDraftJsonButton:hover,
-    button#loadDraftJsonButton:hover,
-    button#closeOrderButton:hover {
-        background-color: #005ea0;
-    }
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script><link href="manifest.json" rel="manifest"/><meta content="yes" name="apple-mobile-web-app-capable"/><meta content="black" name="apple-mobile-web-app-status-bar-style"/><meta content="Reparatur-App" name="apple-mobile-web-app-title"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<style>
-    #updateModal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.6);
-      justify-content: center;
+  body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+  }
+  .header, .footer {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      z-index: 1000;
-    }
-    #updateModalContent {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-    }
-    #confirmationMessage {
-      display: none;
-      margin-top: 20px;
-      padding: 10px;
-      background-color: #e0ffe0;
-      border: 1px solid #00aa00;
+  }
+  .header div, .footer div {
+      margin: 5px;
+  }
+  .section {
+      margin-bottom: 20px;
+  }
+  .section label {
+      display: block;
+      margin-bottom: 5px;
+  }
+  .section input, .section select, .section textarea {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 10px;
+  }
+  .signature {
+      border: 1px solid #000;
+      height: 100px;
+      margin-bottom: 20px;
+  }
+
+  /* Style für die Buttons */
+  button#saveDraftJsonButton,
+  button#loadDraftJsonButton,
+  button#closeOrderButton {
+      margin: 5px;
+      padding: 8px 15px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #0078d4;
+      color: white;
       border-radius: 5px;
-    }
-  </style></head>
+      transition: background-color 0.3s;
+  }
+  button#saveDraftJsonButton:hover,
+  button#loadDraftJsonButton:hover,
+  button#closeOrderButton:hover {
+      background-color: #005ea0;
+  }
+
+  /* ✅ Hier einfügen: Container für PDF */
+  #pdfExportContainer {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+  }
+</style>
+
+
+  <!-- ✅ Scripte und Manifest -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <link href="manifest.json" rel="manifest"/>
+  <meta content="yes" name="apple-mobile-web-app-capable"/>
+  <meta content="black" name="apple-mobile-web-app-status-bar-style"/>
+  <meta content="Reparatur-App" name="apple-mobile-web-app-title"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <style>
+      #updateModal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+      #updateModalContent {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+      }
+      #confirmationMessage {
+        display: none;
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #e0ffe0;
+        border: 1px solid #00aa00;
+        border-radius: 5px;
+      }
+  </style>
+</head>
+
 <body><div id="updateModal">
 <div id="updateModalContent">
 <p><strong>Die App wurde aktualisiert.</strong><br/>Bitte bestätigen Sie die neue Version.</p>
@@ -776,12 +792,11 @@ function replaceCanvasWithImage() {
         img.style.height = canvas.style.height;
         canvas.parentNode.replaceChild(img, canvas);
     });
-
-    // Neu ergänzt: Vorschau-Bilder sichtbar machen!
     document.querySelectorAll('.preview-container img').forEach(img => {
         img.style.display = 'block';
     });
 }
+
 
 
 async function uploadToOneDrive(filename, blob) {
@@ -814,26 +829,20 @@ async function uploadToOneDrive(filename, blob) {
 async function generatePDFAndFinish() {
   replaceCanvasWithImage();
 
-  const container = document.getElementById("pdfExportContainer");
-  container.style.display = "block";
-  container.style.height = "auto";
-  container.style.overflow = "visible";
+  document.getElementById("pdfExportContainer").style.display = "block";
 
-  // Warte 300 ms, bis Browser alles fertig rendert
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const el = container;
+  const el = document.getElementById("pdfExportContainer");
   const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
+
   const opt = {
-    margin: 5,
+    margin: [10, 10, 10, 10],
     filename: `${auftragId}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: {
       scale: 2,
       scrollY: 0,
+      windowWidth: document.body.scrollWidth,
       useCORS: true,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
@@ -841,6 +850,7 @@ async function generatePDFAndFinish() {
 
   try {
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
+
     const success = await uploadToOneDrive(opt.filename, pdfBlob);
 
     if (success) {
