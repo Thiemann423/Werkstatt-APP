@@ -14,7 +14,7 @@
         margin: 20px;
     }
     .header, .footer {
-        display: flex;
+        display: flex;async function generatePDFAndFinish() {
         justify-content: space-between;
         align-items: center;
     }
@@ -774,35 +774,32 @@ function replaceCanvasWithImage() {
     });
 }
 
-// ====================
-// Auftrag abschließen
-// ====================
-async function generatePDFAndFinish() {
-  // Canvas zuerst in Bilder umwandeln
-  replaceCanvasWithImage();
-
-  document.getElementById("pdfExportContainer").style.display = "block";
-
-  const el = document.getElementById("pdfExportContainer");
-  const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
-
-  const opt = {
-    margin: 5,
-    filename: `${auftragId}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, scrollY: 0 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-
-  // Optionale Logik zum Erzeugen oder Speichern des PDFs kannst du hier einbauen
+async function uploadToOneDrive(filename, blob) {
+  if (!accessToken) {
+    alert("⚠️ Kein Zugriffstoken vorhanden. Bitte anmelden.");
+    return false;
+  }
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/pdf"
+        },
+        body: blob
+      }
+    );
+    return res.ok;
+  } catch (err) {
+    console.error("Fehler beim Upload:", err);
+    return false;
+  }
 }
 
-
- 
-
 // ====================
-// Datei in OneDrive hochladen
+// Auftrag abschließen
 // ====================
 async function generatePDFAndFinish() {
   // Canvas zuerst in Bilder umwandeln
@@ -837,7 +834,7 @@ async function generatePDFAndFinish() {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error(err);
+    console.error("Fehler beim Erstellen/Hochladen:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
