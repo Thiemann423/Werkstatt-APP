@@ -60,10 +60,38 @@
   }
 
   /* ✅ Hier einfügen: Container für PDF */
+
+</style>
+<style>
+  @media print {
+    body {
+      -webkit-print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    #pdfExportContainer {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+  }
+
   #pdfExportContainer {
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    color: black;
+  }
+
+  canvas {
+    display: block !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    height: auto !important;
   }
 </style>
 
@@ -827,47 +855,41 @@ async function uploadToOneDrive(filename, blob) {
 // Auftrag abschließen
 // ====================
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage();
-
-  document.getElementById("pdfExportContainer").style.display = "block";
+  replaceCanvasWithImage(); // ✅ Wandelt Unterschrift-Canvas in Bild um
 
   const el = document.getElementById("pdfExportContainer");
-  const auftragId = document.getElementById("auftrag_id")?.value || "Reparaturauftrag";
 
   const opt = {
-    margin: [10, 10, 10, 10],
-    filename: `${auftragId}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
+    margin:       [5, 10, 5, 10], // kleinerer Rand für bessere Passform
+    filename:     `${document.getElementById("auftrag_id").value || "Reparaturauftrag"}.pdf`,
+    image:        { type: 'jpeg', quality: 1 },
+    html2canvas:  {
       scale: 2,
       scrollY: 0,
-      windowWidth: document.body.scrollWidth,
       useCORS: true,
+      windowWidth: el.scrollWidth // sicherstellen, dass ganze Breite berücksichtigt wird
     },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak:    { mode: ['css', 'legacy'] }
   };
 
   try {
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
-
     const success = await uploadToOneDrive(opt.filename, pdfBlob);
-
-   if (success) {
-  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-
-  await deleteDraftFile(); // ✅ Entwurf löschen, falls vorhanden
-
-  document.getElementById("abschlussScreen").style.display = "flex";
-} else {
-  alert("⚠️ Fehler beim Hochladen in OneDrive.");
-}
-
+    
+    if (success) {
+      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+      await deleteDraftFile();
+      document.getElementById("abschlussScreen").style.display = "flex";
+    } else {
+      alert("⚠️ Fehler beim Hochladen in OneDrive.");
+    }
   } catch (err) {
     console.error("Fehler beim Erstellen/Hochladen:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 function forceUpdate() {
