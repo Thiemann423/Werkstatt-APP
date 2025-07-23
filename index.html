@@ -836,62 +836,41 @@ function convertFormElementsToStaticText(container) {
   });
 }
 async function generatePDFAndFinish() {
-  const el = document.getElementById("pdfExportContainer");
+  const container = document.getElementById("pdfExportContainer");
 
-  // 🟢 1. Klon erzeugen
-  const clone = el.cloneNode(true);
+  // 🔁 Formularfelder umwandeln (Input, Select, Textarea → statischer Text)
+  convertFormElementsToStaticText(container);
 
-  // 🟢 2. Canvas-Felder (Unterschriften) in <img> umwandeln
-  clone.querySelectorAll('canvas').forEach((canvas) => {
-    const img = document.createElement('img');
+  // 🔁 Canvas (Signaturen) in Bilder umwandeln
+  container.querySelectorAll("canvas").forEach((canvas) => {
+    const img = document.createElement("img");
     img.src = canvas.toDataURL();
     img.style.width = canvas.style.width;
     img.style.height = canvas.style.height;
     canvas.parentNode.replaceChild(img, canvas);
   });
 
-  // 🟢 2b. Bilder aus Dateiupload in den Klon übernehmen
-  const originalImages = document.querySelectorAll('.preview-container .image-wrapper');
-  const clonedPreview = clone.querySelector('.preview-container');
-
-  if (clonedPreview) {
-    clonedPreview.innerHTML = ''; // Leeren
-
-    originalImages.forEach(wrapper => {
-      const clonedWrapper = wrapper.cloneNode(true);
-      const deleteBtn = clonedWrapper.querySelector('.delete-button');
-      if (deleteBtn) deleteBtn.remove(); // Löschen-Button entfernen
-      clonedPreview.appendChild(clonedWrapper);
+  // 🔁 Bilder (inkl. Fotos) laden sicherstellen
+  const images = container.querySelectorAll("img");
+  await Promise.all(Array.from(images).map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      img.onload = img.onerror = resolve;
     });
-  }
+  }));
 
-  // 🟢 3. Formularfelder in statischen Text umwandeln
-  convertFormElementsToStaticText(clone);
-
-  // 🟢 4. Klon sichtbar machen, damit html2canvas ihn korrekt liest
-  clone.style.position = "fixed";
-  clone.style.top = "50px";
-  clone.style.left = "50px";
-  clone.style.background = "white";
-  clone.style.border = "2px solid red";
-  clone.style.zIndex = "99999";
-  clone.style.padding = "20px";
-  document.body.appendChild(clone);
-
-  // 🟢 5. Auftrags-ID sicherstellen
+  // 📄 Auftrags-ID holen oder erzeugen
   const auftragIdField = document.getElementById("auftrag_id");
-  let auftragId;
-  if (!auftragIdField || !auftragIdField.value) {
-    const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    if (auftragIdField) auftragIdField.value = uniqueId;
-    auftragId = uniqueId;
-  } else {
-    auftragId = auftragIdField.value;
+  let auftragId = auftragIdField?.value?.trim();
+  if (!auftragId) {
+    const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
+    auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    if (auftragIdField) auftragIdField.value = auftragId;
   }
 
   const filename = `${auftragId}.pdf`;
 
-  // 🟢 6. Optionen für html2pdf
+  // 📄 PDF-Optionen
   const opt = {
     margin: [5, 10, 5, 10],
     filename: filename,
@@ -899,9 +878,7 @@ async function generatePDFAndFinish() {
     html2canvas: {
       scale: 2,
       scrollY: 0,
-      useCORS: true,
-      windowWidth: clone.scrollWidth,
-      windowHeight: clone.scrollHeight
+      useCORS: true
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
@@ -910,19 +887,15 @@ async function generatePDFAndFinish() {
   try {
     console.log("📄 Starte PDF-Erzeugung:", filename);
 
-    const pdfBlob = await html2pdf().from(clone).set(opt).outputPdf('blob');
+    // 📄 PDF erzeugen aus dem DOM (kein clone!)
+    const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
 
-    // 🟢 7. Klon wieder entfernen
-    document.body.removeChild(clone);
-
-    // 🟢 8. Upload zu OneDrive
+    // ☁️ Hochladen zu OneDrive
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
-
-      // 🟢 9. Abschluss-Screen anzeigen
       setTimeout(() => {
         document.getElementById("abschlussScreen").style.display = "flex";
       }, 1000);
