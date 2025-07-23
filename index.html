@@ -870,16 +870,13 @@ async function generatePDFAndFinish() {
   console.log("✅ Starte PDF-Erzeugung");
 
   await signInAndAcquireToken(true);
-  if (!accessToken) {
-    console.warn("❌ Kein AccessToken vorhanden");
-    return;
-  }
+  console.log("🔐 Token abgefragt");
 
   replaceCanvasWithImage();
-  convertFormElementsToStaticText(document.getElementById("pdfExportContainer"));
+  console.log("🖼️ Canvas ersetzt");
 
-  // Warten auf Rendering (DOM-Ruhephase)
-  await new Promise(resolve => setTimeout(resolve, 200));
+  convertFormElementsToStaticText(document.getElementById("pdfExportContainer"));
+  console.log("📄 Formulare in Text gewandelt");
 
   const el = document.getElementById("pdfExportContainer");
 
@@ -898,15 +895,15 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
+  console.log("🔄 Erzeuge PDF Blob...");
+
   try {
-    console.log("🔄 Erzeuge PDF Blob...");
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
     console.log("📄 PDF Blob erstellt:", pdfBlob);
 
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    window.open(blobUrl); // Testweise: öffne PDF im neuen Tab
-
     const success = await uploadToOneDrive(opt.filename, pdfBlob);
+    console.log("☁️ Upload erfolgreich:", success);
+
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
@@ -915,10 +912,11 @@ async function generatePDFAndFinish() {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error("❌ Fehler beim Erstellen oder Hochladen der PDF:", err);
+    console.error("❌ Fehler beim Erstellen/Hochladen:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
