@@ -851,15 +851,21 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
+  // ✅ Formularfelder in statischen Text umwandeln
   convertFormElementsToStaticText(el);
 
-  el.style.display = "block";
-  el.scrollIntoView();
-  await new Promise(r => setTimeout(r, 200));
+  // ✅ Klon erzeugen für PDF
+  const clone = el.cloneNode(true);
+  clone.style.position = "absolute";
+  clone.style.top = "0";
+  clone.style.left = "0";
+  clone.style.width = "800px";
+  clone.style.zIndex = "-1";
+  clone.style.background = "white";
+  document.body.appendChild(clone);
 
-  // 🟥 Test-Sichtbarkeit + Größe prüfen
-  el.style.outline = "4px solid red";
-  console.log("📏 Containergröße vor PDF:", el.offsetWidth, el.offsetHeight);
+  // ✅ Kurz warten, damit alles im DOM ankommt
+  await new Promise(r => setTimeout(r, 100));
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -869,8 +875,8 @@ async function generatePDFAndFinish() {
       scale: 2,
       scrollY: 0,
       useCORS: true,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight
+      windowWidth: clone.scrollWidth,
+      windowHeight: clone.scrollHeight
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
@@ -878,7 +884,11 @@ async function generatePDFAndFinish() {
 
   try {
     console.log("🟡 Starte PDF-Erzeugung mit ID:", auftragId);
-    const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
+
+    const pdfBlob = await html2pdf().from(clone).set(opt).outputPdf('blob');
+
+    // ✅ Klon entfernen
+    document.body.removeChild(clone);
 
     const success = await uploadToOneDrive(filename, pdfBlob);
 
@@ -886,7 +896,7 @@ async function generatePDFAndFinish() {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
 
-      // ⏳ Zeige Abschlussbildschirm erst nach kurzer Pause
+      // ⏳ Zeige Abschlussbildschirm mit leichter Verzögerung
       setTimeout(() => {
         document.getElementById("abschlussScreen").style.display = "flex";
       }, 1000);
@@ -898,8 +908,6 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
-
-
 
 
 
