@@ -733,11 +733,7 @@ window.addEventListener('load', function() {
 <button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
 <button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
 
-<!-- ✅ Login-Hinweis-Block -->
-<div id="loginNotice" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: #fffbe6; border: 1px solid #e6c200; padding: 1rem 2rem; border-radius: 8px; font-weight: bold; z-index: 10000; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-⚠️ Um in OneDrive speichern zu können, bitte bei Microsoft anmelden.<br/>
-<button onclick="signInAndAcquireToken(true)" style="margin-top: 10px; background-color: #0078d4; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🔐 Jetzt anmelden</button>
-</div>
+
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
 </script>
@@ -854,8 +850,24 @@ async function uploadToOneDrive(filename, blob) {
 // ====================
 // Auftrag abschließen
 // ====================
+  function convertFormElementsToStaticText(container) {
+  container.querySelectorAll("input, select, textarea").forEach(el => {
+    const span = document.createElement("span");
+    if (el.tagName === "SELECT") {
+      span.textContent = el.options[el.selectedIndex]?.text || "";
+    } else {
+      span.textContent = el.value || "";
+    }
+    span.style.display = "block";
+    span.style.padding = "6px";
+    span.style.borderBottom = "1px solid #ccc";
+    el.replaceWith(span);
+  });
+}
+
 async function generatePDFAndFinish() {
   replaceCanvasWithImage(); // ✅ Wandelt Unterschrift-Canvas in Bild um
+  convertFormElementsToStaticText(document.getElementById("pdfExportContainer")); // ✅ Formulare ersetzen
 
   const el = document.getElementById("pdfExportContainer");
 
@@ -867,7 +879,8 @@ async function generatePDFAndFinish() {
       scale: 2,
       scrollY: 0,
       useCORS: true,
-      windowWidth: el.scrollWidth // sicherstellen, dass ganze Breite berücksichtigt wird
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight
     },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak:    { mode: ['css', 'legacy'] }
@@ -889,6 +902,7 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
