@@ -838,10 +838,10 @@ function convertFormElementsToStaticText(container) {
 async function generatePDFAndFinish() {
   const el = document.getElementById("pdfExportContainer");
 
-  // ✅ Klon erstellen VOR Änderungen
+  // 🟢 1. Klon erzeugen
   const clone = el.cloneNode(true);
 
-  // ✅ Unterschrift-Canvas im Klon in Bild umwandeln
+  // 🟢 2. Canvas-Felder (Unterschriften) in <img> umwandeln
   clone.querySelectorAll('canvas').forEach((canvas) => {
     const img = document.createElement('img');
     img.src = canvas.toDataURL();
@@ -850,20 +850,21 @@ async function generatePDFAndFinish() {
     canvas.parentNode.replaceChild(img, canvas);
   });
 
-  // ✅ Formularfelder im Klon in statischen Text umwandeln
+  // 🟢 3. Formularfelder in statischen Text umwandeln
   convertFormElementsToStaticText(clone);
 
-  // ✅ Positionieren für Screenshot
-  clone.style.position = "absolute";
+  // 🟢 4. Klon sichtbar machen, damit html2canvas ihn korrekt lesen kann
+  clone.style.position = "fixed";
   clone.style.top = "0";
   clone.style.left = "0";
   clone.style.width = "800px";
-  clone.style.zIndex = "-1";
   clone.style.background = "white";
+  clone.style.zIndex = "9999";
+  clone.style.opacity = "1";
   document.body.appendChild(clone);
 
-  // ✅ Auftrags-ID sicherstellen
-  let auftragIdField = document.getElementById("auftrag_id");
+  // 🟢 5. Auftrags-ID sicherstellen
+  const auftragIdField = document.getElementById("auftrag_id");
   let auftragId;
   if (!auftragIdField || !auftragIdField.value) {
     const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
@@ -875,6 +876,7 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
+  // 🟢 6. Optionen für html2pdf
   const opt = {
     margin: [5, 10, 5, 10],
     filename: filename,
@@ -891,17 +893,21 @@ async function generatePDFAndFinish() {
   };
 
   try {
-    console.log("🟡 Starte PDF-Erzeugung mit ID:", auftragId);
+    console.log("📄 Starte PDF-Erzeugung:", filename);
 
     const pdfBlob = await html2pdf().from(clone).set(opt).outputPdf('blob');
 
-    document.body.removeChild(clone); // ✅ Aufräumen
+    // 🟢 7. Klon wieder entfernen
+    document.body.removeChild(clone);
 
+    // 🟢 8. Upload zu OneDrive
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
+
+      // 🟢 9. Abschluss-Screen anzeigen
       setTimeout(() => {
         document.getElementById("abschlussScreen").style.display = "flex";
       }, 1000);
@@ -909,7 +915,7 @@ async function generatePDFAndFinish() {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error("❌ Fehler beim PDF oder Upload:", err);
+    console.error("❌ Fehler bei der PDF-Erstellung oder dem Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
