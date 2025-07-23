@@ -77,13 +77,18 @@
     }
   }
 
-  #pdfExportContainer {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-    background: white;
-    color: black;
-  }
+ #pdfExportContainer {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  background: white;
+  color: black;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 
   canvas {
     display: block !important;
@@ -736,7 +741,7 @@ window.addEventListener('load', function() {
 
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
-</script>
+
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
@@ -866,8 +871,10 @@ async function uploadToOneDrive(filename, blob) {
 }
 
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage(); // ✅ Wandelt Unterschrift-Canvas in Bild um
-  convertFormElementsToStaticText(document.getElementById("pdfExportContainer")); // ✅ Formulare ersetzen
+  await signInAndAcquireToken(true);
+  replaceCanvasWithImage();
+  convertFormElementsToStaticText(document.getElementById("pdfExportContainer"));
+
 
   const el = document.getElementById("pdfExportContainer");
 
@@ -925,10 +932,12 @@ function forceUpdate() {
   }
 }
 async function saveDraftToOneDrive() {
+  await signInAndAcquireToken(true);
   if (!accessToken) {
     alert("Bitte zuerst anmelden.");
     return;
   }
+
 
   const draftData = {};
   fieldIds.forEach(id => {
