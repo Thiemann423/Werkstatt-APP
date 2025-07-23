@@ -836,26 +836,24 @@ function convertFormElementsToStaticText(container) {
   });
 }
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage(); // ✅ Unterschrift-Canvas in Bild umwandeln
-
   const el = document.getElementById("pdfExportContainer");
 
-  let auftragIdField = document.getElementById("auftrag_id");
-  if (!auftragIdField || !auftragIdField.value) {
-    const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    if (auftragIdField) auftragIdField.value = uniqueId;
-    var auftragId = uniqueId;
-  } else {
-    var auftragId = auftragIdField.value;
-  }
-
-  const filename = `${auftragId}.pdf`;
-
-  // ✅ Formularfelder in statischen Text umwandeln
-  convertFormElementsToStaticText(el);
-
-  // ✅ Klon erzeugen für PDF
+  // ✅ Klon erstellen VOR Änderungen
   const clone = el.cloneNode(true);
+
+  // ✅ Unterschrift-Canvas im Klon in Bild umwandeln
+  clone.querySelectorAll('canvas').forEach((canvas) => {
+    const img = document.createElement('img');
+    img.src = canvas.toDataURL();
+    img.style.width = canvas.style.width;
+    img.style.height = canvas.style.height;
+    canvas.parentNode.replaceChild(img, canvas);
+  });
+
+  // ✅ Formularfelder im Klon in statischen Text umwandeln
+  convertFormElementsToStaticText(clone);
+
+  // ✅ Positionieren für Screenshot
   clone.style.position = "absolute";
   clone.style.top = "0";
   clone.style.left = "0";
@@ -864,8 +862,18 @@ async function generatePDFAndFinish() {
   clone.style.background = "white";
   document.body.appendChild(clone);
 
-  // ✅ Kurz warten, damit alles im DOM ankommt
-  await new Promise(r => setTimeout(r, 100));
+  // ✅ Auftrags-ID sicherstellen
+  let auftragIdField = document.getElementById("auftrag_id");
+  let auftragId;
+  if (!auftragIdField || !auftragIdField.value) {
+    const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    if (auftragIdField) auftragIdField.value = uniqueId;
+    auftragId = uniqueId;
+  } else {
+    auftragId = auftragIdField.value;
+  }
+
+  const filename = `${auftragId}.pdf`;
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -887,16 +895,13 @@ async function generatePDFAndFinish() {
 
     const pdfBlob = await html2pdf().from(clone).set(opt).outputPdf('blob');
 
-    // ✅ Klon entfernen
-    document.body.removeChild(clone);
+    document.body.removeChild(clone); // ✅ Aufräumen
 
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
-
-      // ⏳ Zeige Abschlussbildschirm mit leichter Verzögerung
       setTimeout(() => {
         document.getElementById("abschlussScreen").style.display = "flex";
       }, 1000);
