@@ -819,7 +819,9 @@ async function uploadToOneDrive(filename, blob) {
 // ====================
 // Auftrag abschließen
 // ====================
-  function convertFormElementsToStaticText(container) {
+
+// ✅ Nur EINMAL definieren!
+function convertFormElementsToStaticText(container) {
   container.querySelectorAll("input, select, textarea").forEach(el => {
     const span = document.createElement("span");
     if (el.tagName === "SELECT") {
@@ -846,7 +848,7 @@ async function generatePDFAndFinish() {
     const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
     
     if (auftragIdField) {
-      auftragIdField.value = uniqueId; // 🔁 Feld befüllen, falls vorhanden
+      auftragIdField.value = uniqueId;
     } else {
       console.warn("⚠️ Kein 'auftrag_id'-Feld vorhanden, ID wird nur für PDF-Datei verwendet.");
     }
