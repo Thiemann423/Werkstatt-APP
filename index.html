@@ -456,7 +456,7 @@
         fileInput.value = '';
     });
 </script>
-<img id="fotoPreview" style="max-width: 100%; display: none; border: 1px solid #ccc; margin-top: 10px;"/></div><button onclick="clearSignature(1)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+></div><button onclick="clearSignature(1)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
 
 </div>
 <div class="section">
@@ -544,21 +544,6 @@ function clearSignature(index) {
         ctx.clearRect(0, 0, canvases[index].width, canvases[index].height);
     }
 }
-</script><script>
-document.getElementById("foto").addEventListener("change", function(event) {
-    const file = event.target.files[0];
-    const preview = document.getElementById("fotoPreview");
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            preview.src = e.target.result;
-            preview.style.display = "block";
-        };
-        reader.readAsDataURL(file);
-    } else {
-        preview.style.display = "none";
-    }
-});
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -667,34 +652,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-  const fileInput = document.getElementById("photo");
-  const previewImage = document.getElementById("photoPreview");
-  const deleteButton = document.getElementById("deletePhoto");
-  if (fileInput && previewImage && deleteButton) {
-    fileInput.addEventListener("change", function() {
-      const file = fileInput.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          previewImage.src = e.target.result;
-          previewImage.style.display = "block";
-          deleteButton.style.display = "inline";
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-    deleteButton.addEventListener("click", function() {
-      previewImage.src = "";
-      previewImage.style.display = "none";
-      fileInput.value = "";
-      deleteButton.style.display = "none";
-    });
-  }
-});
 
-</script>
 <script>
 // UUID Generator (v4)
 function generateUUID() {
