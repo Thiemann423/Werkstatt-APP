@@ -836,6 +836,7 @@ async function uploadToOneDrive(filename, blob) {
 
 async function generatePDFAndFinish() {
   replaceCanvasWithImage(); // ✅ Unterschrift-Canvas in Bild umwandeln
+  convertFormElementsToStaticText(document.getElementById("pdfExportContainer")); // ✅ NEU: wandelt Inputs in Text um
 
   const el = document.getElementById("pdfExportContainer");
 
