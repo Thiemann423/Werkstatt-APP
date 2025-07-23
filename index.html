@@ -837,11 +837,10 @@ function convertFormElementsToStaticText(container) {
 }
 
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage(); // ✅ Signatur zuerst umwandeln
+  replaceCanvasWithImage();
 
   const el = document.getElementById("pdfExportContainer");
 
-  // ✅ Erst jetzt ID ermitteln (bevor Inputs ersetzt werden!)
   let auftragIdField = document.getElementById("auftrag_id");
   if (!auftragIdField || !auftragIdField.value) {
     const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
@@ -853,8 +852,10 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
-  // ✅ Jetzt erst Inputs in Text umwandeln!
-  convertFormElementsToStaticText(el);
+convertFormElementsToStaticText(el);
+console.log("🔍 PDF-Inhalt:", el.innerHTML);
+el.scrollIntoView();
+await new Promise(r => setTimeout(r, 100));
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -880,7 +881,6 @@ async function generatePDFAndFinish() {
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
-      // ✅ Abschlussbildschirm erst am Ende anzeigen
       document.getElementById("abschlussScreen").style.display = "flex";
     } else {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
