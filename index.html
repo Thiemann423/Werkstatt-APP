@@ -837,28 +837,24 @@ function convertFormElementsToStaticText(container) {
 }
 
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage(); // ✅ Unterschrift-Canvas in Bild umwandeln
-  convertFormElementsToStaticText(document.getElementById("pdfExportContainer")); // ✅ NEU: wandelt Inputs in Text um
+  replaceCanvasWithImage(); // ✅ Signatur zuerst umwandeln
 
   const el = document.getElementById("pdfExportContainer");
 
-  // 🔐 Sicher eine eindeutige Auftrags-ID erzeugen, falls leer
+  // ✅ Erst jetzt ID ermitteln (bevor Inputs ersetzt werden!)
   let auftragIdField = document.getElementById("auftrag_id");
   if (!auftragIdField || !auftragIdField.value) {
     const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    
-    if (auftragIdField) {
-      auftragIdField.value = uniqueId;
-    } else {
-      console.warn("⚠️ Kein 'auftrag_id'-Feld vorhanden, ID wird nur für PDF-Datei verwendet.");
-    }
-
+    if (auftragIdField) auftragIdField.value = uniqueId;
     var auftragId = uniqueId;
   } else {
     var auftragId = auftragIdField.value;
   }
 
   const filename = `${auftragId}.pdf`;
+
+  // ✅ Jetzt erst Inputs in Text umwandeln!
+  convertFormElementsToStaticText(el);
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -876,24 +872,25 @@ async function generatePDFAndFinish() {
   };
 
   try {
-    console.log("🟡 Starte PDF-Erzeugung");
+    console.log("🟡 Starte PDF-Erzeugung mit ID:", auftragId);
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
 
-    console.log("🟢 PDF Blob erstellt:", pdfBlob);
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
+      // ✅ Abschlussbildschirm erst am Ende anzeigen
       document.getElementById("abschlussScreen").style.display = "flex";
     } else {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error("❌ Fehler beim Erstellen/Hochladen:", err);
+    console.error("❌ Fehler beim PDF oder Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
