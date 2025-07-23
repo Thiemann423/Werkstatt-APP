@@ -835,9 +835,8 @@ function convertFormElementsToStaticText(container) {
     el.replaceWith(span);
   });
 }
-
 async function generatePDFAndFinish() {
-  replaceCanvasWithImage();
+  replaceCanvasWithImage(); // ✅ Unterschrift-Canvas in Bild umwandeln
 
   const el = document.getElementById("pdfExportContainer");
 
@@ -852,10 +851,13 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
-convertFormElementsToStaticText(el);
-console.log("🔍 PDF-Inhalt:", el.innerHTML);
-el.scrollIntoView();
-await new Promise(r => setTimeout(r, 100));
+  // ✅ HIER FORMULARE IN TEXT UMWANDELN
+  convertFormElementsToStaticText(el);
+
+  // ✅ HIER EINFÜGEN: Warten auf DOM-Update
+  el.style.display = "block";
+  el.scrollIntoView();
+  await new Promise(r => setTimeout(r, 200));
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -875,6 +877,7 @@ await new Promise(r => setTimeout(r, 100));
   try {
     console.log("🟡 Starte PDF-Erzeugung mit ID:", auftragId);
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
+
 
     const success = await uploadToOneDrive(filename, pdfBlob);
 
