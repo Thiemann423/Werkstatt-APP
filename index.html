@@ -838,10 +838,24 @@ function convertFormElementsToStaticText(container) {
 async function generatePDFAndFinish() {
   const container = document.getElementById("pdfExportContainer");
 
-  // 🔁 Formularfelder umwandeln (Input, Select, Textarea → statischer Text)
+  // 🕵️ Sichtbarkeits-Check vor dem PDF-Export
+  console.log("🕵️ Sichtbarkeitsprüfung PDF-Container:");
+  console.log("offsetWidth:", container.offsetWidth);
+  console.log("offsetHeight:", container.offsetHeight);
+  console.log("display:", getComputedStyle(container).display);
+  console.log("visibility:", getComputedStyle(container).visibility);
+  console.log("opacity:", getComputedStyle(container).opacity);
+
+  // Optional: Sichtbar machen, falls nötig
+  container.style.display = 'block';
+  container.style.visibility = 'visible';
+  container.style.position = 'relative';
+  container.style.opacity = '1';
+
+  // 🔁 Formularfelder (input, textarea, select) zu statischem Text
   convertFormElementsToStaticText(container);
 
-  // 🔁 Canvas (Signaturen) in Bilder umwandeln
+  // 🔁 Canvas (z. B. Unterschriften) zu Bild umwandeln
   container.querySelectorAll("canvas").forEach((canvas) => {
     const img = document.createElement("img");
     img.src = canvas.toDataURL();
@@ -850,8 +864,9 @@ async function generatePDFAndFinish() {
     canvas.parentNode.replaceChild(img, canvas);
   });
 
-  // 🔁 Bilder (inkl. Fotos) laden sicherstellen
+  // ⏳ Warten bis alle <img>-Elemente vollständig geladen sind
   const images = container.querySelectorAll("img");
+  console.log("📷 Anzahl Bilder im Container:", images.length);
   await Promise.all(Array.from(images).map(img => {
     if (img.complete) return Promise.resolve();
     return new Promise(resolve => {
@@ -859,7 +874,7 @@ async function generatePDFAndFinish() {
     });
   }));
 
-  // 📄 Auftrags-ID holen oder erzeugen
+  // 📄 Auftrags-ID ermitteln oder erzeugen
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
@@ -870,7 +885,7 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
-  // 📄 PDF-Optionen
+  // ⚙️ PDF-Exportoptionen
   const opt = {
     margin: [5, 10, 5, 10],
     filename: filename,
@@ -887,8 +902,9 @@ async function generatePDFAndFinish() {
   try {
     console.log("📄 Starte PDF-Erzeugung:", filename);
 
-    // 📄 PDF erzeugen aus dem DOM (kein clone!)
     const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
+
+    console.log("✅ PDF-Blob erzeugt:", pdfBlob);
 
     // ☁️ Hochladen zu OneDrive
     const success = await uploadToOneDrive(filename, pdfBlob);
@@ -903,11 +919,10 @@ async function generatePDFAndFinish() {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error("❌ Fehler bei der PDF-Erstellung oder dem Upload:", err);
+    console.error("❌ Fehler bei PDF-Erstellung oder Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
-
 
 
 
