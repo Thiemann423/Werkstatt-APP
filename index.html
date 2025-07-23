@@ -882,7 +882,7 @@ async function generatePDFAndFinish() {
 
   const opt = {
     margin: [5, 10, 5, 10],
-    filename: `${document.getElementById("auftrag_id").value || "Reparaturauftrag"}.pdf`,
+   filename: `${document.getElementById("auftrag_id")?.value || "Reparaturauftrag"}.pdf`,
     image: { type: 'jpeg', quality: 1 },
     html2canvas: {
       scale: 2,
