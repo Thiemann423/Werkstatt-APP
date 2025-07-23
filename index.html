@@ -851,13 +851,15 @@ async function generatePDFAndFinish() {
 
   const filename = `${auftragId}.pdf`;
 
-  // ✅ HIER FORMULARE IN TEXT UMWANDELN
   convertFormElementsToStaticText(el);
 
-  // ✅ HIER EINFÜGEN: Warten auf DOM-Update
   el.style.display = "block";
   el.scrollIntoView();
   await new Promise(r => setTimeout(r, 200));
+
+  // 🟥 Test-Sichtbarkeit + Größe prüfen
+  el.style.outline = "4px solid red";
+  console.log("📏 Containergröße vor PDF:", el.offsetWidth, el.offsetHeight);
 
   const opt = {
     margin: [5, 10, 5, 10],
@@ -878,13 +880,16 @@ async function generatePDFAndFinish() {
     console.log("🟡 Starte PDF-Erzeugung mit ID:", auftragId);
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
 
-
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile();
-      document.getElementById("abschlussScreen").style.display = "flex";
+
+      // ⏳ Zeige Abschlussbildschirm erst nach kurzer Pause
+      setTimeout(() => {
+        document.getElementById("abschlussScreen").style.display = "flex";
+      }, 1000);
     } else {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
@@ -893,8 +898,6 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
-
-
 
 
 
