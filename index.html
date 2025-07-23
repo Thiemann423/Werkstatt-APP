@@ -825,22 +825,31 @@ async function uploadToOneDrive(filename, blob) {
 }
 
 async function generatePDFAndFinish() {
-  console.log("✅ Starte PDF-Erzeugung");
-
-  await signInAndAcquireToken(true);
-  console.log("🔐 Token abgefragt");
-
-  replaceCanvasWithImage();
-  console.log("🖼️ Canvas ersetzt");
-
-  convertFormElementsToStaticText(document.getElementById("pdfExportContainer"));
-  console.log("📄 Formulare in Text gewandelt");
+  replaceCanvasWithImage(); // ✅ Unterschrift-Canvas in Bild umwandeln
 
   const el = document.getElementById("pdfExportContainer");
 
+  // 🔐 Sicher eine eindeutige Auftrags-ID erzeugen, falls leer
+  let auftragIdField = document.getElementById("auftrag_id");
+  if (!auftragIdField || !auftragIdField.value) {
+    const uniqueId = `REP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    
+    if (auftragIdField) {
+      auftragIdField.value = uniqueId; // 🔁 Feld befüllen, falls vorhanden
+    } else {
+      console.warn("⚠️ Kein 'auftrag_id'-Feld vorhanden, ID wird nur für PDF-Datei verwendet.");
+    }
+
+    var auftragId = uniqueId;
+  } else {
+    var auftragId = auftragIdField.value;
+  }
+
+  const filename = `${auftragId}.pdf`;
+
   const opt = {
     margin: [5, 10, 5, 10],
-   filename: `${document.getElementById("auftrag_id")?.value || "Reparaturauftrag"}.pdf`,
+    filename: filename,
     image: { type: 'jpeg', quality: 1 },
     html2canvas: {
       scale: 2,
@@ -853,14 +862,12 @@ async function generatePDFAndFinish() {
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
-  console.log("🔄 Erzeuge PDF Blob...");
-
   try {
+    console.log("🟡 Starte PDF-Erzeugung");
     const pdfBlob = await html2pdf().from(el).set(opt).outputPdf('blob');
-    console.log("📄 PDF Blob erstellt:", pdfBlob);
 
-    const success = await uploadToOneDrive(opt.filename, pdfBlob);
-    console.log("☁️ Upload erfolgreich:", success);
+    console.log("🟢 PDF Blob erstellt:", pdfBlob);
+    const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -874,6 +881,7 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
