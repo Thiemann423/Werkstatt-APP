@@ -850,19 +850,33 @@ async function generatePDFAndFinish() {
     canvas.parentNode.replaceChild(img, canvas);
   });
 
+  // 🟢 2b. Bilder aus Dateiupload in den Klon übernehmen
+  const originalImages = document.querySelectorAll('.preview-container .image-wrapper');
+  const clonedPreview = clone.querySelector('.preview-container');
+
+  if (clonedPreview) {
+    clonedPreview.innerHTML = ''; // Leeren
+
+    originalImages.forEach(wrapper => {
+      const clonedWrapper = wrapper.cloneNode(true);
+      const deleteBtn = clonedWrapper.querySelector('.delete-button');
+      if (deleteBtn) deleteBtn.remove(); // Löschen-Button entfernen
+      clonedPreview.appendChild(clonedWrapper);
+    });
+  }
+
   // 🟢 3. Formularfelder in statischen Text umwandeln
   convertFormElementsToStaticText(clone);
 
-  // 🟢 4. Klon sichtbar machen, damit html2canvas ihn korrekt lesen kann
-clone.style.position = "fixed";
-clone.style.top = "50px";
-clone.style.left = "50px";
-clone.style.background = "white";
-clone.style.border = "2px solid red";     // Sichtbar!
-clone.style.zIndex = "99999";
-clone.style.padding = "20px";
-document.body.appendChild(clone);
-
+  // 🟢 4. Klon sichtbar machen, damit html2canvas ihn korrekt liest
+  clone.style.position = "fixed";
+  clone.style.top = "50px";
+  clone.style.left = "50px";
+  clone.style.background = "white";
+  clone.style.border = "2px solid red";
+  clone.style.zIndex = "99999";
+  clone.style.padding = "20px";
+  document.body.appendChild(clone);
 
   // 🟢 5. Auftrags-ID sicherstellen
   const auftragIdField = document.getElementById("auftrag_id");
