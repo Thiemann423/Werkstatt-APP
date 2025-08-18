@@ -851,6 +851,13 @@ function convertFormElementsToStaticText(container) {
   });
 }
 async function generatePDFAndFinish() {
+
+  await signInAndAcquireToken(true);
+if (!accessToken) {
+  alert("Bitte zuerst anmelden.");
+  return;
+}
+
   const container = document.getElementById("pdfExportContainer");
 
   // Sichtbar & renderbar machen
