@@ -337,7 +337,7 @@
 </div>
 
 
-</div>
+
 <div class="section">
 <label for="unterschrift_techniker"></label>
 </div>
@@ -471,12 +471,11 @@
     });
 </script>
 
-
-</div>
 <div class="section">
   <label for="ort_datum">Ort / Datum:</label>
   <input id="ort_datum" name="ort_datum" type="text"/>
 </div>
+
 
 <div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">
 Erstellt: M.Thiemann       Datum: 18.06.2025
@@ -564,7 +563,7 @@ window.addEventListener("load", () => {
 });
 </script>
 
-</script>
+
 <script>
 function clearSignature(index) {
     const canvases = document.querySelectorAll("canvas");
@@ -854,43 +853,33 @@ function convertFormElementsToStaticText(container) {
 async function generatePDFAndFinish() {
   const container = document.getElementById("pdfExportContainer");
 
-  // 🕵️ Sichtbarkeits-Check vor dem PDF-Export
-  console.log("🕵️ Sichtbarkeitsprüfung PDF-Container:");
-  console.log("offsetWidth:", container.offsetWidth);
-  console.log("offsetHeight:", container.offsetHeight);
-  console.log("display:", getComputedStyle(container).display);
-  console.log("visibility:", getComputedStyle(container).visibility);
-  console.log("opacity:", getComputedStyle(container).opacity);
-
-  // Optional: Sichtbar machen, falls nötig
-  container.style.display = 'block';
+  // Sichtbar & renderbar machen
+  container.style.display   = 'block';
   container.style.visibility = 'visible';
-  container.style.position = 'relative';
-  container.style.opacity = '1';
+  container.style.position   = 'relative';
+  container.style.opacity    = '1';
+  container.style.background = '#ffffff';
 
-  // 🔁 Formularfelder (input, textarea, select) zu statischem Text
+  // Form-Elemente in statischen Text wandeln
   convertFormElementsToStaticText(container);
 
-  // 🔁 Canvas (z. B. Unterschriften) zu Bild umwandeln
+  // Unterschriften (Canvas) in <img> umwandeln
   container.querySelectorAll("canvas").forEach((canvas) => {
     const img = document.createElement("img");
-    img.src = canvas.toDataURL();
-    img.style.width = canvas.style.width;
-    img.style.height = canvas.style.height;
+    img.src = canvas.toDataURL("image/png");
+    img.style.width  = canvas.style.width  || "100%";
+    img.style.height = canvas.style.height || "200px";
     canvas.parentNode.replaceChild(img, canvas);
   });
 
-  // ⏳ Warten bis alle <img>-Elemente vollständig geladen sind
+  // Warten bis alle Bilder geladen sind (inkl. Signatur-Imgs & Fotos)
   const images = container.querySelectorAll("img");
-  console.log("📷 Anzahl Bilder im Container:", images.length);
   await Promise.all(Array.from(images).map(img => {
     if (img.complete) return Promise.resolve();
-    return new Promise(resolve => {
-      img.onload = img.onerror = resolve;
-    });
+    return new Promise(resolve => { img.onload = img.onerror = resolve; });
   }));
 
-  // 📄 Auftrags-ID ermitteln oder erzeugen
+  // Auftrags-ID bestimmen
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
@@ -898,47 +887,49 @@ async function generatePDFAndFinish() {
     auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
     if (auftragIdField) auftragIdField.value = auftragId;
   }
-
   const filename = `${auftragId}.pdf`;
 
-  // ⚙️ PDF-Exportoptionen
+  // iOS/Safari-Falle umgehen: komplette Größe rendern lassen
+  const fullWidth  = container.scrollWidth;
+  const fullHeight = container.scrollHeight;
+
+  // html2pdf / html2canvas / jsPDF Optionen
   const opt = {
-    margin: [5, 10, 5, 10],
-    filename: filename,
-    image: { type: 'jpeg', quality: 1 },
+    margin: [10, 10, 10, 10],
+    filename,
+    image: { type: 'jpeg', quality: 0.98 },
     html2canvas: {
       scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
       scrollY: 0,
-      useCORS: true
+      windowWidth:  fullWidth,
+      windowHeight: fullHeight
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } // respektiert .page-break
   };
 
   try {
-    console.log("📄 Starte PDF-Erzeugung:", filename);
-
+    // PDF erzeugen
     const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
 
-    console.log("✅ PDF-Blob erzeugt:", pdfBlob);
-
-    // ☁️ Hochladen zu OneDrive
+    // Hochladen nach OneDrive
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-      await deleteDraftFile();
-      setTimeout(() => {
-        document.getElementById("abschlussScreen").style.display = "flex";
-      }, 1000);
+      await deleteDraftFile?.();
+      document.getElementById("abschlussScreen").style.display = "flex";
     } else {
       alert("⚠️ Fehler beim Hochladen in OneDrive.");
     }
   } catch (err) {
-    console.error("❌ Fehler bei PDF-Erstellung oder Upload:", err);
+    console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
