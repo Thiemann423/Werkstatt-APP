@@ -125,6 +125,27 @@
   }
 </style>
 
+  <style>
+  /* Fallback-Layout nur für die PDF-Erstellung */
+  #pdfExportContainer.pdf-snapshot .print-field { 
+    display: block; 
+    padding: 6px 0; 
+    border-bottom: 1px solid #e9e9e9;
+  }
+  #pdfExportContainer.pdf-snapshot .print-label { 
+    font-weight: 700; 
+    margin: 2px 0 2px; 
+    white-space: normal; 
+  }
+  #pdfExportContainer.pdf-snapshot .print-value { 
+    white-space: pre-wrap; 
+    word-break: break-word; 
+    line-height: 1.35; 
+    margin-bottom: 6px;
+  }
+</style>
+
+
 <!-- html2pdf einmalig laden (ohne defer!) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
@@ -943,7 +964,6 @@ function convertFormElementsToStaticText(container){
 }
 
 
-
 async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
@@ -952,14 +972,23 @@ async function generatePDFAndFinish() {
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
   const container = document.getElementById("pdfExportContainer");
-  container.style.display = 'block';
+
+  // Fallback-Styles nur für die PDF-Erstellung aktivieren
+  container.classList.add('pdf-snapshot');
+
+  container.style.display    = 'block';
   container.style.visibility = 'visible';
-  container.style.position = 'relative';
-  container.style.opacity = '1';
+  container.style.position   = 'relative';
+  container.style.opacity    = '1';
   container.style.background = '#ffffff';
 
+  // Form → statischer Text
   convertFormElementsToStaticText(container);
 
+  // Nach DOM-Umbau: 2 Frames warten (Layout stabilisieren)
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  // Bilder im PDF nicht verkleinern
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = '';
@@ -971,15 +1000,21 @@ async function generatePDFAndFinish() {
     img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
   ));
 
+  // Dateiname
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
     const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
     auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    auftragIdField && (auftragIdField.value = auftragId);
+    if (auftragIdField) auftragIdField.value = auftragId;
   }
   const filename = `${auftragId}.pdf`;
 
+  // ⭐ Scroll-Fix: vor dem Rendern nach oben, Offsets negieren
+  const prevScroll = { x: window.scrollX, y: window.scrollY };
+  window.scrollTo(0, 0);
+
+  // Optionen (ohne windowWidth/windowHeight!)
   const opt = {
     margin: 0,
     filename,
@@ -988,17 +1023,19 @@ async function generatePDFAndFinish() {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
-      windowWidth: container.getBoundingClientRect().width,
-      scrollX: 0, scrollY: 0
+      scrollX: -window.scrollX,
+      scrollY: -window.scrollY,
+      foreignObjectRendering: true   // kann bei komplexem CSS helfen
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
   try {
-    // einmal Layout sicher flushen
+    // Noch einmal kurz flushen
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+    // Robuste Erzeugung
     const worker  = window.html2pdf().set(opt).from(container).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
@@ -1013,8 +1050,14 @@ async function generatePDFAndFinish() {
   } catch (err) {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
+  } finally {
+    // Ursprüngliche Scrollposition & Styles wiederherstellen
+    window.scrollTo(prevScroll.x, prevScroll.y);
+    container.classList.remove('pdf-snapshot');
   }
 }
+
+
 
 
 
