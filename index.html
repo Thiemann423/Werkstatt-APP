@@ -944,20 +944,13 @@ function convertFormElementsToStaticText(container){
 
 
 
-
 async function generatePDFAndFinish() {
-  // 0) html2pdf sicherstellen (mit Fallback)
   await loadHtml2PdfIfNeeded();
-  if (typeof window.html2pdf === "undefined") {
-    alert("html2pdf konnte nicht geladen werden (CDN blockiert/offline?).");
-    return;
-  }
+  if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
 
-  // 1) Login sicherstellen
   await signInAndAcquireToken(true);
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
-  // 2) Container vorbereiten
   const container = document.getElementById("pdfExportContainer");
   container.style.display = 'block';
   container.style.visibility = 'visible';
@@ -965,47 +958,50 @@ async function generatePDFAndFinish() {
   container.style.opacity = '1';
   container.style.background = '#ffffff';
 
-  // 3) Form-Elemente -> statischer Print (inkl. Canvas->IMG)
   convertFormElementsToStaticText(container);
 
-  // 3a) Vorschaubilder für PDF nicht verkleinern
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
-    img.style.maxHeight = '';     // Begrenzung entfernen
+    img.style.maxHeight = '';
   });
 
-  // 4) Auf Bilder warten (Signaturen/Fotos)
+  // Bilder laden lassen
   const images = container.querySelectorAll("img");
-  await Promise.all(Array.from(images).map(img =>
+  await Promise.all([...images].map(img =>
     img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
   ));
 
-  // 5) Dateiname bauen …
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
     const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
     auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    if (auftragIdField) auftragIdField.value = auftragId;
+    auftragIdField && (auftragIdField.value = auftragId);
   }
   const filename = `${auftragId}.pdf`;
 
-  // 6) Optionen
   const opt = {
     margin: 0,
     filename,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: {
-      scale: 2, useCORS: true, backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
       windowWidth: container.getBoundingClientRect().width,
-      windowHeight: container.scrollHeight, scrollX: 0, scrollY: 0
+      scrollX: 0, scrollY: 0
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
   try {
-    const pdfBlob = await window.html2pdf().set(opt).from(container).outputPdf('blob');
+    // einmal Layout sicher flushen
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const worker  = window.html2pdf().set(opt).from(container).toPdf();
+    const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
+
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1019,6 +1015,8 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
+
 
 
 
