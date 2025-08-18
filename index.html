@@ -394,13 +394,17 @@
 <div class="section">
   <label for="unterschrift_technik">Unterschrift MA Technik:</label>
   <canvas class="signature-pad" id="unterschrift_technik"></canvas>
+  <button type="button" style="margin-top: 8px; display: block;" 
+          onclick="clearSignature(1)">Unterschrift löschen</button>
+
   <div style="margin-top: 24px;">
     <label for="foto" style="font-weight: bold;">Fehlerstelle / Schaden (optional):</label>
     <h2>Fotos für Reparaturauftrag</h2>
-    <input accept="image/*" id="fileInput" multiple="" type="file"/>
+    <input accept="image/*" id="fileInput" multiple type="file" />
     <div class="preview-container" id="previewContainer"></div>
   </div>
 </div>
+
 
 <style>
   .page-break {
@@ -466,16 +470,30 @@
         fileInput.value = '';
     });
 </script>
-></div><button onclick="clearSignature(1)" style="margin-top: 8px; display: block;" type="button">Unterschrift löschen</button>
+
 
 </div>
 <div class="section">
-<label for="ort_datum">Ort / Datum:</label>
-<input id="ort_datum" name="ort_datum" type="text"/>
+  <label for="ort_datum">Ort / Datum:</label>
+  <input id="ort_datum" name="ort_datum" type="text"/>
 </div>
-<div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">Erstellt: M.Thiemann       Datum: 18.06.2025
-Geprüft: M. Hafermalz       Datum: 24.06.2025
-Freigegeben: F. Pieper  Datum: 24.06.2025</div>
+
+<div style="margin-top: 20px; font-size: 14px; line-height: 1.5; white-space: pre;">
+Erstellt: M.Thiemann       Datum: 18.06.2025
+Geprüft: M. Hafermalz      Datum: 24.06.2025
+Freigegeben: F. Pieper     Datum: 24.06.2025
+</div>
+
+</div> <!-- <= HIER schließen wir #pdfExportContainer -->
+
+<!-- ====================== -->
+<!-- Buttons außerhalb Container -->
+<!-- ====================== -->
+<button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
+<button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
+<button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
+<button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
+
 <style>
 canvas.signature-pad {
   border: 1px solid #000;
@@ -697,17 +715,14 @@ window.addEventListener('load', function() {
 </div>
 <!-- ✅ Ende Login-Hinweis -->
 
-<button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
-<button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
-<button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
-<button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
+
 
 
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
 
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
 
 <script>
 const msalConfig = {
