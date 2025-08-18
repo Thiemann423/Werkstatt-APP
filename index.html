@@ -99,7 +99,7 @@
   img { max-width:100% !important; height:auto !important; }
 </style>
 
-   <style>
+ <style>
   #updateModal {
     display: none;
     position: fixed;
@@ -123,15 +123,16 @@
     border: 1px solid #00aa00;
     border-radius: 5px;
   }
+</style>
 
- <!-- html2pdf einmalig laden (ohne defer!) -->
+<!-- html2pdf einmalig laden (ohne defer!) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 <!-- Fallback, falls das CDN mal nicht lädt -->
 <script>
 async function loadHtml2PdfIfNeeded(){
   if (window.html2pdf) return;
-  await new Promise(r=>setTimeout(r,0));   // einen Tick warten
+  await new Promise(r=>setTimeout(r,0));
   if (window.html2pdf) return;
   await new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -141,8 +142,8 @@ async function loadHtml2PdfIfNeeded(){
     document.head.appendChild(s);
   });
 }
-
- </script>   
+</script>
+  
 
 
 </head>
@@ -1196,6 +1197,19 @@ async function deleteDraftFile() {
     console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
   }
 }
+
+
+  window.confirmUpdate = function () {
+    const modal = document.getElementById('updateModal');
+    if (modal) modal.style.display = 'none';
+
+    const msg = document.getElementById('confirmationMessage');
+    if (msg) {
+      msg.style.display = 'block';
+      setTimeout(() => { msg.style.display = 'none'; }, 2500);
+    }
+  };
+
 
 
 
