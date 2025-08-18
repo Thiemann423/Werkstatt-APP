@@ -123,7 +123,27 @@
     border: 1px solid #00aa00;
     border-radius: 5px;
   }
-</style>
+
+ <!-- html2pdf einmalig laden (ohne defer!) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<!-- Fallback, falls das CDN mal nicht lädt -->
+<script>
+async function loadHtml2PdfIfNeeded(){
+  if (window.html2pdf) return;
+  await new Promise(r=>setTimeout(r,0));   // einen Tick warten
+  if (window.html2pdf) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('html2pdf konnte nicht geladen werden'));
+    document.head.appendChild(s);
+  });
+}
+
+ </script>   
+
 
 </head>
 
@@ -924,11 +944,19 @@ function convertFormElementsToStaticText(container){
 
 
 
-
 async function generatePDFAndFinish() {
+  // 0) html2pdf sicherstellen (mit Fallback)
+  await loadHtml2PdfIfNeeded();
+  if (typeof window.html2pdf === "undefined") {
+    alert("html2pdf konnte nicht geladen werden (CDN blockiert/offline?).");
+    return;
+  }
+
+  // 1) Login sicherstellen
   await signInAndAcquireToken(true);
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
+  // 2) Container vorbereiten
   const container = document.getElementById("pdfExportContainer");
   container.style.display = 'block';
   container.style.visibility = 'visible';
@@ -936,16 +964,22 @@ async function generatePDFAndFinish() {
   container.style.opacity = '1';
   container.style.background = '#ffffff';
 
-  // Form-Elemente -> statischer Print (inkl. Canvas->IMG)
+  // 3) Form-Elemente -> statischer Print (inkl. Canvas->IMG)
   convertFormElementsToStaticText(container);
 
-  // Auf Bilder warten (Signaturen/Fotos)
+  // 3a) Vorschaubilder für PDF nicht verkleinern
+  container.querySelectorAll('.preview-container img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '';     // Begrenzung entfernen
+  });
+
+  // 4) Auf Bilder warten (Signaturen/Fotos)
   const images = container.querySelectorAll("img");
   await Promise.all(Array.from(images).map(img =>
     img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
   ));
 
-  // Dateiname bauen …
+  // 5) Dateiname bauen …
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
@@ -955,6 +989,7 @@ async function generatePDFAndFinish() {
   }
   const filename = `${auftragId}.pdf`;
 
+  // 6) Optionen
   const opt = {
     margin: 0,
     filename,
@@ -969,7 +1004,7 @@ async function generatePDFAndFinish() {
   };
 
   try {
-    const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
+    const pdfBlob = await window.html2pdf().set(opt).from(container).outputPdf('blob');
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -983,6 +1018,8 @@ async function generatePDFAndFinish() {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
+
 
 
 
