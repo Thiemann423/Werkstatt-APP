@@ -66,35 +66,35 @@
   @media print {
     body {
       -webkit-print-color-adjust: exact !important;
-      color-adjust: exact !important;
+      print-color-adjust: exact !important; /* moderner Ersatz */
     }
     .page-break {
       page-break-before: always;
     }
+    /* WICHTIG: Keine width/max-width-Vorgaben für #pdfExportContainer hier drin! */
+  }
+
+  /* A4-Breite ~ 794px bei 96dpi */
+  #pdfExportContainer {
+    width: 794px;
+    max-width: 794px;
+    margin: 0 auto;        /* zentrieren */
+    background: white;
+    color: black;
+  }
+
+  /* Optional: Responsive Ansicht im Browser (hat keinen Effekt aufs PDF) */
+  @media (max-width: 820px) {
     #pdfExportContainer {
-      width: 100% !important;
-      max-width: 100% !important;
+      width: 100%;
+      max-width: 100%;
     }
   }
-#pdfExportContainer {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  background: white;
-  color: black;
-}
 
-
-
-  canvas {
-    display: block !important;
-  }
-
-  img {
-    max-width: 100% !important;
-    height: auto !important;
-  }
+  canvas { display: block !important; }
+  img { max-width: 100% !important; height: auto !important; }
 </style>
+
 
 
   <!-- ✅ Scripte und Manifest -->
@@ -844,27 +844,28 @@ function convertFormElementsToStaticText(container) {
     el.replaceWith(span);
   });
 }
+
 async function generatePDFAndFinish() {
 
+  // 1) Login sicherstellen
   await signInAndAcquireToken(true);
-if (!accessToken) {
-  alert("Bitte zuerst anmelden.");
-  return;
-}
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
 
+  // 2) Container vorbereiten
   const container = document.getElementById("pdfExportContainer");
-
-  // Sichtbar & renderbar machen
   container.style.display   = 'block';
   container.style.visibility = 'visible';
   container.style.position   = 'relative';
   container.style.opacity    = '1';
   container.style.background = '#ffffff';
 
-  // Form-Elemente in statischen Text wandeln
+  // 3) Form-Elemente in statischen Text wandeln
   convertFormElementsToStaticText(container);
 
-  // Unterschriften (Canvas) in <img> umwandeln
+  // 4) Unterschriften (Canvas) in <img> umwandeln
   container.querySelectorAll("canvas").forEach((canvas) => {
     const img = document.createElement("img");
     img.src = canvas.toDataURL("image/png");
@@ -873,14 +874,14 @@ if (!accessToken) {
     canvas.parentNode.replaceChild(img, canvas);
   });
 
-  // Warten bis alle Bilder geladen sind (inkl. Signatur-Imgs & Fotos)
+  // 5) Warten bis alle Bilder geladen sind
   const images = container.querySelectorAll("img");
   await Promise.all(Array.from(images).map(img => {
     if (img.complete) return Promise.resolve();
     return new Promise(resolve => { img.onload = img.onerror = resolve; });
   }));
 
-  // Auftrags-ID bestimmen
+  // 6) Auftrags-ID / Dateiname
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
@@ -890,11 +891,12 @@ if (!accessToken) {
   }
   const filename = `${auftragId}.pdf`;
 
-  // iOS/Safari-Falle umgehen: komplette Größe rendern lassen
-  const fullWidth  = container.scrollWidth;
-  const fullHeight = container.scrollHeight;
+  // 7) Exakte Render-Maße ermitteln (verhindert „alles links“ & Abschneiden)
+  const rect = container.getBoundingClientRect();
+  const exportWidth  = Math.ceil(rect.width);   // tatsächliche Layout-Breite
+  const exportHeight = container.scrollHeight;  // komplette Inhalts-Höhe
 
-  // html2pdf / html2canvas / jsPDF Optionen
+  // 8) html2pdf-Optionen
   const opt = {
     margin: [10, 10, 10, 10],
     filename,
@@ -903,19 +905,18 @@ if (!accessToken) {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
-      scrollY: 0,
-      windowWidth:  fullWidth,
-      windowHeight: fullHeight
+      windowWidth:  exportWidth,
+      windowHeight: exportHeight,
+      scrollX: 0,
+      scrollY: 0
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } // respektiert .page-break
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
 
+  // 9) PDF erzeugen & hochladen
   try {
-    // PDF erzeugen
     const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
-
-    // Hochladen nach OneDrive
     const success = await uploadToOneDrive(filename, pdfBlob);
 
     if (success) {
@@ -930,6 +931,8 @@ if (!accessToken) {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
+
 
 
 
