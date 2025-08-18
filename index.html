@@ -99,30 +99,32 @@
   img { max-width:100% !important; height:auto !important; }
 </style>
 
-      #updateModal {
-        display: none;
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.6);
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-      }
-      #updateModalContent {
-        background: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-      }
-      #confirmationMessage {
-        display: none;
-        margin-top: 20px;
-        padding: 10px;
-        background-color: #e0ffe0;
-        border: 1px solid #00aa00;
-        border-radius: 5px;
-      }
-  </style>
+   <style>
+  #updateModal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  #updateModalContent {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+  }
+  #confirmationMessage {
+    display: none;
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #e0ffe0;
+    border: 1px solid #00aa00;
+    border-radius: 5px;
+  }
+</style>
+
 </head>
 
 <body><div id="updateModal">
@@ -815,43 +817,98 @@ async function uploadToOneDrive(filename, blob) {
 // ✅ Nur EINMAL definieren!
 
 function convertFormElementsToStaticText(container){
-  // UI ausblenden (Buttons etc.)
-  container.querySelectorAll('button, .delete-button').forEach(el => el.classList.add('no-print'));
+  // UI sicher ausblenden (wir rendern mit html2canvas, nicht @media print)
+  container.querySelectorAll('button, .delete-button').forEach(el => el.style.display = 'none');
+
+  // Vorschaubilder im PDF groß/sauber
+  container.querySelectorAll('.preview-container img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = 'none';
+    img.style.border = '0';
+  });
+
+  // Helper: eine 2-Spalten-Zeile bauen
+  function addRow(labelText, valueText, beforeNode){
+    if(!valueText || !valueText.toString().trim()) return;
+    const row = document.createElement('div'); row.className = 'print-field';
+    const l = document.createElement('div'); l.className = 'print-label'; l.textContent = labelText;
+    const v = document.createElement('div'); v.className = 'print-value'; v.textContent = valueText;
+    row.append(l, v);
+    const parent = (beforeNode && beforeNode.parentNode) || container;
+    parent.insertBefore(row, beforeNode || null);
+  }
+
+  // 1) AUSFALLZEIT (2 Felder -> 1 Zeile)
+  const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
+  const ausSt = container.querySelector('#ausfall_stunden');
+  const ausMin = container.querySelector('#ausfall_minuten');
+  if (ausSt || ausMin){
+    const value =
+      (ausSt?.value ? `${ausSt.value} h` : '') +
+      (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
+    addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
+    // Originalblock aufräumen
+    ausSt?.remove(); ausMin?.remove();
+    const flex = ausLabel?.nextElementSibling;
+    if (flex && flex.matches('div')) flex.remove();
+    ausLabel?.remove();
+  }
+
+  // 2) REPARATURDAUER (3 Felder -> 1 Zeile)
+  const start = container.querySelector('#startzeit');
+  const end   = container.querySelector('#endzeit');
+  const dur   = container.querySelector('#dauer');
+  const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
+  if (start || end || dur){
+    const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
+    addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
+    start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+  }
+
+  // 3) RESTLICHE FELDER generisch konvertieren
+  const formatDate = (v) => {
+    try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); }
+    catch { return v || ''; }
+  };
 
   const fields = Array.from(container.querySelectorAll('input, select, textarea'));
   fields.forEach(el => {
-    // Unsichtbares/hidden überspringen
-    const style = getComputedStyle(el);
-    if (el.type === 'hidden' || style.display === 'none' || style.visibility === 'hidden' || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
-      el.remove(); // aufräumen
-      return;
+    // Unsichtbares überspringen/entfernen
+    const cs = getComputedStyle(el);
+    if (el.type === 'hidden' || cs.display === 'none' || cs.visibility === 'hidden' || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+      el.remove(); return;
     }
 
-    const label = (el.previousElementSibling && el.previousElementSibling.tagName === 'LABEL')
-      ? el.previousElementSibling : null;
+    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
+    // Wert ermitteln (Select ohne Value => leer, Datum formatiert)
     let val = '';
-    if (el.tagName === 'SELECT')       val = el.options[el.selectedIndex]?.text || '';
-    else if (el.tagName === 'TEXTAREA') val = el.value;
-    else                                val = el.value || '';
+    if (el.tagName === 'SELECT') {
+      val = el.value ? (el.options[el.selectedIndex]?.text || '') : '';
+    } else if (el.type === 'date') {
+      val = formatDate(el.value);
+    } else if (el.tagName === 'TEXTAREA') {
+      val = el.value;
+    } else {
+      val = el.value || '';
+    }
 
     // Leere Felder nicht ausgeben
-    if (!val.trim() && !label) { el.remove(); return; }
+    if (!val.trim()) { el.remove(); label?.remove(); return; }
 
+    // Zeile ausgeben
     const row = document.createElement('div'); row.className = 'print-field';
     const l   = document.createElement('div'); l.className = 'print-label';
     l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-
     const v   = document.createElement('div'); v.className = 'print-value'; v.textContent = val;
+    row.append(l, v);
 
-    row.appendChild(l); row.appendChild(v);
     const parent = label ? label.parentNode : el.parentNode;
     parent.insertBefore(row, label || el);
-    if (label) label.remove();
-    el.remove();
+    label?.remove(); el.remove();
   });
 
-  // Signaturen sicher als Bild (falls noch vorhanden)
+  // 4) Signaturen (Canvas -> Bild)
   container.querySelectorAll('canvas').forEach(c => {
     const img = document.createElement('img');
     img.src = c.toDataURL('image/png');
@@ -860,49 +917,35 @@ function convertFormElementsToStaticText(container){
     c.parentNode.replaceChild(img, c);
   });
 
+  // 5) Bildblöcke nicht umbrechen
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
 
 
 
 
+
 async function generatePDFAndFinish() {
-
-  // 1) Login sicherstellen
   await signInAndAcquireToken(true);
-  if (!accessToken) {
-    alert("Bitte zuerst anmelden.");
-    return;
-  }
+  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
-  // 2) Container vorbereiten
   const container = document.getElementById("pdfExportContainer");
-  container.style.display   = 'block';
+  container.style.display = 'block';
   container.style.visibility = 'visible';
-  container.style.position   = 'relative';
-  container.style.opacity    = '1';
+  container.style.position = 'relative';
+  container.style.opacity = '1';
   container.style.background = '#ffffff';
 
-  // 3) Form-Elemente in statischen Text wandeln
+  // Form-Elemente -> statischer Print (inkl. Canvas->IMG)
   convertFormElementsToStaticText(container);
 
-  // 4) Unterschriften (Canvas) in <img> umwandeln
-  container.querySelectorAll("canvas").forEach((canvas) => {
-    const img = document.createElement("img");
-    img.src = canvas.toDataURL("image/png");
-    img.style.width  = canvas.style.width  || "100%";
-    img.style.height = canvas.style.height || "200px";
-    canvas.parentNode.replaceChild(img, canvas);
-  });
-
-  // 5) Warten bis alle Bilder geladen sind
+  // Auf Bilder warten (Signaturen/Fotos)
   const images = container.querySelectorAll("img");
-  await Promise.all(Array.from(images).map(img => {
-    if (img.complete) return Promise.resolve();
-    return new Promise(resolve => { img.onload = img.onerror = resolve; });
-  }));
+  await Promise.all(Array.from(images).map(img =>
+    img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
+  ));
 
-  // 6) Auftrags-ID / Dateiname
+  // Dateiname bauen …
   const auftragIdField = document.getElementById("auftrag_id");
   let auftragId = auftragIdField?.value?.trim();
   if (!auftragId) {
@@ -912,33 +955,22 @@ async function generatePDFAndFinish() {
   }
   const filename = `${auftragId}.pdf`;
 
-  // 7) Exakte Render-Maße ermitteln (verhindert „alles links“ & Abschneiden)
-  const rect = container.getBoundingClientRect();
-  const exportWidth  = Math.ceil(rect.width);   // tatsächliche Layout-Breite
-  const exportHeight = container.scrollHeight;  // komplette Inhalts-Höhe
+  const opt = {
+    margin: 0,
+    filename,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2, useCORS: true, backgroundColor: '#ffffff',
+      windowWidth: container.getBoundingClientRect().width,
+      windowHeight: container.scrollHeight, scrollX: 0, scrollY: 0
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
 
-  // 8) html2pdf-Optionen
-const opt = {
-  margin: 0,                       // <— vorher [10,10,10,10] entfernen
-  filename,
-  image: { type: 'jpeg', quality: 0.98 },
-  html2canvas: {
-    scale: 2, useCORS: true, backgroundColor: '#ffffff',
-    windowWidth: container.getBoundingClientRect().width,
-    windowHeight: container.scrollHeight,
-    scrollX: 0, scrollY: 0
-  },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-  pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-};
-
-
-
-  // 9) PDF erzeugen & hochladen
   try {
     const pdfBlob = await html2pdf().set(opt).from(container).outputPdf('blob');
     const success = await uploadToOneDrive(filename, pdfBlob);
-
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile?.();
@@ -951,6 +983,7 @@ const opt = {
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   }
 }
+
 
 
 
