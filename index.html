@@ -964,6 +964,7 @@ function convertFormElementsToStaticText(container){
 }
 
 
+<script>
 async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
@@ -971,74 +972,89 @@ async function generatePDFAndFinish() {
   await signInAndAcquireToken(true);
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
-  const container = document.getElementById("pdfExportContainer");
+  const src = document.getElementById("pdfExportContainer");
+  if (!src) { alert("Container nicht gefunden."); return; }
 
-  // Fallback-Styles nur für die PDF-Erstellung aktivieren
-  container.classList.add('pdf-snapshot');
+  // 1) Isolierten Render-Bereich anlegen (A4 ~ 794px Breite @96DPI)
+  const renderRoot = document.createElement('div');
+  renderRoot.style.position = 'fixed';
+  renderRoot.style.left = '-10000px';
+  renderRoot.style.top = '0';
+  renderRoot.style.width = '794px';
+  renderRoot.style.background = '#ffffff';
+  renderRoot.style.zIndex = '-1';
+  document.body.appendChild(renderRoot);
 
-  container.style.display    = 'block';
-  container.style.visibility = 'visible';
-  container.style.position   = 'relative';
-  container.style.opacity    = '1';
-  container.style.background = '#ffffff';
+  // 2) Inhalt klonen und nur den KLON aufbereiten
+  const clone = src.cloneNode(true);
+  clone.id = 'pdfExportContainerClone';
+  clone.classList.add('pdf-snapshot');           // deine Fallback-Styles
+  clone.style.width   = '794px';
+  clone.style.maxWidth= '794px';
+  clone.style.margin  = '0';
+  clone.style.padding = '20px';
+  clone.style.background = '#ffffff';
 
-  // Form → statischer Text
-  convertFormElementsToStaticText(container);
+  renderRoot.appendChild(clone);
 
-  // Nach DOM-Umbau: 2 Frames warten (Layout stabilisieren)
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  // Bilder im PDF nicht verkleinern
-  container.querySelectorAll('.preview-container img').forEach(img => {
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '';
-  });
-
-  // Bilder laden lassen
-  const images = container.querySelectorAll("img");
-  await Promise.all([...images].map(img =>
-    img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
-  ));
-
-  // Dateiname
-  const auftragIdField = document.getElementById("auftrag_id");
-  let auftragId = auftragIdField?.value?.trim();
-  if (!auftragId) {
-    const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
-    auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    if (auftragIdField) auftragIdField.value = auftragId;
-  }
-  const filename = `${auftragId}.pdf`;
-
-  // ⭐ Scroll-Fix: vor dem Rendern nach oben, Offsets negieren
-  const prevScroll = { x: window.scrollX, y: window.scrollY };
-  window.scrollTo(0, 0);
-
-  // Optionen (ohne windowWidth/windowHeight!)
-  const opt = {
-    margin: 0,
-    filename,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      scrollX: -window.scrollX,
-      scrollY: -window.scrollY,
-      foreignObjectRendering: true   // kann bei komplexem CSS helfen
-    },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-
+  // 3) Formular → statischer Inhalt (nur im Klon!)
   try {
-    // Noch einmal kurz flushen
+    convertFormElementsToStaticText(clone);
+
+    // Thumbnails im PDF groß
+    clone.querySelectorAll('.preview-container img').forEach(img => {
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '';
+      img.style.border = '0';
+      img.style.display = 'block';
+    });
+
+    // 4) Bilder im KLON laden lassen
+    const images = clone.querySelectorAll('img');
+    await Promise.all([...images].map(img =>
+      img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
+    ));
+
+    // 5) Dateiname
+    const auftragIdField = document.getElementById("auftrag_id");
+    let auftragId = auftragIdField?.value?.trim();
+    if (!auftragId) {
+      const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
+      auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+      if (auftragIdField) auftragIdField.value = auftragId;
+    }
+    const filename = `${auftragId}.pdf`;
+
+    // 6) html2pdf-Optionen (ohne windowWidth/windowHeight, ohne Scroll-Offsets)
+    const opt = {
+      margin: 0,
+      filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+        logging: true,
+        // foreignObjectRendering: false ist stabiler – bei Bedarf auf true testen
+        foreignObjectRendering: false
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    // 7) Layout stabilisieren
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    // Robuste Erzeugung
-    const worker  = window.html2pdf().set(opt).from(container).toPdf();
+    // 8) Robuste Erzeugung
+    const worker  = window.html2pdf().set(opt).from(clone).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
+    // Debug (einmalig): Blob-Größe prüfen
+    console.log('PDF Blob size:', pdfBlob.size);
+
+    // 9) Upload
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1051,11 +1067,12 @@ async function generatePDFAndFinish() {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   } finally {
-    // Ursprüngliche Scrollposition & Styles wiederherstellen
-    window.scrollTo(prevScroll.x, prevScroll.y);
-    container.classList.remove('pdf-snapshot');
+    // 10) Aufräumen – den isolierten Render-Bereich entfernen
+    try { renderRoot.remove(); } catch {}
   }
 }
+</script>
+
 
 
 
