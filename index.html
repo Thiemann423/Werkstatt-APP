@@ -587,44 +587,62 @@ button.clear-signature {
 function initSignaturePad(id) {
   const canvas = document.getElementById(id);
   const ctx = canvas.getContext("2d");
-  
+
   function resizeCanvas() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    // HiDPI/Retina scharf rendern
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+    // CSS-Größe aus dem Layout (Fallbacks, falls offset 0 ist)
+    const style = getComputedStyle(canvas);
+    const cssW = canvas.offsetWidth  || parseInt(style.width)  || 600;
+    const cssH = canvas.offsetHeight || parseInt(style.height) || 200;
+
+    // Interne Auflösung hochskalieren
+    canvas.width  = Math.round(cssW * ratio);
+    canvas.height = Math.round(cssH * ratio);
+
+    // Koordinaten wieder in CSS-Pixeln
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    // Strichstil
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.strokeStyle = '#000';
   }
+
   resizeCanvas();
+  // ↳ Diese Zeile ist neu: bei Fenstergröße neu skalieren
+  window.addEventListener('resize', resizeCanvas);
 
   let drawing = false;
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     drawing = true;
-    const rect = canvas.getBoundingClientRect();
+    const r = canvas.getBoundingClientRect();
     ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  });
+    ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
 
   canvas.addEventListener("pointermove", (e) => {
     if (!drawing) return;
-    const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    const r = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
     ctx.stroke();
   });
 
-  canvas.addEventListener("pointerup", () => {
-    drawing = false;
-  });
-
-  canvas.addEventListener("pointerleave", () => {
-    drawing = false;
-  });
+  canvas.addEventListener("pointerup",   () => { drawing = false; });
+  canvas.addEventListener("pointerleave",() => { drawing = false; });
 }
 
+// Dein Load-Listener kann unverändert bleiben:
 window.addEventListener("load", () => {
   initSignaturePad("unterschrift_abnahme");
   initSignaturePad("unterschrift_technik");
 });
 </script>
+
 
 
 <script>
@@ -858,9 +876,11 @@ async function uploadToOneDrive(filename, blob) {
 
 // ✅ Nur EINMAL definieren!
 
+<script>
 function convertFormElementsToStaticText(container){
-  // UI sicher ausblenden (wir rendern mit html2canvas, nicht @media print)
-  container.querySelectorAll('button, .delete-button').forEach(el => el.style.display = 'none');
+  // UI ausblenden
+  container.querySelectorAll('button, input[type="file"], .delete-button')
+           .forEach(el => el.style.display = 'none');
 
   // Vorschaubilder im PDF groß/sauber
   container.querySelectorAll('.preview-container img').forEach(img => {
@@ -868,6 +888,101 @@ function convertFormElementsToStaticText(container){
     img.style.maxHeight = 'none';
     img.style.border = '0';
   });
+
+  // Helper: 2-Spalten-Zeile erzeugen
+  function addRow(labelText, valueText, beforeNode){
+    if(!valueText || !valueText.toString().trim()) return;
+    const row = document.createElement('div'); row.className = 'print-field';
+    const l = document.createElement('div'); l.className = 'print-label'; l.textContent = labelText;
+    const v = document.createElement('div'); v.className = 'print-value'; v.textContent = valueText;
+    row.append(l, v);
+    const parent = (beforeNode && beforeNode.parentNode) || container;
+    parent.insertBefore(row, beforeNode || null);
+  }
+
+  // 1) Ausfallzeit (2 Felder -> 1 Zeile)
+  const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
+  const ausSt = container.querySelector('#ausfall_stunden');
+  const ausMin = container.querySelector('#ausfall_minuten');
+  if (ausSt || ausMin){
+    const value =
+      (ausSt?.value ? `${ausSt.value} h` : '') +
+      (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
+    addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
+    ausSt?.remove(); ausMin?.remove(); ausLabel?.nextElementSibling?.remove(); ausLabel?.remove();
+  }
+
+  // 2) Reparaturdauer (3 Felder -> 1 Zeile)
+  const start = container.querySelector('#startzeit');
+  const end   = container.querySelector('#endzeit');
+  const dur   = container.querySelector('#dauer');
+  const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
+  if (start || end || dur){
+    const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
+    addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
+    start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+  }
+
+  // 3) Alle übrigen Felder generisch konvertieren
+  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const formatDate = (v) => {
+    try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); }
+    catch { return v || ''; }
+  };
+
+  Array.from(container.querySelectorAll('input, select, textarea')).forEach(el => {
+    // unsichtbare/irrelevante überspringen
+    const cs = getComputedStyle(el);
+    if (el.type === 'hidden' || el.type === 'file' ||
+        cs.display === 'none' || cs.visibility === 'hidden' ||
+        (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+      el.remove(); return;
+    }
+
+    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
+
+    let val = '';
+    if (el.tagName === 'SELECT') {
+      const opt = el.options[el.selectedIndex];
+      const txt = (opt?.text || '').trim();
+      const v   = (opt?.value || '').trim();
+      // Platzhalter (z. B. „–“ / „Bitte auswählen“) unterdrücken
+      if (!placeholders.has(v) && !placeholders.has(txt)) val = txt;
+    } else if (el.type === 'date') {
+      val = formatDate(el.value);
+    } else if (el.tagName === 'TEXTAREA') {
+      val = el.value;
+    } else {
+      val = (el.value || '').trim();
+    }
+
+    if (!val) { el.remove(); label?.remove(); return; }
+
+    const row = document.createElement('div'); row.className = 'print-field';
+    const l   = document.createElement('div'); l.className = 'print-label';
+    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+    const vDiv   = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+    row.append(l, vDiv);
+
+    const parent = label ? label.parentNode : el.parentNode;
+    parent.insertBefore(row, label || el);
+    label?.remove(); el.remove();
+  });
+
+  // 4) Signaturen (Canvas -> Bild)
+  container.querySelectorAll('canvas').forEach(c => {
+    const img = document.createElement('img');
+    img.src = c.toDataURL('image/png');
+    img.style.width = '100%';
+    img.className = 'avoid-break';
+    c.parentNode.replaceChild(img, c);
+  });
+
+  // 5) Bildblöcke nicht umbrechen
+  container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
+}
+</script>
+
 
   // Helper: eine 2-Spalten-Zeile bauen
   function addRow(labelText, valueText, beforeNode){
@@ -925,8 +1040,17 @@ function convertFormElementsToStaticText(container){
 
     // Wert ermitteln (Select ohne Value => leer, Datum formatiert)
     let val = '';
-    if (el.tagName === 'SELECT') {
-      val = el.value ? (el.options[el.selectedIndex]?.text || '') : '';
+if (el.tagName === 'SELECT') {
+  const selectedText = el.options[el.selectedIndex]?.text || '';
+  // Spezieller Fall: Techniker 2 -> nur anzeigen, wenn nicht der Platzhalter "–" aktiv ist
+  if (el.id === 'techniker2') {
+    val = el.value ? selectedText : '';   // bei Platzhalter leer lassen (nicht drucken)
+  } else {
+    // Für alle anderen Selects reicht der sichtbare Text
+    val = selectedText || el.value || '';
+  }
+}
+
     } else if (el.type === 'date') {
       val = formatDate(el.value);
     } else if (el.tagName === 'TEXTAREA') {
