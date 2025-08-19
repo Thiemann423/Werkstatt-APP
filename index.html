@@ -964,7 +964,7 @@ function convertFormElementsToStaticText(container){
 }
 
 
-<script>
+
 async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
@@ -1071,7 +1071,7 @@ async function generatePDFAndFinish() {
     try { renderRoot.remove(); } catch {}
   }
 }
-</script>
+
 
 
 
