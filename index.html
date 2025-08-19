@@ -905,6 +905,26 @@ function convertFormElementsToStaticText(container){
     addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
+// Techniker 1
+const tk1 = container.querySelector('#techniker1');
+const tk1Label = tk1?.previousElementSibling?.tagName === 'LABEL' ? tk1.previousElementSibling : null;
+if (tk1) {
+  const t1 = tk1.options[tk1.selectedIndex]?.text?.trim() || tk1.value || '';
+  if (t1) addRow(tk1Label ? tk1Label.textContent.replace(/:\s*$/, '') : 'Techniker 1', t1, tk1Label || tk1);
+  tk1.remove(); tk1Label?.remove();
+}
+
+// Techniker 2 (nur wenn wirklich gewählt)
+const tk2 = container.querySelector('#techniker2');
+const tk2Label = tk2?.previousElementSibling?.tagName === 'LABEL' ? tk2.previousElementSibling : null;
+if (tk2) {
+  const t2 = tk2.options[tk2.selectedIndex]?.text?.trim() || tk2.value || '';
+  if (t2 && t2 !== '–' && t2 !== 'Bitte auswählen') {
+    addRow(tk2Label ? tk2Label.textContent.replace(/:\s*$/, '') : 'Techniker 2', t2, tk2Label || tk2);
+  }
+  tk2.remove(); tk2Label?.remove();
+}
+
 
   // 3) Rest generisch
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
@@ -964,6 +984,7 @@ function convertFormElementsToStaticText(container){
 // ====================
 // Auftrag abschließen → PDF erzeugen & hochladen
 // ====================
+
 async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
@@ -973,6 +994,14 @@ async function generatePDFAndFinish() {
 
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
+
+  // 🔴 NEU A: Canvas aus dem ORIGINAL sichern (Map: id -> DataURL)
+  const signatureMap = new Map(
+    Array.from(src.querySelectorAll('canvas')).map(c => {
+      try { return [c.id, c.toDataURL('image/png')]; }
+      catch (e) { console.warn('toDataURL fehlgeschlagen', e); return [c.id, null]; }
+    })
+  );
 
   // 1) Isolierter Render-Bereich (A4 ~ 794px @96DPI)
   const renderRoot = document.createElement('div');
@@ -995,7 +1024,20 @@ async function generatePDFAndFinish() {
   clone.style.background = '#ffffff';
   renderRoot.appendChild(clone);
 
+  // 🔴 NEU B: Im KLON Canvas sofort durch IMG mit gesicherter DataURL ersetzen
+  clone.querySelectorAll('canvas').forEach(c => {
+    const url = signatureMap.get(c.id);
+    if (!url) return;
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.className = 'avoid-break';
+    c.parentNode.replaceChild(img, c);
+  });
+
   try {
+    // 3) Formular -> statischer Inhalt (nur im KLON!)
     convertFormElementsToStaticText(clone);
 
     // Thumbnails im PDF groß
@@ -1006,13 +1048,13 @@ async function generatePDFAndFinish() {
       img.style.display = 'block';
     });
 
-    // Bilder laden
+    // 4) Bilder im KLON laden lassen
     const images = clone.querySelectorAll('img');
     await Promise.all([...images].map(img =>
       img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
     ));
 
-    // Dateiname
+    // 5) Dateiname
     const auftragIdField = document.getElementById("auftrag_id");
     let auftragId = auftragIdField?.value?.trim();
     if (!auftragId) {
@@ -1022,7 +1064,7 @@ async function generatePDFAndFinish() {
     }
     const filename = `${auftragId}.pdf`;
 
-    // html2pdf-Optionen
+    // 6) html2pdf-Optionen
     const opt = {
       margin: 0,
       filename,
@@ -1040,12 +1082,15 @@ async function generatePDFAndFinish() {
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
+    // 7) Layout stabilisieren
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+    // 8) PDF erzeugen
     const worker  = window.html2pdf().set(opt).from(clone).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
     console.log('PDF Blob size:', pdfBlob.size);
 
+    // 9) Upload
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1058,9 +1103,13 @@ async function generatePDFAndFinish() {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   } finally {
+    // 10) Aufräumen
     try { renderRoot.remove(); } catch {}
   }
 }
+
+
+
 
 // ====================
 // Sonstiges
