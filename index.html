@@ -878,15 +878,16 @@ async function uploadToOneDrive(filename, blob) {
 
 <script>
 function convertFormElementsToStaticText(container){
-  // UI ausblenden
+  // 0) UI-Elemente ausblenden (werden nicht ins PDF übernommen)
   container.querySelectorAll('button, input[type="file"], .delete-button')
            .forEach(el => el.style.display = 'none');
 
-  // Vorschaubilder im PDF groß/sauber
+  // Vorschau-Bilder fürs PDF groß & ohne Rahmen
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = 'none';
     img.style.border = '0';
+    img.loading = 'eager';
   });
 
   // Helper: 2-Spalten-Zeile erzeugen
@@ -900,7 +901,7 @@ function convertFormElementsToStaticText(container){
     parent.insertBefore(row, beforeNode || null);
   }
 
-  // 1) Ausfallzeit (2 Felder -> 1 Zeile)
+  // 1) Ausfallzeit (zwei Inputs -> eine Zeile)
   const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
   const ausSt = container.querySelector('#ausfall_stunden');
   const ausMin = container.querySelector('#ausfall_minuten');
@@ -909,10 +910,13 @@ function convertFormElementsToStaticText(container){
       (ausSt?.value ? `${ausSt.value} h` : '') +
       (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
     addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
-    ausSt?.remove(); ausMin?.remove(); ausLabel?.nextElementSibling?.remove(); ausLabel?.remove();
+    ausSt?.remove(); ausMin?.remove();
+    const flex = ausLabel?.nextElementSibling;
+    if (flex && flex.matches('div')) flex.remove();
+    ausLabel?.remove();
   }
 
-  // 2) Reparaturdauer (3 Felder -> 1 Zeile)
+  // 2) Reparaturdauer (Start/Ende/Dauer -> eine Zeile)
   const start = container.querySelector('#startzeit');
   const end   = container.querySelector('#endzeit');
   const dur   = container.querySelector('#dauer');
@@ -925,14 +929,15 @@ function convertFormElementsToStaticText(container){
 
   // 3) Alle übrigen Felder generisch konvertieren
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const isPlaceholder = (t) => placeholders.has((t||'').trim());
   const formatDate = (v) => {
     try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); }
     catch { return v || ''; }
   };
 
   Array.from(container.querySelectorAll('input, select, textarea')).forEach(el => {
-    // unsichtbare/irrelevante überspringen
     const cs = getComputedStyle(el);
+    // Unsichtbares/irrelevantes auslassen
     if (el.type === 'hidden' || el.type === 'file' ||
         cs.display === 'none' || cs.visibility === 'hidden' ||
         (el.offsetWidth === 0 && el.offsetHeight === 0)) {
@@ -943,25 +948,29 @@ function convertFormElementsToStaticText(container){
 
     let val = '';
     if (el.tagName === 'SELECT') {
-      const opt = el.options[el.selectedIndex];
-      const txt = (opt?.text || '').trim();
-      const v   = (opt?.value || '').trim();
-      // Platzhalter (z. B. „–“ / „Bitte auswählen“) unterdrücken
-      if (!placeholders.has(v) && !placeholders.has(txt)) val = txt;
+      const txt = el.options[el.selectedIndex]?.text?.trim() || '';
+      if (el.id === 'techniker2') {
+        // TK2 nur ausgeben, wenn wirklich etwas gewählt wurde (nicht Platzhalter „–/Bitte auswählen“)
+        val = (!isPlaceholder(el.value) && !isPlaceholder(txt)) ? txt : '';
+      } else {
+        val = !isPlaceholder(txt) ? txt : '';
+      }
     } else if (el.type === 'date') {
       val = formatDate(el.value);
     } else if (el.tagName === 'TEXTAREA') {
-      val = el.value;
+      val = (el.value || '').trim();
     } else {
       val = (el.value || '').trim();
     }
 
+    // Leere Werte nicht drucken
     if (!val) { el.remove(); label?.remove(); return; }
 
+    // Zeile ausgeben
     const row = document.createElement('div'); row.className = 'print-field';
     const l   = document.createElement('div'); l.className = 'print-label';
     l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv   = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+    const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
     row.append(l, vDiv);
 
     const parent = label ? label.parentNode : el.parentNode;
@@ -969,10 +978,10 @@ function convertFormElementsToStaticText(container){
     label?.remove(); el.remove();
   });
 
-  // 4) Signaturen (Canvas -> Bild)
+  // 4) Signaturen (Canvas → IMG), damit sie im PDF sichtbar sind
   container.querySelectorAll('canvas').forEach(c => {
     const img = document.createElement('img');
-    img.src = c.toDataURL('image/png');
+    try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
     img.style.width = '100%';
     img.className = 'avoid-break';
     c.parentNode.replaceChild(img, c);
@@ -981,6 +990,7 @@ function convertFormElementsToStaticText(container){
   // 5) Bildblöcke nicht umbrechen
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
+
 </script>
 
 
