@@ -905,35 +905,42 @@ function convertFormElementsToStaticText(container){
     addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
-// Techniker 1
-const tk1 = container.querySelector('#techniker1');
-const tk1Label = tk1?.previousElementSibling?.tagName === 'LABEL' ? tk1.previousElementSibling : null;
-if (tk1) {
-  const t1 = tk1.options[tk1.selectedIndex]?.text?.trim() || tk1.value || '';
-  if (t1) addRow(tk1Label ? tk1Label.textContent.replace(/:\s*$/, '') : 'Techniker 1', t1, tk1Label || tk1);
-  tk1.remove(); tk1Label?.remove();
-}
 
-// Techniker 2 (nur wenn wirklich gewählt)
-const tk2 = container.querySelector('#techniker2');
-const tk2Label = tk2?.previousElementSibling?.tagName === 'LABEL' ? tk2.previousElementSibling : null;
-if (tk2) {
-  const t2 = tk2.options[tk2.selectedIndex]?.text?.trim() || tk2.value || '';
-  if (t2 && t2 !== '–' && t2 !== 'Bitte auswählen') {
-    addRow(tk2Label ? tk2Label.textContent.replace(/:\s*$/, '') : 'Techniker 2', t2, tk2Label || tk2);
+  // 2a) Techniker 1/2 ausgeben (steht ABSICHTLICH außerhalb des Reparaturdauer-if)
+  {
+    // Techniker 1
+    const tk1 = container.querySelector('#techniker1');
+    const tk1Label = tk1 && tk1.previousElementSibling?.tagName === 'LABEL' ? tk1.previousElementSibling : null;
+    if (tk1) {
+      const t1 = tk1.options[tk1.selectedIndex]?.text?.trim() || tk1.value || '';
+      if (t1) addRow(tk1Label ? tk1Label.textContent.replace(/:\s*$/, '') : 'Techniker 1', t1, tk1Label || tk1);
+      tk1.remove(); tk1Label?.remove();
+    }
+
+    // Techniker 2 (nur wenn ≠ Platzhalter „–“)
+    const tk2 = container.querySelector('#techniker2');
+    const tk2Label = tk2 && tk2.previousElementSibling?.tagName === 'LABEL' ? tk2.previousElementSibling : null;
+    if (tk2) {
+      const idx = tk2.selectedIndex ?? -1; // 0 ist „–“
+      if (idx > 0) {
+        const t2 = tk2.options[idx].text.trim();
+        addRow(tk2Label ? tk2Label.textContent.replace(/:\s*$/, '') : 'Techniker 2', t2, tk2Label || tk2);
+      }
+      tk2.remove(); tk2Label?.remove();
+    }
   }
-  tk2.remove(); tk2Label?.remove();
-}
-
 
   // 3) Rest generisch
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
   const isPlaceholder = (t) => placeholders.has((t||'').trim());
   const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
-  Array.from(container.querySelectorAll('input, select, textarea')).forEach(el => {
+  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
+  fields.forEach(el => {
     const cs = getComputedStyle(el);
-    if (el.type === 'hidden' || el.type === 'file' || cs.display === 'none' || cs.visibility === 'hidden' || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+    if (el.type === 'hidden' || el.type === 'file' ||
+        cs.display === 'none' || cs.visibility === 'hidden' ||
+        (el.offsetWidth === 0 && el.offsetHeight === 0)) {
       el.remove(); return;
     }
 
@@ -942,11 +949,7 @@ if (tk2) {
     let val = '';
     if (el.tagName === 'SELECT') {
       const txt = el.options[el.selectedIndex]?.text?.trim() || '';
-      if (el.id === 'techniker2') {
-        val = (!isPlaceholder(el.value) && !isPlaceholder(txt)) ? txt : '';
-      } else {
-        val = !isPlaceholder(txt) ? txt : '';
-      }
+      val = !isPlaceholder(txt) ? txt : '';
     } else if (el.type === 'date') {
       val = formatDate(el.value);
     } else if (el.tagName === 'TEXTAREA') {
@@ -980,6 +983,7 @@ if (tk2) {
   // 5) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
+
 
 // ====================
 // Auftrag abschließen → PDF erzeugen & hochladen
