@@ -812,10 +812,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
- 
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
-
 // ====================
 // Draft-Funktionen
 // ====================
@@ -828,40 +826,26 @@ const fieldIds = [
 
 let currentDraftId = null;
 
-// ====================
-// ✅ HIER NEU EINFÜGEN: Canvas-Funktion
-// ====================
+// Optional: Canvas → Bild (wird unten ohnehin in convertFormElementsToStaticText gemacht)
 function replaceCanvasWithImage() {
-    document.querySelectorAll('canvas').forEach((canvas) => {
-        const img = document.createElement('img');
-        img.src = canvas.toDataURL();
-        img.style.width = canvas.style.width;
-        img.style.height = canvas.style.height;
-        canvas.parentNode.replaceChild(img, canvas);
-    });
-    document.querySelectorAll('.preview-container img').forEach(img => {
-        img.style.display = 'block';
-    });
+  document.querySelectorAll('canvas').forEach((canvas) => {
+    const img = document.createElement('img');
+    img.src = canvas.toDataURL();
+    img.style.width = canvas.style.width;
+    img.style.height = canvas.style.height;
+    canvas.parentNode.replaceChild(img, canvas);
+  });
+  document.querySelectorAll('.preview-container img').forEach(img => {
+    img.style.display = 'block';
+  });
 }
 
-
-
 async function uploadToOneDrive(filename, blob) {
-  if (!accessToken) {
-    alert("⚠️ Kein Zugriffstoken vorhanden. Bitte anmelden.");
-    return false;
-  }
+  if (!accessToken) { alert("⚠️ Kein Zugriffstoken vorhanden. Bitte anmelden."); return false; }
   try {
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/pdf"
-        },
-        body: blob
-      }
+      { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/pdf" }, body: blob }
     );
     return res.ok;
   } catch (err) {
@@ -871,18 +855,14 @@ async function uploadToOneDrive(filename, blob) {
 }
 
 // ====================
-// Auftrag abschließen
+// Formular → statischer Inhalt (für PDF)
 // ====================
-
-// ✅ Nur EINMAL definieren!
-
-<script>
 function convertFormElementsToStaticText(container){
-  // 0) UI-Elemente ausblenden (werden nicht ins PDF übernommen)
+  // 0) UI-Elemente ausblenden
   container.querySelectorAll('button, input[type="file"], .delete-button')
            .forEach(el => el.style.display = 'none');
 
-  // Vorschau-Bilder fürs PDF groß & ohne Rahmen
+  // Vorschau-Bilder groß & ohne Rahmen
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = 'none';
@@ -890,7 +870,7 @@ function convertFormElementsToStaticText(container){
     img.loading = 'eager';
   });
 
-  // Helper: 2-Spalten-Zeile erzeugen
+  // Helper: 2-Spalten-Zeile
   function addRow(labelText, valueText, beforeNode){
     if(!valueText || !valueText.toString().trim()) return;
     const row = document.createElement('div'); row.className = 'print-field';
@@ -901,7 +881,7 @@ function convertFormElementsToStaticText(container){
     parent.insertBefore(row, beforeNode || null);
   }
 
-  // 1) Ausfallzeit (zwei Inputs -> eine Zeile)
+  // 1) Ausfallzeit (2 Inputs → 1 Zeile)
   const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
   const ausSt = container.querySelector('#ausfall_stunden');
   const ausMin = container.querySelector('#ausfall_minuten');
@@ -911,12 +891,11 @@ function convertFormElementsToStaticText(container){
       (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
     addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
     ausSt?.remove(); ausMin?.remove();
-    const flex = ausLabel?.nextElementSibling;
-    if (flex && flex.matches('div')) flex.remove();
+    const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
     ausLabel?.remove();
   }
 
-  // 2) Reparaturdauer (Start/Ende/Dauer -> eine Zeile)
+  // 2) Reparaturdauer (Start/Ende/Dauer → 1 Zeile)
   const start = container.querySelector('#startzeit');
   const end   = container.querySelector('#endzeit');
   const dur   = container.querySelector('#dauer');
@@ -927,20 +906,14 @@ function convertFormElementsToStaticText(container){
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
 
-  // 3) Alle übrigen Felder generisch konvertieren
+  // 3) Rest generisch
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
   const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => {
-    try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); }
-    catch { return v || ''; }
-  };
+  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
   Array.from(container.querySelectorAll('input, select, textarea')).forEach(el => {
     const cs = getComputedStyle(el);
-    // Unsichtbares/irrelevantes auslassen
-    if (el.type === 'hidden' || el.type === 'file' ||
-        cs.display === 'none' || cs.visibility === 'hidden' ||
-        (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+    if (el.type === 'hidden' || el.type === 'file' || cs.display === 'none' || cs.visibility === 'hidden' || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
       el.remove(); return;
     }
 
@@ -950,7 +923,6 @@ function convertFormElementsToStaticText(container){
     if (el.tagName === 'SELECT') {
       const txt = el.options[el.selectedIndex]?.text?.trim() || '';
       if (el.id === 'techniker2') {
-        // TK2 nur ausgeben, wenn wirklich etwas gewählt wurde (nicht Platzhalter „–/Bitte auswählen“)
         val = (!isPlaceholder(el.value) && !isPlaceholder(txt)) ? txt : '';
       } else {
         val = !isPlaceholder(txt) ? txt : '';
@@ -963,10 +935,8 @@ function convertFormElementsToStaticText(container){
       val = (el.value || '').trim();
     }
 
-    // Leere Werte nicht drucken
     if (!val) { el.remove(); label?.remove(); return; }
 
-    // Zeile ausgeben
     const row = document.createElement('div'); row.className = 'print-field';
     const l   = document.createElement('div'); l.className = 'print-label';
     l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
@@ -978,7 +948,7 @@ function convertFormElementsToStaticText(container){
     label?.remove(); el.remove();
   });
 
-  // 4) Signaturen (Canvas → IMG), damit sie im PDF sichtbar sind
+  // 4) Signaturen Canvas → IMG
   container.querySelectorAll('canvas').forEach(c => {
     const img = document.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
@@ -987,119 +957,13 @@ function convertFormElementsToStaticText(container){
     c.parentNode.replaceChild(img, c);
   });
 
-  // 5) Bildblöcke nicht umbrechen
+  // 5) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
 
-</script>
-
-
-  // Helper: eine 2-Spalten-Zeile bauen
-  function addRow(labelText, valueText, beforeNode){
-    if(!valueText || !valueText.toString().trim()) return;
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l = document.createElement('div'); l.className = 'print-label'; l.textContent = labelText;
-    const v = document.createElement('div'); v.className = 'print-value'; v.textContent = valueText;
-    row.append(l, v);
-    const parent = (beforeNode && beforeNode.parentNode) || container;
-    parent.insertBefore(row, beforeNode || null);
-  }
-
-  // 1) AUSFALLZEIT (2 Felder -> 1 Zeile)
-  const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
-  const ausSt = container.querySelector('#ausfall_stunden');
-  const ausMin = container.querySelector('#ausfall_minuten');
-  if (ausSt || ausMin){
-    const value =
-      (ausSt?.value ? `${ausSt.value} h` : '') +
-      (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
-    addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
-    // Originalblock aufräumen
-    ausSt?.remove(); ausMin?.remove();
-    const flex = ausLabel?.nextElementSibling;
-    if (flex && flex.matches('div')) flex.remove();
-    ausLabel?.remove();
-  }
-
-  // 2) REPARATURDAUER (3 Felder -> 1 Zeile)
-  const start = container.querySelector('#startzeit');
-  const end   = container.querySelector('#endzeit');
-  const dur   = container.querySelector('#dauer');
-  const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
-  if (start || end || dur){
-    const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
-    addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
-    start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
-  }
-
-  // 3) RESTLICHE FELDER generisch konvertieren
-  const formatDate = (v) => {
-    try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); }
-    catch { return v || ''; }
-  };
-
-  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-  fields.forEach(el => {
-    // Unsichtbares überspringen/entfernen
-    const cs = getComputedStyle(el);
-    if (el.type === 'hidden' || cs.display === 'none' || cs.visibility === 'hidden' || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
-      el.remove(); return;
-    }
-
-    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
-
-    // Wert ermitteln (Select ohne Value => leer, Datum formatiert)
-    let val = '';
-if (el.tagName === 'SELECT') {
-  const selectedText = el.options[el.selectedIndex]?.text || '';
-  // Spezieller Fall: Techniker 2 -> nur anzeigen, wenn nicht der Platzhalter "–" aktiv ist
-  if (el.id === 'techniker2') {
-    val = el.value ? selectedText : '';   // bei Platzhalter leer lassen (nicht drucken)
-  } else {
-    // Für alle anderen Selects reicht der sichtbare Text
-    val = selectedText || el.value || '';
-  }
-}
-
-    } else if (el.type === 'date') {
-      val = formatDate(el.value);
-    } else if (el.tagName === 'TEXTAREA') {
-      val = el.value;
-    } else {
-      val = el.value || '';
-    }
-
-    // Leere Felder nicht ausgeben
-    if (!val.trim()) { el.remove(); label?.remove(); return; }
-
-    // Zeile ausgeben
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l   = document.createElement('div'); l.className = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const v   = document.createElement('div'); v.className = 'print-value'; v.textContent = val;
-    row.append(l, v);
-
-    const parent = label ? label.parentNode : el.parentNode;
-    parent.insertBefore(row, label || el);
-    label?.remove(); el.remove();
-  });
-
-  // 4) Signaturen (Canvas -> Bild)
-  container.querySelectorAll('canvas').forEach(c => {
-    const img = document.createElement('img');
-    img.src = c.toDataURL('image/png');
-    img.style.width = '100%';
-    img.className = 'avoid-break';
-    c.parentNode.replaceChild(img, c);
-  });
-
-  // 5) Bildblöcke nicht umbrechen
-  container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
-}
-
-
-
-
+// ====================
+// Auftrag abschließen → PDF erzeugen & hochladen
+// ====================
 async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
@@ -1110,7 +974,7 @@ async function generatePDFAndFinish() {
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
-  // 1) Isolierten Render-Bereich anlegen (A4 ~ 794px Breite @96DPI)
+  // 1) Isolierter Render-Bereich (A4 ~ 794px @96DPI)
   const renderRoot = document.createElement('div');
   renderRoot.style.position = 'fixed';
   renderRoot.style.left = '-10000px';
@@ -1120,19 +984,17 @@ async function generatePDFAndFinish() {
   renderRoot.style.zIndex = '-1';
   document.body.appendChild(renderRoot);
 
-  // 2) Inhalt klonen und nur den KLON aufbereiten
+  // 2) Inhalt klonen & nur KLON aufbereiten
   const clone = src.cloneNode(true);
   clone.id = 'pdfExportContainerClone';
-  clone.classList.add('pdf-snapshot');           // deine Fallback-Styles
+  clone.classList.add('pdf-snapshot');
   clone.style.width   = '794px';
   clone.style.maxWidth= '794px';
   clone.style.margin  = '0';
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
-
   renderRoot.appendChild(clone);
 
-  // 3) Formular → statischer Inhalt (nur im Klon!)
   try {
     convertFormElementsToStaticText(clone);
 
@@ -1144,13 +1006,13 @@ async function generatePDFAndFinish() {
       img.style.display = 'block';
     });
 
-    // 4) Bilder im KLON laden lassen
+    // Bilder laden
     const images = clone.querySelectorAll('img');
     await Promise.all([...images].map(img =>
       img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
     ));
 
-    // 5) Dateiname
+    // Dateiname
     const auftragIdField = document.getElementById("auftrag_id");
     let auftragId = auftragIdField?.value?.trim();
     if (!auftragId) {
@@ -1160,7 +1022,7 @@ async function generatePDFAndFinish() {
     }
     const filename = `${auftragId}.pdf`;
 
-    // 6) html2pdf-Optionen (ohne windowWidth/windowHeight, ohne Scroll-Offsets)
+    // html2pdf-Optionen
     const opt = {
       margin: 0,
       filename,
@@ -1172,24 +1034,18 @@ async function generatePDFAndFinish() {
         scrollX: 0,
         scrollY: 0,
         logging: true,
-        // foreignObjectRendering: false ist stabiler – bei Bedarf auf true testen
         foreignObjectRendering: false
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
-    // 7) Layout stabilisieren
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    // 8) Robuste Erzeugung
     const worker  = window.html2pdf().set(opt).from(clone).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
-
-    // Debug (einmalig): Blob-Größe prüfen
     console.log('PDF Blob size:', pdfBlob.size);
 
-    // 9) Upload
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1202,53 +1058,29 @@ async function generatePDFAndFinish() {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   } finally {
-    // 10) Aufräumen – den isolierten Render-Bereich entfernen
     try { renderRoot.remove(); } catch {}
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ====================
+// Sonstiges
+// ====================
 function forceUpdate() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(function(registrations) {
-      for (let registration of registrations) {
-        registration.unregister();
-      }
+      for (let registration of registrations) registration.unregister();
     }).then(function() {
-      caches.keys().then(function(names) {
-        for (let name of names) {
-          caches.delete(name);
-        }
-      });
+      caches.keys().then(function(names) { for (let name of names) caches.delete(name); });
     }).then(function() {
       alert("✅ Cache & Service Worker gelöscht. Seite wird neu geladen.");
       location.reload(true);
     });
   }
 }
+
 async function saveDraftToOneDrive() {
   await signInAndAcquireToken(true);
-  if (!accessToken) {
-    alert("Bitte zuerst anmelden.");
-    return;
-  }
-
+  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
   const draftData = {};
   fieldIds.forEach(id => {
@@ -1262,53 +1094,27 @@ async function saveDraftToOneDrive() {
   const draftFilename = `Entwurf-${document.getElementById('auftrag_id').value}.json`;
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${draftFilename}:/content`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: blob
-    }
+    { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: blob }
   );
 
-  if (res.ok) {
-    alert("✅ Entwurf erfolgreich gespeichert!");
-  } else {
-    alert("⚠️ Fehler beim Speichern des Entwurfs.");
-  }
+  if (res.ok) { alert("✅ Entwurf erfolgreich gespeichert!"); }
+  else { alert("⚠️ Fehler beim Speichern des Entwurfs."); }
 }
+
 async function loadDraftFromOneDrive(fileName) {
-  if (!accessToken) {
-    alert("Bitte zuerst anmelden.");
-    return;
-  }
+  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
   try {
-    // Hole Datei-Inhalt (JSON) aus OneDrive
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${fileName}:/content`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
+      { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } }
     );
-
-    if (!res.ok) {
-      alert("⚠️ Fehler beim Laden des Entwurfs.");
-      return;
-    }
+    if (!res.ok) { alert("⚠️ Fehler beim Laden des Entwurfs."); return; }
 
     const draftData = await res.json();
-
-    // Felder wieder befüllen
     fieldIds.forEach(id => {
       const el = document.getElementById(id);
-      if (el && draftData[id] !== undefined) {
-        el.value = draftData[id];
-      }
+      if (el && draftData[id] !== undefined) el.value = draftData[id];
     });
 
     alert("✅ Entwurf erfolgreich geladen!");
@@ -1319,46 +1125,27 @@ async function loadDraftFromOneDrive(fileName) {
 }
 
 async function showDraftList() {
-  if (!accessToken) {
-    alert("Bitte zuerst anmelden.");
-    return;
-  }
+  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
   try {
-    // Dateien abrufen
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe:/children`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     const data = await res.json();
-    if (!data.value || data.value.length === 0) {
-      alert("⚠️ Keine Entwürfe gefunden.");
-      return;
-    }
+    if (!data.value || data.value.length === 0) { alert("⚠️ Keine Entwürfe gefunden."); return; }
 
-    // Nur JSON-Dateien filtern
-    const fileNames = data.value
-      .filter(item => item.name.endsWith(".json"))
-      .map(item => item.name);
+    const fileNames = data.value.filter(item => item.name.endsWith(".json")).map(item => item.name);
 
-    // Liste mit Nummern anzeigen
     let list = "Verfügbare Entwürfe:\n\n";
-    fileNames.forEach((name, index) => {
-      list += `${index + 1}: ${name}\n`;
-    });
+    fileNames.forEach((name, index) => { list += `${index + 1}: ${name}\n`; });
 
     const numberInput = prompt("Bitte die Nummer des Entwurfs eingeben:\n\n" + list);
-
     const selectedIndex = parseInt(numberInput, 10) - 1;
+
     if (!isNaN(selectedIndex) && fileNames[selectedIndex]) {
       await loadDraftFromOneDrive(fileNames[selectedIndex]);
-
-      // 💡 Speichere den gewählten Dateinamen, um ihn später zu löschen
       window.currentDraftFileName = fileNames[selectedIndex];
     } else {
       alert("⚠️ Ungültige Nummer.");
@@ -1369,48 +1156,33 @@ async function showDraftList() {
   }
 }
 
-// =========================
-// ✅ Entwurfsdatei nach Abschluss löschen
-// =========================
 async function deleteDraftFile() {
-  if (!accessToken || !window.currentDraftFileName) {
-    return;
-  }
+  if (!accessToken || !window.currentDraftFileName) return;
 
   try {
     await fetch(
       `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${window.currentDraftFileName}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
+      { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    console.log("✅ Entwurfsdatei erfolgreich gelöscht:", window.currentDraftFileName);
+    console.log("✅ Entwurfsdatei gelöscht:", window.currentDraftFileName);
     window.currentDraftFileName = null;
   } catch (err) {
     console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
   }
 }
 
+window.confirmUpdate = function () {
+  const modal = document.getElementById('updateModal');
+  if (modal) modal.style.display = 'none';
 
-  window.confirmUpdate = function () {
-    const modal = document.getElementById('updateModal');
-    if (modal) modal.style.display = 'none';
-
-    const msg = document.getElementById('confirmationMessage');
-    if (msg) {
-      msg.style.display = 'block';
-      setTimeout(() => { msg.style.display = 'none'; }, 2500);
-    }
-  };
-
-
-
-
-
+  const msg = document.getElementById('confirmationMessage');
+  if (msg) {
+    msg.style.display = 'block';
+    setTimeout(() => { msg.style.display = 'none'; }, 2500);
+  }
+};
 </script>
+
 
 
 </body>
