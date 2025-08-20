@@ -862,7 +862,7 @@ function convertFormElementsToStaticText(container){
   container.querySelectorAll('button, input[type="file"], .delete-button')
            .forEach(el => el.style.display = 'none');
 
-  // Vorschau-Bilder groß & ohne Rahmen
+  // Vorschau-Bilder groß & ohne Rahmen (Thumbnails im PDF groß)
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = 'none';
@@ -870,7 +870,7 @@ function convertFormElementsToStaticText(container){
     img.loading = 'eager';
   });
 
-  // Helpers
+  // Helper: 2-Spalten-Zeile
   function addRow(labelText, valueText, beforeNode){
     if(!valueText || !valueText.toString().trim()) return;
     const row = document.createElement('div'); row.className = 'print-field';
@@ -880,13 +880,6 @@ function convertFormElementsToStaticText(container){
     const parent = (beforeNode && beforeNode.parentNode) || container;
     parent.insertBefore(row, beforeNode || null);
   }
-  const cleanLabel = (el, fallback) =>
-    (el?.textContent || fallback || '')
-      .replace(/:\s*$/, '')
-      .replace(/\s*\(optional\)\s*$/i, '');
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
   // 1) Ausfallzeit (2 Inputs → 1 Zeile)
   const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
@@ -913,50 +906,52 @@ function convertFormElementsToStaticText(container){
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
 
-  // 2a) Techniker 1/2 (außerhalb des Reparaturdauer-if!)
-  (function(){
-    function addTechniker(id, fallback){
+  // 2a) 🔴 Techniker 1/2 – SPEZIALBEHANDLUNG (MUSS vor dem generischen Loop stehen!)
+  {
+    const cleanLabel = (el, fallback) =>
+      ((el?.textContent || fallback || '')
+        .replace(/:\s*$/, '')
+        .replace(/\s*\(optional\)\s*$/i, ''));
+
+    function addTechniker(id, fallback) {
       const sel = container.querySelector('#' + id);
       if (!sel) return;
 
       const labelEl = (sel.previousElementSibling?.tagName === 'LABEL') ? sel.previousElementSibling : null;
 
-      const val = (sel.value || '').trim();
+      // sichtbarer Text und value ermitteln
+      const val = (sel.value || '').trim(); // entspricht <option value="...">
       const txt = (sel.options[sel.selectedIndex]?.text || val).trim();
 
-      // TK2 nur ausgeben, wenn nicht Platzhalter/leer/„–“
+      // TK2: Platzhalter (leer/„–“) überspringen
       if (id === 'techniker2') {
-        if (!val || txt === '–' || /Bitte auswählen/i.test(txt)) {
-          sel.remove(); labelEl?.remove(); return;
-        }
+        if (!val || val === '–') { sel.remove(); labelEl?.remove(); return; }
       }
 
       if (txt) addRow(cleanLabel(labelEl, fallback), txt, labelEl || sel);
 
-      // Entfernen, damit der generische Loop sie nicht erneut verarbeitet
+      // entfernen, damit der generische Loop sie nicht nochmal verarbeitet
       sel.remove();
       labelEl?.remove();
     }
 
     addTechniker('techniker1', 'Techniker 1');
     addTechniker('techniker2', 'Techniker 2');
-  })();
+  }
 
   // 3) Rest generisch
+  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const isPlaceholder = (t) => placeholders.has((t||'').trim());
+  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
+
   const fields = Array.from(container.querySelectorAll('input, select, textarea'));
   fields.forEach(el => {
-    // Elemente, die bereits entfernt wurden, überspringen
-    if (!el.isConnected) return;
-
     const cs = getComputedStyle(el);
     if (el.type === 'hidden' || el.type === 'file' ||
         cs.display === 'none' || cs.visibility === 'hidden' ||
         (el.offsetWidth === 0 && el.offsetHeight === 0)) {
       el.remove(); return;
     }
-
-    // Techniker wurden oben verarbeitet
-    if (el.id === 'techniker1' || el.id === 'techniker2') { el.remove(); return; }
 
     const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
@@ -976,7 +971,7 @@ function convertFormElementsToStaticText(container){
 
     const row = document.createElement('div'); row.className = 'print-field';
     const l   = document.createElement('div'); l.className = 'print-label';
-    l.textContent = cleanLabel(label, el.name || el.id || '');
+    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
     const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
     row.append(l, vDiv);
 
@@ -985,7 +980,7 @@ function convertFormElementsToStaticText(container){
     label?.remove(); el.remove();
   });
 
-  // 4) Signaturen Canvas → IMG (falls noch vorhanden)
+  // 4) Signaturen Canvas → IMG
   container.querySelectorAll('canvas').forEach(c => {
     const img = document.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
@@ -997,6 +992,7 @@ function convertFormElementsToStaticText(container){
   // 5) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
+
 
 
 
@@ -1032,53 +1028,48 @@ async function generatePDFAndFinish() {
   renderRoot.style.zIndex = '-1';
   document.body.appendChild(renderRoot);
 
- // 2) Inhalt klonen & nur KLON aufbereiten
-const clone = src.cloneNode(true);
-clone.id = 'pdfExportContainerClone';
-clone.classList.add('pdf-snapshot');
-clone.style.width   = '794px';
-clone.style.maxWidth= '794px';
-clone.style.margin  = '0';
-clone.style.padding = '20px';
-clone.style.background = '#ffffff';
-renderRoot.appendChild(clone);
+  // 2) Inhalt klonen & nur KLON aufbereiten
+  const clone = src.cloneNode(true);
+  clone.id = 'pdfExportContainerClone';
+  clone.classList.add('pdf-snapshot');
+  clone.style.width   = '794px';
+  clone.style.maxWidth= '794px';
+  clone.style.margin  = '0';
+  clone.style.padding = '20px';
+  clone.style.background = '#ffffff';
+  renderRoot.appendChild(clone);
 
-// 🔴 NEU C: Select-Werte vom ORIGINAL in den KLON übertragen
-clone.querySelectorAll('select').forEach(sel => {
-  const orig = src.querySelector('#' + sel.id);
-  if (!orig) return;
-
-  // 1) Wert setzen
-  sel.value = orig.value;
-
-  // 2) selected-Flag im Klon korrekt setzen
-  Array.from(sel.options).forEach(o => {
-    o.selected = (o.value === orig.value);
+  // 🔴 NEU C: Select-Werte vom ORIGINAL in den KLON übertragen
+  clone.querySelectorAll('select').forEach(sel => {
+    const orig = src.querySelector('#' + sel.id);
+    if (!orig) return;
+    // 1) Wert setzen
+    sel.value = orig.value;
+    // 2) selected-Flag im Klon korrekt markieren
+    Array.from(sel.options).forEach(o => { o.selected = (o.value === orig.value); });
   });
-});
 
-// (optional) Debug
-console.log('TK1 orig/clone:', src.querySelector('#techniker1')?.value, clone.querySelector('#techniker1')?.value);
-console.log('TK2 orig/clone:', src.querySelector('#techniker2')?.value, clone.querySelector('#techniker2')?.value);
+  // (optional) Debug – hier siehst du sofort, ob TK2 korrekt im Klon ankommt
+  console.log('TK1 orig/clone:', src.querySelector('#techniker1')?.value, clone.querySelector('#techniker1')?.value);
+  console.log('TK2 orig/clone:', src.querySelector('#techniker2')?.value, clone.querySelector('#techniker2')?.value);
 
-// 🔴 NEU B: Canvas im KLON durch IMG ersetzen
-clone.querySelectorAll('canvas').forEach(c => {
-  const url = signatureMap.get(c.id);
-  if (!url) return;
-  const img = document.createElement('img');
-  img.src = url;
-  img.style.maxWidth = '100%';
-  img.style.height = 'auto';
-  img.className = 'avoid-break';
-  c.parentNode.replaceChild(img, c);
-});
+  // 🔴 NEU B: Im KLON Canvas sofort durch IMG mit gesicherter DataURL ersetzen
+  clone.querySelectorAll('canvas').forEach(c => {
+    const url = signatureMap.get(c.id);
+    if (!url) return;
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.className = 'avoid-break';
+    c.parentNode.replaceChild(img, c);
+  });
 
-try {
-  // 3) Formular -> statischer Inhalt (nur im KLON!)
-  convertFormElementsToStaticText(clone);
-  …
+  try {
+    // 3) Formular -> statischer Inhalt (nur im KLON!)
+    convertFormElementsToStaticText(clone);
 
-    // Thumbnails im PDF groß
+    // Thumbnails im PDF groß darstellen
     clone.querySelectorAll('.preview-container img').forEach(img => {
       img.style.maxWidth = '100%';
       img.style.maxHeight = '';
