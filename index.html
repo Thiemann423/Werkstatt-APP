@@ -870,7 +870,7 @@ function convertFormElementsToStaticText(container){
     img.loading = 'eager';
   });
 
-  // Helper: 2-Spalten-Zeile
+  // Helpers
   function addRow(labelText, valueText, beforeNode){
     if(!valueText || !valueText.toString().trim()) return;
     const row = document.createElement('div'); row.className = 'print-field';
@@ -880,6 +880,13 @@ function convertFormElementsToStaticText(container){
     const parent = (beforeNode && beforeNode.parentNode) || container;
     parent.insertBefore(row, beforeNode || null);
   }
+  const cleanLabel = (el, fallback) =>
+    (el?.textContent || fallback || '')
+      .replace(/:\s*$/, '')
+      .replace(/\s*\(optional\)\s*$/i, '');
+  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const isPlaceholder = (t) => placeholders.has((t||'').trim());
+  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
   // 1) Ausfallzeit (2 Inputs → 1 Zeile)
   const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
@@ -906,43 +913,50 @@ function convertFormElementsToStaticText(container){
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
 
-  // 2a) Techniker 1/2 ausgeben (steht ABSICHTLICH außerhalb des Reparaturdauer-if)
-  {
-    // Techniker 1
-    const tk1 = container.querySelector('#techniker1');
-    const tk1Label = tk1 && tk1.previousElementSibling?.tagName === 'LABEL' ? tk1.previousElementSibling : null;
-    if (tk1) {
-      const t1 = tk1.options[tk1.selectedIndex]?.text?.trim() || tk1.value || '';
-      if (t1) addRow(tk1Label ? tk1Label.textContent.replace(/:\s*$/, '') : 'Techniker 1', t1, tk1Label || tk1);
-      tk1.remove(); tk1Label?.remove();
+  // 2a) Techniker 1/2 (außerhalb des Reparaturdauer-if!)
+  (function(){
+    function addTechniker(id, fallback){
+      const sel = container.querySelector('#' + id);
+      if (!sel) return;
+
+      const labelEl = (sel.previousElementSibling?.tagName === 'LABEL') ? sel.previousElementSibling : null;
+
+      const val = (sel.value || '').trim();
+      const txt = (sel.options[sel.selectedIndex]?.text || val).trim();
+
+      // TK2 nur ausgeben, wenn nicht Platzhalter/leer/„–“
+      if (id === 'techniker2') {
+        if (!val || txt === '–' || /Bitte auswählen/i.test(txt)) {
+          sel.remove(); labelEl?.remove(); return;
+        }
+      }
+
+      if (txt) addRow(cleanLabel(labelEl, fallback), txt, labelEl || sel);
+
+      // Entfernen, damit der generische Loop sie nicht erneut verarbeitet
+      sel.remove();
+      labelEl?.remove();
     }
 
-    // Techniker 2 (nur wenn ≠ Platzhalter „–“)
-    const tk2 = container.querySelector('#techniker2');
-    const tk2Label = tk2 && tk2.previousElementSibling?.tagName === 'LABEL' ? tk2.previousElementSibling : null;
-    if (tk2) {
-      const idx = tk2.selectedIndex ?? -1; // 0 ist „–“
-      if (idx > 0) {
-        const t2 = tk2.options[idx].text.trim();
-        addRow(tk2Label ? tk2Label.textContent.replace(/:\s*$/, '') : 'Techniker 2', t2, tk2Label || tk2);
-      }
-      tk2.remove(); tk2Label?.remove();
-    }
-  }
+    addTechniker('techniker1', 'Techniker 1');
+    addTechniker('techniker2', 'Techniker 2');
+  })();
 
   // 3) Rest generisch
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
-
   const fields = Array.from(container.querySelectorAll('input, select, textarea'));
   fields.forEach(el => {
+    // Elemente, die bereits entfernt wurden, überspringen
+    if (!el.isConnected) return;
+
     const cs = getComputedStyle(el);
     if (el.type === 'hidden' || el.type === 'file' ||
         cs.display === 'none' || cs.visibility === 'hidden' ||
         (el.offsetWidth === 0 && el.offsetHeight === 0)) {
       el.remove(); return;
     }
+
+    // Techniker wurden oben verarbeitet
+    if (el.id === 'techniker1' || el.id === 'techniker2') { el.remove(); return; }
 
     const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
@@ -962,7 +976,7 @@ function convertFormElementsToStaticText(container){
 
     const row = document.createElement('div'); row.className = 'print-field';
     const l   = document.createElement('div'); l.className = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+    l.textContent = cleanLabel(label, el.name || el.id || '');
     const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
     row.append(l, vDiv);
 
@@ -971,7 +985,7 @@ function convertFormElementsToStaticText(container){
     label?.remove(); el.remove();
   });
 
-  // 4) Signaturen Canvas → IMG
+  // 4) Signaturen Canvas → IMG (falls noch vorhanden)
   container.querySelectorAll('canvas').forEach(c => {
     const img = document.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
@@ -983,6 +997,7 @@ function convertFormElementsToStaticText(container){
   // 5) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
+
 
 
 // ====================
