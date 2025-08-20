@@ -1032,32 +1032,51 @@ async function generatePDFAndFinish() {
   renderRoot.style.zIndex = '-1';
   document.body.appendChild(renderRoot);
 
-  // 2) Inhalt klonen & nur KLON aufbereiten
-  const clone = src.cloneNode(true);
-  clone.id = 'pdfExportContainerClone';
-  clone.classList.add('pdf-snapshot');
-  clone.style.width   = '794px';
-  clone.style.maxWidth= '794px';
-  clone.style.margin  = '0';
-  clone.style.padding = '20px';
-  clone.style.background = '#ffffff';
-  renderRoot.appendChild(clone);
+ // 2) Inhalt klonen & nur KLON aufbereiten
+const clone = src.cloneNode(true);
+clone.id = 'pdfExportContainerClone';
+clone.classList.add('pdf-snapshot');
+clone.style.width   = '794px';
+clone.style.maxWidth= '794px';
+clone.style.margin  = '0';
+clone.style.padding = '20px';
+clone.style.background = '#ffffff';
+renderRoot.appendChild(clone);
 
-  // 🔴 NEU B: Im KLON Canvas sofort durch IMG mit gesicherter DataURL ersetzen
-  clone.querySelectorAll('canvas').forEach(c => {
-    const url = signatureMap.get(c.id);
-    if (!url) return;
-    const img = document.createElement('img');
-    img.src = url;
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.className = 'avoid-break';
-    c.parentNode.replaceChild(img, c);
+// 🔴 NEU C: Select-Werte vom ORIGINAL in den KLON übertragen
+clone.querySelectorAll('select').forEach(sel => {
+  const orig = src.querySelector('#' + sel.id);
+  if (!orig) return;
+
+  // 1) Wert setzen
+  sel.value = orig.value;
+
+  // 2) selected-Flag im Klon korrekt setzen
+  Array.from(sel.options).forEach(o => {
+    o.selected = (o.value === orig.value);
   });
+});
 
-  try {
-    // 3) Formular -> statischer Inhalt (nur im KLON!)
-    convertFormElementsToStaticText(clone);
+// (optional) Debug
+console.log('TK1 orig/clone:', src.querySelector('#techniker1')?.value, clone.querySelector('#techniker1')?.value);
+console.log('TK2 orig/clone:', src.querySelector('#techniker2')?.value, clone.querySelector('#techniker2')?.value);
+
+// 🔴 NEU B: Canvas im KLON durch IMG ersetzen
+clone.querySelectorAll('canvas').forEach(c => {
+  const url = signatureMap.get(c.id);
+  if (!url) return;
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.maxWidth = '100%';
+  img.style.height = 'auto';
+  img.className = 'avoid-break';
+  c.parentNode.replaceChild(img, c);
+});
+
+try {
+  // 3) Formular -> statischer Inhalt (nur im KLON!)
+  convertFormElementsToStaticText(clone);
+  …
 
     // Thumbnails im PDF groß
     clone.querySelectorAll('.preview-container img').forEach(img => {
