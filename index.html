@@ -194,6 +194,11 @@ async function loadHtml2PdfIfNeeded(){
     Abmelden / Konto wechseln
   </button>
 </div>
+<div id="loginHint" class="no-print" 
+     style="margin-bottom: 20px; padding: 10px; background: #fffbe6; border: 1px solid #e6c200; 
+            border-radius: 6px; color: #7a6600; font-size: 14px;">
+  ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
+</div>
 
 
 
@@ -219,11 +224,14 @@ async function loadHtml2PdfIfNeeded(){
 <div>
 <input id="ausfall_minuten" max="59" min="0" name="ausfall_minuten" placeholder="Minuten" style="width: 100px; padding: 6px;" type="number"/>
 <span>Minuten</span>
-</div>
-</div>
-</div>
-
+</div>  <!-- schließt inneres margin-bottom:10px -->
+<!-- ➕ fehlend: -->
+</div>  <!-- schließt äußeres margin-bottom:10px -->
+</div>  <!-- schließt .section (Maschinenausfall) -->
+<!-- und erst dann: -->
 <div class="section" style="margin-bottom: 12px;">
+  <!-- Maschine ... -->
+
   <label for="maschine" style="display: block; font-weight: bold;">Maschine</label>
   <select id="maschine" name="maschine" style="width: 100%; padding: 6px;">
     <option value="">Bitte auswählen</option>
@@ -793,38 +801,47 @@ window.addEventListener('load', function() {
     document.getElementById("loginNotice").style.display = "block";
   }
 
-  async function signInAndAcquireToken(interactive = false) {
-    try {
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length === 0 && interactive) {
-        await msalInstance.loginPopup({ scopes });
-      }
-      const account = msalInstance.getAllAccounts()[0];
-      if (!account) { showLoginNotice(); return; }
-
-      const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
-      accessToken = tokenResponse.accessToken;
-      document.getElementById("loginNotice").style.display = "none";
-    } catch (e) {
-      console.error(e);
-      showLoginNotice();
+async function signInAndAcquireToken(interactive = false) {
+  try {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length === 0 && interactive) {
+      await msalInstance.loginPopup({ scopes });
     }
-  }
-
-  // Abmelden / Konto wechseln (für deinen Button)
-  async function signOut() {
-    try {
-      const accs = msalInstance.getAllAccounts();
-      if (accs.length) await msalInstance.logoutPopup({ account: accs[0] });
-    } finally {
-      location.reload();
+    const account = msalInstance.getAllAccounts()[0];
+    if (!account) { 
+      showLoginNotice(); 
+      return; 
     }
-  }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    signInAndAcquireToken();
-  });
+    const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
+    accessToken = tokenResponse.accessToken;
+
+    // ✅ Hinweis ausblenden, wenn eingeloggt
+    const hint = document.getElementById("loginHint");
+    if (hint) hint.style.display = "none";
+
+    document.getElementById("loginNotice").style.display = "none";
+  } catch (e) {
+    console.error(e);
+    showLoginNotice();
+  }
+}
+
+// Abmelden / Konto wechseln (für deinen Button)
+async function signOut() {
+  try {
+    const accs = msalInstance.getAllAccounts();
+    if (accs.length) await msalInstance.logoutPopup({ account: accs[0] });
+  } finally {
+    location.reload();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  signInAndAcquireToken();
+});
 </script>
+
 
 
 
