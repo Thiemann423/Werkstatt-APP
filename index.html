@@ -767,12 +767,7 @@ window.addEventListener('load', function() {
 
 </script>
 
-<!-- ✅ HIER den Login-Hinweis-Block einfügen -->
-<div id="loginNotice" style="display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: #fffbe6; border: 1px solid #e6c200; padding: 1rem 2rem; border-radius: 8px; font-weight: bold; z-index: 10000; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-⚠️ Um in OneDrive speichern zu können, bitte bei Microsoft anmelden.<br/>
-<button onclick="signInAndAcquireToken(true)" style="margin-top: 10px; background-color: #0078d4; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🔐 Jetzt anmelden</button>
-</div>
-<!-- ✅ Ende Login-Hinweis -->
+
 
 
 
@@ -780,67 +775,82 @@ window.addEventListener('load', function() {
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
 
+<!-- ✅ MSAL Konfiguration & Login Logik -->
+
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
-
-
 <script>
   const msalConfig = {
     auth: {
       clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
       authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
-      redirectUri: "https://thiemann423.github.io/ReparaturApp/index.html"
+      redirectUri: "https://thiemann423.github.io/Werkstatt-APP/" // ✅ anpassen
     },
-    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
+    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true },
+    system: { allowRedirectInIframe: true }
   };
 
   const scopes = ["Files.ReadWrite.All", "User.Read", "openid", "profile", "offline_access"];
   const msalInstance = new msal.PublicClientApplication(msalConfig);
   let accessToken = "";
 
-  function showLoginNotice() {
-    document.getElementById("loginNotice").style.display = "block";
-  }
-
-async function signInAndAcquireToken(interactive = false) {
-  try {
-    const accounts = msalInstance.getAllAccounts();
-    if (accounts.length === 0 && interactive) {
-      await msalInstance.loginPopup({ scopes });
-    }
-    const account = msalInstance.getAllAccounts()[0];
-    if (!account) { 
-      showLoginNotice(); 
-      return; 
-    }
-
-    const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
-    accessToken = tokenResponse.accessToken;
-
-    // ✅ Hinweis ausblenden, wenn eingeloggt
+  function hideLoginHint() {
     const hint = document.getElementById("loginHint");
     if (hint) hint.style.display = "none";
-
-    document.getElementById("loginNotice").style.display = "none";
-  } catch (e) {
-    console.error(e);
-    showLoginNotice();
   }
-}
 
-// Abmelden / Konto wechseln (für deinen Button)
-async function signOut() {
-  try {
-    const accs = msalInstance.getAllAccounts();
-    if (accs.length) await msalInstance.logoutPopup({ account: accs[0] });
-  } finally {
-    location.reload();
+  function showLoginHint() {
+    const hint = document.getElementById("loginHint");
+    if (hint) hint.style.display = "block";
   }
-}
 
-document.addEventListener("DOMContentLoaded", () => {
-  signInAndAcquireToken();
-});
+  async function getTokenSilentOrPopup(account) {
+    try {
+      const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
+      return tokenResponse.accessToken;
+    } catch (e) {
+      console.warn("Silent token failed, falling back to popup:", e);
+      const tokenResponse = await msalInstance.acquireTokenPopup({ scopes });
+      return tokenResponse.accessToken;
+    }
+  }
+
+  async function signInAndAcquireToken(interactive = false) {
+    try {
+      let account = msalInstance.getAllAccounts()[0];
+
+      if (!account && interactive) {
+        await msalInstance.loginPopup({ scopes });
+        account = msalInstance.getAllAccounts()[0];
+      }
+
+      if (!account) {
+        showLoginHint(); // noch nicht eingeloggt
+        return;
+      }
+
+      accessToken = await getTokenSilentOrPopup(account);
+      hideLoginHint(); // ✅ eingeloggt -> Hinweis ausblenden
+    } catch (e) {
+      console.error(e);
+      showLoginHint();
+    }
+  }
+
+  async function signOut() {
+    try {
+      const acc = msalInstance.getAllAccounts()[0];
+      if (acc) await msalInstance.logoutPopup({ account: acc });
+    } finally {
+      location.reload();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    signInAndAcquireToken(false);
+  });
 </script>
+
+
 
 
 
