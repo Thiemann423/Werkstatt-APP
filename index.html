@@ -777,61 +777,55 @@ window.addEventListener('load', function() {
 
 
 <script>
-<script>
-const msalConfig = {
-  auth: {
-    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862", 
-    authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
-    redirectUri: "https://thiemann423.github.io/ReparaturApp/index.html"
-  },
-  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
-};
+  const msalConfig = {
+    auth: {
+      clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+      authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+      redirectUri: "https://thiemann423.github.io/ReparaturApp/index.html"
+    },
+    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
+  };
 
-// 👉 HIER die Scopes direkt dazu:
-const scopes = ["Files.ReadWrite.All", "User.Read", "openid", "profile", "offline_access"];
+  const scopes = ["Files.ReadWrite.All", "User.Read", "openid", "profile", "offline_access"];
+  const msalInstance = new msal.PublicClientApplication(msalConfig);
+  let accessToken = "";
 
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-let accessToken = "";
-</script>
-
-
-function showLoginNotice() {
-  document.getElementById("loginNotice").style.display = "block";
-}
-
-async function signInAndAcquireToken(interactive = false) {
-  try {
-    const accounts = msalInstance.getAllAccounts();
-
-    if (accounts.length === 0 && interactive) {
-      await msalInstance.loginPopup({ scopes }); // 👈 hier ersetzt
-    }
-
-    const account = msalInstance.getAllAccounts()[0];
-    if (!account) {
-      showLoginNotice();
-      return;
-    }
-
-    const tokenResponse = await msalInstance.acquireTokenSilent({
-      scopes, // 👈 auch hier ersetzt
-      account
-    });
-
-    accessToken = tokenResponse.accessToken;
-    document.getElementById("loginNotice").style.display = "none";
-  } catch (e) {
-    console.error(e);
-    showLoginNotice();
+  function showLoginNotice() {
+    document.getElementById("loginNotice").style.display = "block";
   }
-}
 
+  async function signInAndAcquireToken(interactive = false) {
+    try {
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length === 0 && interactive) {
+        await msalInstance.loginPopup({ scopes });
+      }
+      const account = msalInstance.getAllAccounts()[0];
+      if (!account) { showLoginNotice(); return; }
 
-document.addEventListener("DOMContentLoaded", () => {
-  signInAndAcquireToken();
-});
+      const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
+      accessToken = tokenResponse.accessToken;
+      document.getElementById("loginNotice").style.display = "none";
+    } catch (e) {
+      console.error(e);
+      showLoginNotice();
+    }
+  }
+
+  // Abmelden / Konto wechseln (für deinen Button)
+  async function signOut() {
+    try {
+      const accs = msalInstance.getAllAccounts();
+      if (accs.length) await msalInstance.logoutPopup({ account: accs[0] });
+    } finally {
+      location.reload();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    signInAndAcquireToken();
+  });
 </script>
-
 
 
 
@@ -1030,7 +1024,7 @@ async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
 
-accessToken = await getAccessToken();
+await signInAndAcquireToken(true);
 if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
 
