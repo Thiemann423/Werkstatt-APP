@@ -183,6 +183,19 @@ async function loadHtml2PdfIfNeeded(){
     Neuen Auftrag starten
   </button>
 </div>
+<!-- 🔐 Login/Logout Bereich -->
+<div style="margin-bottom: 20px;">
+  <button onclick="signInAndAcquireToken(true)" class="no-print"
+          style="padding:8px 15px; background:#0078d4; color:white; border:none; border-radius:5px; cursor:pointer;">
+    Microsoft anmelden
+  </button>
+  <button onclick="signOut()" class="no-print"
+          style="padding:8px 15px; margin-left:10px; background:#d9534f; color:white; border:none; border-radius:5px; cursor:pointer;">
+    Abmelden / Konto wechseln
+  </button>
+</div>
+
+
 
 <div id="pdfExportContainer">
 <div style="margin-bottom: 12px;">
@@ -764,15 +777,23 @@ window.addEventListener('load', function() {
 
 
 <script>
+<script>
 const msalConfig = {
   auth: {
-    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
-    authority: "https://login.microsoftonline.com/common",
-    redirectUri: window.location.href
-  }
+    clientId: "800b6d33-1917-4b4f-abf4-162094f8c862", 
+    authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+    redirectUri: "https://thiemann423.github.io/ReparaturApp/index.html"
+  },
+  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
 };
+
+// 👉 HIER die Scopes direkt dazu:
+const scopes = ["Files.ReadWrite.All", "User.Read", "openid", "profile", "offline_access"];
+
 const msalInstance = new msal.PublicClientApplication(msalConfig);
 let accessToken = "";
+</script>
+
 
 function showLoginNotice() {
   document.getElementById("loginNotice").style.display = "block";
@@ -781,18 +802,22 @@ function showLoginNotice() {
 async function signInAndAcquireToken(interactive = false) {
   try {
     const accounts = msalInstance.getAllAccounts();
+
     if (accounts.length === 0 && interactive) {
-      await msalInstance.loginPopup({ scopes: ["Files.ReadWrite.All"] });
+      await msalInstance.loginPopup({ scopes }); // 👈 hier ersetzt
     }
+
     const account = msalInstance.getAllAccounts()[0];
     if (!account) {
       showLoginNotice();
       return;
     }
+
     const tokenResponse = await msalInstance.acquireTokenSilent({
-      scopes: ["Files.ReadWrite.All"],
+      scopes, // 👈 auch hier ersetzt
       account
     });
+
     accessToken = tokenResponse.accessToken;
     document.getElementById("loginNotice").style.display = "none";
   } catch (e) {
@@ -800,6 +825,7 @@ async function signInAndAcquireToken(interactive = false) {
     showLoginNotice();
   }
 }
+
 
 document.addEventListener("DOMContentLoaded", () => {
   signInAndAcquireToken();
@@ -1004,8 +1030,9 @@ async function generatePDFAndFinish() {
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
 
-  await signInAndAcquireToken(true);
-  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+accessToken = await getAccessToken();
+if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+
 
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
