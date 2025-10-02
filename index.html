@@ -1,4 +1,6 @@
 
+
+
 <!DOCTYPE html>
 
 <html lang="de">
@@ -776,14 +778,13 @@ window.addEventListener('load', function() {
 <!-- ✅ MSAL Konfiguration & Login Logik -->
 
 <!-- ✅ MSAL Konfiguration & Login Logik -->
-
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <script>
   const msalConfig = {
     auth: {
       clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
       authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
-      redirectUri: "https://thiemann423.github.io/Werkstatt-APP/" // ✅ anpassen
+      redirectUri: "https://thiemann423.github.io/Werkstatt-APP/"
     },
     cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true },
     system: { allowRedirectInIframe: true }
@@ -793,54 +794,111 @@ window.addEventListener('load', function() {
   const msalInstance = new msal.PublicClientApplication(msalConfig);
   let accessToken = "";
 
-  function hideLoginHint() {
-    const hint = document.getElementById("loginHint");
-    if (hint) hint.style.display = "none";
+  function hideLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="none"; }
+  function showLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="block"; }
+
+  async function getTokenSilentOrPopup(account){
+    try { const t = await msalInstance.acquireTokenSilent({ scopes, account }); return t.accessToken; }
+    catch(e){ console.warn("Silent token failed, fallback popup:", e); const t = await msalInstance.acquireTokenPopup({ scopes }); return t.accessToken; }
   }
 
-  function showLoginHint() {
-    const hint = document.getElementById("loginHint");
-    if (hint) hint.style.display = "block";
+  /* ============================
+     🔽🔽🔽  HIER EINFÜGEN  🔽🔽🔽
+     Resolver + Ziel-IDs
+  ============================ */
+  // 🔗 Dein Freigabelink (Datei- oder Ordnerlink)
+  const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:b:/g/personal/merten_thiemann_petri-feinkost_de/ETnDq4-F2NZBpsdrhWKLz0sBFi53HyOIxsjj_Ea9rz9nAw?e=LeKSXf";
+
+  // Ziel-IDs (werden per Resolver gefüllt)
+  const TARGET = { driveId: null, parentItemId: null };
+  const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
+  let TARGET_DRAFTS_ITEM_ID = null;
+
+  function _b64Url(u){
+    return btoa(`u!${u}`).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   }
 
-  async function getTokenSilentOrPopup(account) {
-    try {
-      const tokenResponse = await msalInstance.acquireTokenSilent({ scopes, account });
-      return tokenResponse.accessToken;
-    } catch (e) {
-      console.warn("Silent token failed, falling back to popup:", e);
-      const tokenResponse = await msalInstance.acquireTokenPopup({ scopes });
-      return tokenResponse.accessToken;
+  async function resolveShareLinkToFolder(){
+    if (!accessToken) throw new Error("Kein Access Token");
+
+    // Cache nutzen
+    const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
+    if (cache?.driveId && cache?.parentItemId){
+      TARGET.driveId = cache.driveId;
+      TARGET.parentItemId = cache.parentItemId;
+      TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
+      return;
     }
-  }
 
-  async function signInAndAcquireToken(interactive = false) {
+    // 1) Freigabelink → driveItem
+    const encoded = _b64Url(SHARE_URL);
+    const res = await fetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) throw new Error("Share-Link konnte nicht aufgelöst werden");
+    const item = await res.json();
+
+    // 2) Wenn Datei-Link (:b:), Elternordner nehmen
+    const isFolder = !!item.folder;
+    const folderItemId = isFolder ? item.id : item.parentReference?.id;
+    const driveId = item.parentReference?.driveId;
+    if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden");
+
+    TARGET.driveId = driveId;
+    TARGET.parentItemId = folderItemId;
+
+    // 3) Optional: Unterordner „Reparatur-Entwürfe“ suchen
     try {
-      let account = msalInstance.getAllAccounts()[0];
+      const childrenRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (childrenRes.ok){
+        const data = await childrenRes.json();
+        const drafts = (data.value || []).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+        if (drafts) TARGET_DRAFTS_ITEM_ID = drafts.id;
+      }
+    } catch(e){ console.warn("Entwurfsordner-Suche ausgelassen:", e); }
 
-      if (!account && interactive) {
+    // 4) Cache speichern
+    localStorage.setItem("TARGET_CACHE", JSON.stringify({
+      driveId: TARGET.driveId,
+      parentItemId: TARGET.parentItemId,
+      draftsItemId: TARGET_DRAFTS_ITEM_ID
+    }));
+  }
+  /* ============================
+     🔼🔼🔼  BIS HIER  🔼🔼🔼
+  ============================ */
+
+  // ⬇️ dein Login-Flow (mit dem bereits eingefügten Aufruf)
+  async function signInAndAcquireToken(interactive = false){
+    try{
+      let account = msalInstance.getAllAccounts()[0];
+      if (!account && interactive){
         await msalInstance.loginPopup({ scopes });
         account = msalInstance.getAllAccounts()[0];
       }
-
-      if (!account) {
-        showLoginHint(); // noch nicht eingeloggt
-        return;
-      }
+      if (!account){ showLoginHint(); return; }
 
       accessToken = await getTokenSilentOrPopup(account);
-      hideLoginHint(); // ✅ eingeloggt -> Hinweis ausblenden
-    } catch (e) {
+
+      // ⚙️ Resolver NACH dem Token holen
+      await resolveShareLinkToFolder();
+
+      hideLoginHint();
+    } catch(e){
       console.error(e);
       showLoginHint();
     }
   }
 
-  async function signOut() {
-    try {
+  async function signOut(){
+    try{
       const acc = msalInstance.getAllAccounts()[0];
       if (acc) await msalInstance.logoutPopup({ account: acc });
     } finally {
+      localStorage.removeItem("TARGET_CACHE"); // Cache leeren bei Konto-Wechsel
       location.reload();
     }
   }
@@ -863,42 +921,58 @@ window.addEventListener('load', function() {
 // ====================
 // Draft-Funktionen
 // ====================
-const folderPath = "Reparatur-Aufträge/Reparatur-Entwürfe";
+
+// ====================
+// Draft-Funktionen
+// ====================
 const fieldIds = [
-  "bearbeitet_am", "techniker1", "techniker2", "maschine", "sonstige_maschine",
-  "anlagenteil", "sonstige_anlagenteil", "startzeit", "endzeit", "dauer", "abschlussdatum",
-  "fehlerbeschreibung", "reinigung_erforderlich", "reinigungsart_zusatz", "sonstige_reinigungsart_zusatz", "ort_datum"
+  "auftrag_id",
+  "bearbeitet_am",
+  "techniker1",
+  "techniker2",
+  "maschinenstillstand",
+  "ausfall_stunden",
+  "ausfall_minuten",
+  "maschine",
+  "sonstige_maschine",
+  "anlagenteil",
+  "sonstige_anlagenteil",
+  "startzeit",
+  "endzeit",
+  "dauer",
+  "abschlussdatum",
+  "fehlerbeschreibung",
+  "reinigung_erforderlich",
+  "reinigungsart_zusatz",
+  "sonstige_reinigungsart_zusatz",
+  "reinigungsart_sonstiges",
+  "ort_datum"
 ];
 
-let currentDraftId = null;
 
-// Optional: Canvas → Bild (wird unten ohnehin in convertFormElementsToStaticText gemacht)
-function replaceCanvasWithImage() {
-  document.querySelectorAll('canvas').forEach((canvas) => {
-    const img = document.createElement('img');
-    img.src = canvas.toDataURL();
-    img.style.width = canvas.style.width;
-    img.style.height = canvas.style.height;
-    canvas.parentNode.replaceChild(img, canvas);
-  });
-  document.querySelectorAll('.preview-container img').forEach(img => {
-    img.style.display = 'block';
-  });
-}
 
-async function uploadToOneDrive(filename, blob) {
-  if (!accessToken) { alert("⚠️ Kein Zugriffstoken vorhanden. Bitte anmelden."); return false; }
+
+
+
+async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
+  if (!accessToken) { alert("⚠️ Kein Zugriffstoken. Bitte anmelden."); return false; }
+  if (!TARGET.driveId || !TARGET.parentItemId) { alert("⚠️ Zielordner nicht initialisiert."); return false; }
+  const url =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${TARGET.parentItemId}:/${encodeURIComponent(filename)}:/content`;
   try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/${filename}:/content`,
-      { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/pdf" }, body: blob }
-    );
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mime },
+      body: blob
+    });
     return res.ok;
   } catch (err) {
     console.error("Fehler beim Upload:", err);
     return false;
   }
 }
+
 
 // ====================
 // Formular → statischer Inhalt (für PDF)
@@ -1203,9 +1277,12 @@ function forceUpdate() {
   }
 }
 
+// 💾 ENTWURF SPEICHERN
 async function saveDraftToOneDrive() {
   await signInAndAcquireToken(true);
+  await resolveShareLinkToFolder();
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+  if (!TARGET.driveId || !TARGET.parentItemId) { alert("Zielordner nicht initialisiert."); return; }
 
   const draftData = {};
   fieldIds.forEach(id => {
@@ -1216,24 +1293,40 @@ async function saveDraftToOneDrive() {
   const draftJson = JSON.stringify(draftData, null, 2);
   const blob = new Blob([draftJson], { type: "application/json" });
 
-  const draftFilename = `Entwurf-${document.getElementById('auftrag_id').value}.json`;
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${draftFilename}:/content`,
-    { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: blob }
-  );
+  const auftragId = document.getElementById('auftrag_id')?.value || "ohne-id";
+  const draftFilename = `Entwurf-${auftragId}.json`;
+
+  // Falls der Unterordner existiert, dorthin; sonst in den Hauptordner
+  const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
+
+  const url =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${parentId}:/${encodeURIComponent(draftFilename)}:/content`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: blob
+  });
 
   if (res.ok) { alert("✅ Entwurf erfolgreich gespeichert!"); }
   else { alert("⚠️ Fehler beim Speichern des Entwurfs."); }
 }
 
+
+// 📥 ENTWURF LADEN
 async function loadDraftFromOneDrive(fileName) {
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+  await resolveShareLinkToFolder();
+  if (!TARGET.driveId || !TARGET.parentItemId) { alert("Zielordner nicht initialisiert."); return; }
+
+  const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
+  const url =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${parentId}:/${encodeURIComponent(fileName)}:/content`;
 
   try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${fileName}:/content`,
-      { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) { alert("⚠️ Fehler beim Laden des Entwurfs."); return; }
 
     const draftData = await res.json();
@@ -1249,29 +1342,36 @@ async function loadDraftFromOneDrive(fileName) {
   }
 }
 
+
+// 📂 ENTWURFSLISTE ANZEIGEN
 async function showDraftList() {
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+  await resolveShareLinkToFolder();
+  if (!TARGET.driveId || !TARGET.parentItemId) { alert("Zielordner nicht initialisiert."); return; }
+
+  const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
 
   try {
     const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe:/children`,
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${parentId}/children?$select=id,name,file,folder`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-
     const data = await res.json();
-    if (!data.value || data.value.length === 0) { alert("⚠️ Keine Entwürfe gefunden."); return; }
-
-    const fileNames = data.value.filter(item => item.name.endsWith(".json")).map(item => item.name);
+    const files = (data.value || []).filter(item => item.name.endsWith(".json"));
+    if (!files.length) { alert("⚠️ Keine Entwürfe gefunden."); return; }
 
     let list = "Verfügbare Entwürfe:\n\n";
-    fileNames.forEach((name, index) => { list += `${index + 1}: ${name}\n`; });
+    files.forEach((f, i) => { list += `${i + 1}: ${f.name}\n`; });
 
     const numberInput = prompt("Bitte die Nummer des Entwurfs eingeben:\n\n" + list);
-    const selectedIndex = parseInt(numberInput, 10) - 1;
+    const idx = parseInt(numberInput, 10) - 1;
 
-    if (!isNaN(selectedIndex) && fileNames[selectedIndex]) {
-      await loadDraftFromOneDrive(fileNames[selectedIndex]);
-      window.currentDraftFileName = fileNames[selectedIndex];
+    if (!isNaN(idx) && files[idx]) {
+      // Für späteres Löschen merken wir uns Name + ID
+      window.currentDraftFileName = files[idx].name;
+      window.currentDraftFileId   = files[idx].id;
+
+      await loadDraftFromOneDrive(files[idx].name);
     } else {
       alert("⚠️ Ungültige Nummer.");
     }
@@ -1281,18 +1381,51 @@ async function showDraftList() {
   }
 }
 
-async function deleteDraftFile() {
-  if (!accessToken || !window.currentDraftFileName) return;
 
-  try {
-    await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Reparatur-Entwürfe/${window.currentDraftFileName}`,
-      { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    console.log("✅ Entwurfsdatei gelöscht:", window.currentDraftFileName);
-    window.currentDraftFileName = null;
-  } catch (err) {
-    console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
+// 🗑️ ENTWURF LÖSCHEN
+async function deleteDraftFile() {
+  if (!accessToken) return;
+  await resolveShareLinkToFolder();
+  if (!TARGET.driveId || !TARGET.parentItemId) { console.warn("Zielordner nicht initialisiert."); return; }
+
+  // Bevorzugt mit der gespeicherten Item-ID löschen
+  if (window.currentDraftFileId) {
+    try {
+      await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${window.currentDraftFileId}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      console.log("✅ Entwurfsdatei gelöscht:", window.currentDraftFileName);
+      window.currentDraftFileName = null;
+      window.currentDraftFileId = null;
+    } catch (err) {
+      console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
+    }
+    return;
+  }
+
+  // Fallback: Wenn wir nur den Namen haben, versuche die ID aus dem Ordner zu ermitteln
+  if (window.currentDraftFileName) {
+    try {
+      const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${parentId}/children?$select=id,name`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const data = await res.json();
+      const match = (data.value || []).find(x => x.name === window.currentDraftFileName);
+      if (!match) { console.warn("Datei nicht gefunden:", window.currentDraftFileName); return; }
+
+      await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${match.id}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      console.log("✅ Entwurfsdatei gelöscht:", window.currentDraftFileName);
+      window.currentDraftFileName = null;
+      window.currentDraftFileId = null;
+    } catch (err) {
+      console.error("❌ Fehler beim Löschen der Entwurfsdatei:", err);
+    }
   }
 }
 
