@@ -825,11 +825,15 @@ const TARGET = { driveId: null, parentItemId: null }; // <- war bei dir nicht de
 const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
 let TARGET_DRAFTS_ITEM_ID = null;
 
-function _b64Url(u){
-  const bytes = new TextEncoder().encode('u!' + u);
-  let bin=''; for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+// richtig: shareId = 'u!' + base64url( UTF8( SHARING_URL ) )
+function _b64Url(u) {
+  const bytes = new TextEncoder().encode(u);      // nur die URL encodieren
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/,'');
+  return 'u!' + b64;                               // 'u!' VOR die Base64, nicht hinein!
 }
+
 
 // WICHTIG: als "function ..." deklarieren (wird gehoistet)
 async function resolveShareLinkToFolder(){
