@@ -790,145 +790,83 @@ window.addEventListener('load', function() {
     system: { allowRedirectInIframe: true }
   };
 
- const scopes = [
-  "User.Read",
-  "openid", "profile", "offline_access",
-  "Files.ReadWrite.All",
-  "Sites.ReadWrite.All"   // <-- neu
-];
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-let accessToken = "";
+  const scopes = ["User.Read","openid","profile","offline_access","Files.ReadWrite.All"];
+  const msalInstance = new msal.PublicClientApplication(msalConfig);
+  let accessToken = "";
 
-
-  function hideLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="none"; }
-  function showLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="block"; }
-
-  async function getTokenSilentOrPopup(account){
-    try { const t = await msalInstance.acquireTokenSilent({ scopes, account }); return t.accessToken; }
-    catch(e){ console.warn("Silent token failed, fallback popup:", e); const t = await msalInstance.acquireTokenPopup({ scopes }); return t.accessToken; }
-  }
-
-  /* ============================
-     🔽🔽🔽  HIER EINFÜGEN  🔽🔽🔽
-     Resolver + Ziel-IDs
-  ============================ */
-  // 🔗 Dein Freigabelink (Datei- oder Ordnerlink)
-const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten_thiemann_petri-feinkost_de/EkOa1ufucPNDtlfo6B9rxowB7o8nAY4wHK-gcRha74B2AQ?e=mIn13S";
-
-
-  // Ziel-IDs (werden per Resolver gefüllt)
-  const TARGET = { driveId: null, parentItemId: null };
-  const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
-  let TARGET_DRAFTS_ITEM_ID = null;
-
-function _b64Url(u){
-  const bytes = new TextEncoder().encode('u!' + u);
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-
-
-async function resolveShareLinkToFolder(){
-  if (!accessToken) throw new Error("Kein Access Token");
-
-  // Optional: Cache nutzen – aber an SHARE_URL koppeln
-  const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
-  if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId){
-    TARGET.driveId = cache.driveId;
-    TARGET.parentItemId = cache.parentItemId;
-    TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
-    return;
-  }
-
-  const encoded = _b64Url(SHARE_URL);
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  if (!res.ok){
-    console.warn("shares/driveItem fehlgeschlagen:", res.status, await res.text());
-    throw new Error("Share-Link konnte nicht aufgelöst werden. Bitte Link/Anmeldung prüfen.");
-  }
-
-  const item = await res.json();
-  const folderItemId = item.folder ? item.id : item.parentReference?.id;
-  const driveId = item.parentReference?.driveId;
-  if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden.");
-
-  TARGET.driveId = driveId;
-  TARGET.parentItemId = folderItemId;
-
-  // Optional: Unterordner „Reparatur-Entwürfe“ anlegen, falls er nicht existiert
-  try {
-    const r2 = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (r2.ok){
-      const data = await r2.json();
-      const drafts = (data.value||[]).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-      if (drafts) TARGET_DRAFTS_ITEM_ID = drafts.id;
-      else {
-        const create = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
-            body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
-          }
-        );
-        if (create.ok) TARGET_DRAFTS_ITEM_ID = (await create.json()).id;
-      }
+  // === NEU 1: Redirect-Antwort verarbeiten – MUSS direkt nach msalInstance stehen
+  (async () => {
+    try {
+      const resp = await msalInstance.handleRedirectPromise();
+      if (resp?.account) msalInstance.setActiveAccount(resp.account);
+    } catch (e) {
+      console.warn("handleRedirectPromise:", e);
     }
-  } catch {}
+  })();
 
-  localStorage.setItem("TARGET_CACHE", JSON.stringify({
-    shareUrl: SHARE_URL,
-    driveId: TARGET.driveId,
-    parentItemId: TARGET.parentItemId,
-    draftsItemId: TARGET_DRAFTS_ITEM_ID
-  }));
-}
+  function hideLoginHint(){ const el=document.getElementById("loginHint"); if(el) el.style.display="none"; }
+  function showLoginHint(){ const el=document.getElementById("loginHint"); if(el) el.style.display="block"; }
 
+  // === NEU 2: Browser-Detection – Safari/Firefox/iOS => Redirect erzwingen
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const IS_FIREFOX = /firefox/i.test(navigator.userAgent);
+  const FORCE_REDIRECT = IS_IOS || IS_SAFARI || IS_FIREFOX;
 
-  /* ============================
-     🔼🔼🔼  BIS HIER  🔼🔼🔼
-  ============================ */
+  // === ERSETZT deine alte signInAndAcquireToken()
+  async function signInAndAcquireToken(interactive = false) {
+    try {
+      let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
-  // ⬇️ dein Login-Flow (mit dem bereits eingefügten Aufruf)
-  async function signInAndAcquireToken(interactive = false){
-    try{
-      let account = msalInstance.getAllAccounts()[0];
-      if (!account && interactive){
-        await msalInstance.loginPopup({ scopes });
-        account = msalInstance.getAllAccounts()[0];
+      // Login
+      if (!account && interactive) {
+        if (FORCE_REDIRECT) {
+          await msalInstance.loginRedirect({ scopes });
+          return; // kommt nach Redirect zurück
+        }
+        const r = await msalInstance.loginPopup({ scopes });
+        msalInstance.setActiveAccount(r.account);
+        account = r.account;
       }
-      if (!account){ showLoginHint(); return; }
 
-      accessToken = await getTokenSilentOrPopup(account);
+      if (!account) { showLoginHint(); return; }
 
-      // ⚙️ Resolver NACH dem Token holen
+      // Token holen
+      try {
+        const t = await msalInstance.acquireTokenSilent({ scopes, account });
+        accessToken = t.accessToken;
+      } catch (e) {
+        if (FORCE_REDIRECT) {
+          await msalInstance.acquireTokenRedirect({ scopes });
+          return;
+        }
+        const t = await msalInstance.acquireTokenPopup({ scopes });
+        accessToken = t.accessToken;
+      }
+
+      // Erst nach Token: Zielordner auflösen
       await resolveShareLinkToFolder();
-
       hideLoginHint();
-    } catch(e){
+    } catch (e) {
       console.error(e);
       showLoginHint();
     }
   }
 
+  // (optional, aber sauber): Logout je nach Browser
   async function signOut(){
     try{
-      const acc = msalInstance.getAllAccounts()[0];
-      if (acc) await msalInstance.logoutPopup({ account: acc });
+      const acc = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+      if (!acc) return;
+      if (FORCE_REDIRECT) await msalInstance.logoutRedirect({ account: acc });
+      else await msalInstance.logoutPopup({ account: acc });
     } finally {
-      localStorage.removeItem("TARGET_CACHE"); // Cache leeren bei Konto-Wechsel
+      localStorage.removeItem("TARGET_CACHE");
       location.reload();
     }
   }
 
+  // Auto-Login (silent) beim Laden – bleibt
   document.addEventListener("DOMContentLoaded", () => {
     signInAndAcquireToken(false);
   });
