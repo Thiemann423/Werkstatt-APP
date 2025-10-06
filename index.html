@@ -794,6 +794,18 @@ window.addEventListener('load', function() {
   const msalInstance = new msal.PublicClientApplication(msalConfig);
   let accessToken = "";
 
+  
+  function hideLoginHint(){
+    const el = document.getElementById("loginHint");
+    if (el) el.style.display = "none";
+  }
+  function showLoginHint(){
+    const el = document.getElementById("loginHint");
+    if (el) el.style.display = "block";
+  }
+
+
+
   // === NEU 1: Redirect-Antwort verarbeiten – MUSS direkt nach msalInstance stehen
  
 // 1) Redirect-Antwort verarbeiten (muss direkt nach msalInstance stehen)
@@ -879,6 +891,8 @@ async function resolveShareLinkToFolder(){
   }));
 }
 
+<!-- ... alles davor: msalConfig, scopes, msalInstance, handleRedirectPromise, resolveShareLinkToFolder, signInAndAcquireToken ... -->
+
 // 3) Login/Token nur per Redirect (Popup auf GitHub Pages meiden)
 async function signInAndAcquireToken(interactive = false) {
   try {
@@ -898,7 +912,6 @@ async function signInAndAcquireToken(interactive = false) {
       return; // kommt nach Redirect zurück
     }
 
-    // Erst nach Token den Zielordner auflösen
     await resolveShareLinkToFolder();
     hideLoginHint();
   } catch (e) {
@@ -907,13 +920,28 @@ async function signInAndAcquireToken(interactive = false) {
   }
 }
 
-// Optional: beim Laden still versuchen
+/* === HIER einfügen: signOut() === */
+async function signOut(){
+  try{
+    const acc = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    if (acc) {
+      localStorage.removeItem("TARGET_CACHE");     // Zielordner-Cache leeren
+      await msalInstance.logoutRedirect({ account: acc });
+      return;                                      // kommt nach Redirect zurück
+    }
+  } catch(e){
+    console.error("logout:", e);
+  }
+}
+
+/* und dann dein DOMContentLoaded wie gehabt */
 document.addEventListener("DOMContentLoaded", () => {
   const acc = msalInstance.getAllAccounts()[0];
   if (acc) msalInstance.setActiveAccount(acc);
   signInAndAcquireToken(false);
 });
 </script>
+
 
 
 
