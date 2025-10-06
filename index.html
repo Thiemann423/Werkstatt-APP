@@ -795,82 +795,126 @@ window.addEventListener('load', function() {
   let accessToken = "";
 
   // === NEU 1: Redirect-Antwort verarbeiten – MUSS direkt nach msalInstance stehen
-  (async () => {
-    try {
-      const resp = await msalInstance.handleRedirectPromise();
-      if (resp?.account) msalInstance.setActiveAccount(resp.account);
-    } catch (e) {
-      console.warn("handleRedirectPromise:", e);
-    }
-  })();
+ 
+// 1) Redirect-Antwort verarbeiten (muss direkt nach msalInstance stehen)
+(async () => {
+  try {
+    const resp = await msalInstance.handleRedirectPromise();
+    if (resp?.account) msalInstance.setActiveAccount(resp.account);
+  } catch (e) {
+    console.warn("handleRedirectPromise:", e);
+  }
+})();
 
-  function hideLoginHint(){ const el=document.getElementById("loginHint"); if(el) el.style.display="none"; }
-  function showLoginHint(){ const el=document.getElementById("loginHint"); if(el) el.style.display="block"; }
+// 2) Resolver + Ziel-IDs (GLOBAL!)
+const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten_thiemann_petri-feinkost_de/EkOa1ufucPNDtlfo6B9rxowB7o8nAY4wHK-gcRha74B2AQ?e=NtbXUx";
 
-  // === NEU 2: Browser-Detection – Safari/Firefox/iOS => Redirect erzwingen
-  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const IS_FIREFOX = /firefox/i.test(navigator.userAgent);
-  const FORCE_REDIRECT = IS_IOS || IS_SAFARI || IS_FIREFOX;
+const TARGET = { driveId: null, parentItemId: null }; // <- war bei dir nicht definiert
+const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
+let TARGET_DRAFTS_ITEM_ID = null;
 
-  // === ERSETZT deine alte signInAndAcquireToken()
-  async function signInAndAcquireToken(interactive = false) {
-    try {
-      let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+function _b64Url(u){
+  const bytes = new TextEncoder().encode('u!' + u);
+  let bin=''; for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
 
-      // Login
-      if (!account && interactive) {
-        if (FORCE_REDIRECT) {
-          await msalInstance.loginRedirect({ scopes });
-          return; // kommt nach Redirect zurück
+// WICHTIG: als "function ..." deklarieren (wird gehoistet)
+async function resolveShareLinkToFolder(){
+  if (!accessToken) throw new Error("Kein Access Token");
+
+  // Cache
+  const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
+  if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId){
+    TARGET.driveId = cache.driveId;
+    TARGET.parentItemId = cache.parentItemId;
+    TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
+    return;
+  }
+
+  // Share-Link → Drive & Ordner
+  const encoded = _b64Url(SHARE_URL);
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok){
+    throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
+  }
+  const item = await res.json();
+  const folderItemId = item.folder ? item.id : item.parentReference?.id;
+  const driveId = item.parentReference?.driveId;
+  if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden.");
+
+  TARGET.driveId = driveId;
+  TARGET.parentItemId = folderItemId;
+
+  // Optional: Unterordner für Entwürfe anlegen
+  const r2 = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (r2.ok){
+    const data = await r2.json();
+    const drafts = (data.value||[]).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+    if (drafts) TARGET_DRAFTS_ITEM_ID = drafts.id;
+    else {
+      const create = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
+          body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
         }
-        const r = await msalInstance.loginPopup({ scopes });
-        msalInstance.setActiveAccount(r.account);
-        account = r.account;
-      }
-
-      if (!account) { showLoginHint(); return; }
-
-      // Token holen
-      try {
-        const t = await msalInstance.acquireTokenSilent({ scopes, account });
-        accessToken = t.accessToken;
-      } catch (e) {
-        if (FORCE_REDIRECT) {
-          await msalInstance.acquireTokenRedirect({ scopes });
-          return;
-        }
-        const t = await msalInstance.acquireTokenPopup({ scopes });
-        accessToken = t.accessToken;
-      }
-
-      // Erst nach Token: Zielordner auflösen
-      await resolveShareLinkToFolder();
-      hideLoginHint();
-    } catch (e) {
-      console.error(e);
-      showLoginHint();
+      );
+      if (create.ok) TARGET_DRAFTS_ITEM_ID = (await create.json()).id;
     }
   }
 
-  // (optional, aber sauber): Logout je nach Browser
-  async function signOut(){
-    try{
-      const acc = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
-      if (!acc) return;
-      if (FORCE_REDIRECT) await msalInstance.logoutRedirect({ account: acc });
-      else await msalInstance.logoutPopup({ account: acc });
-    } finally {
-      localStorage.removeItem("TARGET_CACHE");
-      location.reload();
-    }
-  }
+  localStorage.setItem("TARGET_CACHE", JSON.stringify({
+    shareUrl: SHARE_URL,
+    driveId: TARGET.driveId,
+    parentItemId: TARGET.parentItemId,
+    draftsItemId: TARGET_DRAFTS_ITEM_ID
+  }));
+}
 
-  // Auto-Login (silent) beim Laden – bleibt
-  document.addEventListener("DOMContentLoaded", () => {
-    signInAndAcquireToken(false);
-  });
+// 3) Login/Token nur per Redirect (Popup auf GitHub Pages meiden)
+async function signInAndAcquireToken(interactive = false) {
+  try {
+    let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+
+    if (!account && interactive) {
+      await msalInstance.loginRedirect({ scopes });
+      return; // kommt nach Redirect zurück
+    }
+    if (!account) { showLoginHint(); return; }
+
+    try {
+      const t = await msalInstance.acquireTokenSilent({ scopes, account });
+      accessToken = t.accessToken;
+    } catch (e) {
+      await msalInstance.acquireTokenRedirect({ scopes });
+      return; // kommt nach Redirect zurück
+    }
+
+    // Erst nach Token den Zielordner auflösen
+    await resolveShareLinkToFolder();
+    hideLoginHint();
+  } catch (e) {
+    console.error("signInAndAcquireToken:", e);
+    showLoginHint();
+  }
+}
+
+// Optional: beim Laden still versuchen
+document.addEventListener("DOMContentLoaded", () => {
+  const acc = msalInstance.getAllAccounts()[0];
+  if (acc) msalInstance.setActiveAccount(acc);
+  signInAndAcquireToken(false);
+});
 </script>
+
 
 
 
