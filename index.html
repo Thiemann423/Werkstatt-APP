@@ -815,59 +815,92 @@ const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten
   const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
   let TARGET_DRAFTS_ITEM_ID = null;
 
-  function _b64Url(u){
-    return btoa(`u!${u}`).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  }
+ function _b64Url(u) {
+  const bytes = new TextEncoder().encode('u!' + u); // UTF-8
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
 
-  async function resolveShareLinkToFolder(){
-    if (!accessToken) throw new Error("Kein Access Token");
 
-    // Cache nutzen
-    const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
-    if (cache?.driveId && cache?.parentItemId){
-      TARGET.driveId = cache.driveId;
-      TARGET.parentItemId = cache.parentItemId;
-      TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
-      return;
-    }
+async function resolveShareLinkToFolder(){
+  if (!accessToken) throw new Error("Kein Access Token");
 
-    // 1) Freigabelink → driveItem
-    const encoded = _b64Url(SHARE_URL);
-    const res = await fetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    if (!res.ok) throw new Error("Share-Link konnte nicht aufgelöst werden");
+  // 1) Share-Link → driveItem
+  const encoded = _b64Url(SHARE_URL);
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (res.ok) {
     const item = await res.json();
-
-    // 2) Wenn Datei-Link (:b:), Elternordner nehmen
-    const isFolder = !!item.folder;
-    const folderItemId = isFolder ? item.id : item.parentReference?.id;
+    const folderItemId = item.folder ? item.id : item.parentReference?.id;
     const driveId = item.parentReference?.driveId;
     if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden");
 
     TARGET.driveId = driveId;
     TARGET.parentItemId = folderItemId;
 
-    // 3) Optional: Unterordner „Reparatur-Entwürfe“ suchen
+    // Unterordner „Reparatur-Entwürfe“ (falls vorhanden) merken
     try {
-      const childrenRes = await fetch(
+      const r2 = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      if (childrenRes.ok){
-        const data = await childrenRes.json();
+      if (r2.ok){
+        const data = await r2.json();
         const drafts = (data.value || []).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-        if (drafts) TARGET_DRAFTS_ITEM_ID = drafts.id;
+        TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
       }
-    } catch(e){ console.warn("Entwurfsordner-Suche ausgelassen:", e); }
+    } catch (_) {}
 
-    // 4) Cache speichern
+    // Cache schreiben
     localStorage.setItem("TARGET_CACHE", JSON.stringify({
       driveId: TARGET.driveId,
       parentItemId: TARGET.parentItemId,
       draftsItemId: TARGET_DRAFTS_ITEM_ID
     }));
+    return;
   }
+
+  // 2) Fallback: Share-Link fehlgeschlagen → per Pfad auflösen
+  const errTxt = await res.text();
+  console.warn("shares/driveItem fehlgeschlagen:", res.status, errTxt);
+
+  // <— falls dein OneDrive-Ordner anders heißt, hier anpassen
+  const pfadRes = await fetch(
+    'https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge',
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!pfadRes.ok) {
+    const t = await pfadRes.text();
+    throw new Error(`Share-Link & Fallback-Pfad fehlgeschlagen (${pfadRes.status}). Details in Konsole: ${t}`);
+  }
+
+  const folder = await pfadRes.json();
+  TARGET.driveId = folder.parentReference?.driveId;
+  TARGET.parentItemId = folder.id;
+
+  try {
+    const r3 = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children?$select=id,name,folder`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (r3.ok){
+      const data = await r3.json();
+      const drafts = (data.value || []).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+      TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
+    }
+  } catch (_) {}
+
+  localStorage.setItem("TARGET_CACHE", JSON.stringify({
+    driveId: TARGET.driveId,
+    parentItemId: TARGET.parentItemId,
+    draftsItemId: TARGET_DRAFTS_ITEM_ID
+  }));
+}
+
   /* ============================
      🔼🔼🔼  BIS HIER  🔼🔼🔼
   ============================ */
