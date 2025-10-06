@@ -790,9 +790,15 @@ window.addEventListener('load', function() {
     system: { allowRedirectInIframe: true }
   };
 
-  const scopes = ["Files.ReadWrite.All", "User.Read", "openid", "profile", "offline_access"];
-  const msalInstance = new msal.PublicClientApplication(msalConfig);
-  let accessToken = "";
+ const scopes = [
+  "User.Read",
+  "openid", "profile", "offline_access",
+  "Files.ReadWrite.All",
+  "Sites.ReadWrite.All"   // <-- neu
+];
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+let accessToken = "";
+
 
   function hideLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="none"; }
   function showLoginHint(){ const hint=document.getElementById("loginHint"); if(hint) hint.style.display="block"; }
@@ -816,9 +822,12 @@ const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten
   let TARGET_DRAFTS_ITEM_ID = null;
 
 function _b64Url(u){
-  // URL ist ASCII → einfaches btoa reicht; robust & Safari-freundlich
-  return btoa('u!' + u).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const bytes = new TextEncoder().encode('u!' + u);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
+
 
 async function resolveShareLinkToFolder(){
   if (!accessToken) throw new Error("Kein Access Token");
