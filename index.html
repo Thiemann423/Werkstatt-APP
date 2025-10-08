@@ -171,7 +171,12 @@ async function loadHtml2PdfIfNeeded(){
 
 </head>
 
-<body><div id="updateModal">
+<body>
+  <!-- Offscreen-Renderframe nur für den PDF-Export -->
+  <iframe id="pdfSandbox"
+          style="position:fixed;left:-99999px;top:-99999px;width:820px;height:1200px;visibility:hidden;border:0;"></iframe>
+
+  <div id="updateModal">
 <div id="updateModalContent">
 <p><strong>Die App wurde aktualisiert.</strong><br/>Bitte bestätigen Sie die neue Version.</p>
 <button onclick="confirmUpdate()">OK</button>
@@ -1160,18 +1165,19 @@ function convertFormElementsToStaticText(container){
 // Auftrag abschließen → PDF erzeugen & hochladen
 // ====================
 
+
 async function generatePDFAndFinish() {
+  // 0) Lib + Login wie bei dir
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
 
-await signInAndAcquireToken(true);
-if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
-
+  await signInAndAcquireToken(true);
+  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
 
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
-  // 🔴 NEU A: Canvas aus dem ORIGINAL sichern (Map: id -> DataURL)
+  // A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
   const signatureMap = new Map(
     Array.from(src.querySelectorAll('canvas')).map(c => {
       try { return [c.id, c.toDataURL('image/png')]; }
@@ -1179,46 +1185,55 @@ if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
     })
   );
 
-  // 1) Isolierter Render-Bereich (A4 ~ 794px @96DPI)
-  const renderRoot = document.createElement('div');
-  renderRoot.style.position = 'fixed';
-  renderRoot.style.left = '-10000px';
-  renderRoot.style.top = '0';
-  renderRoot.style.width = '794px';
-  renderRoot.style.background = '#ffffff';
-  renderRoot.style.zIndex = '-1';
-  document.body.appendChild(renderRoot);
+  // B) Isoliertes OFFSCREEN-IFRAME benutzen (ignoriert Seiten-/Text-Zoom)
+  const frame = document.getElementById('pdfSandbox');
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write(`<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+      <style>
+        html,body{margin:0;padding:0;width:794px;background:#fff;}
+        html,body,#root{-webkit-text-size-adjust:none;text-size-adjust:none;}
+        #root, #root *{
+          font-family:"Inter", Arial, sans-serif !important;
+          line-height:1.35;
+          box-sizing:border-box;
+        }
+        @page { size: A4; margin: 0; }
+      </style>
+    </head>
+    <body><div id="root"></div></body>
+  </html>`);
+  doc.close();
 
-  // 2) Inhalt klonen & nur KLON aufbereiten
+  // C) Inhalt klonen & vorbereiten (nur im KLON ändern)
   const clone = src.cloneNode(true);
   clone.id = 'pdfExportContainerClone';
   clone.classList.add('pdf-snapshot');
-  clone.style.width   = '794px';
-  clone.style.maxWidth= '794px';
-  clone.style.margin  = '0';
+  clone.style.width = '794px';
+  clone.style.maxWidth = '794px';
+  clone.style.margin = '0';
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
-  renderRoot.appendChild(clone);
 
-  // 🔴 NEU C: Select-Werte vom ORIGINAL in den KLON übertragen
+  // Select-Werte übernehmen
   clone.querySelectorAll('select').forEach(sel => {
     const orig = src.querySelector('#' + sel.id);
     if (!orig) return;
-    // 1) Wert setzen
     sel.value = orig.value;
-    // 2) selected-Flag im Klon korrekt markieren
     Array.from(sel.options).forEach(o => { o.selected = (o.value === orig.value); });
   });
 
-  // (optional) Debug – hier siehst du sofort, ob TK2 korrekt im Klon ankommt
-  console.log('TK1 orig/clone:', src.querySelector('#techniker1')?.value, clone.querySelector('#techniker1')?.value);
-  console.log('TK2 orig/clone:', src.querySelector('#techniker2')?.value, clone.querySelector('#techniker2')?.value);
-
-  // 🔴 NEU B: Im KLON Canvas sofort durch IMG mit gesicherter DataURL ersetzen
+  // Canvas -> IMG mit gesicherter DataURL
   clone.querySelectorAll('canvas').forEach(c => {
     const url = signatureMap.get(c.id);
     if (!url) return;
-    const img = document.createElement('img');
+    const img = doc.createElement('img');
     img.src = url;
     img.style.maxWidth = '100%';
     img.style.height = 'auto';
@@ -1226,35 +1241,39 @@ if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
     c.parentNode.replaceChild(img, c);
   });
 
+  // Formular-Elemente in statisches DOM wandeln (deine bestehende Helper-Funktion)
+  convertFormElementsToStaticText(clone);
+
+  // Thumbnails größer im PDF
+  clone.querySelectorAll('.preview-container img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '';
+    img.style.border = '0';
+    img.style.display = 'block';
+  });
+
+  // Klon ins Iframe einhängen
+  doc.getElementById('root').appendChild(clone);
+
   try {
-    // 3) Formular -> statischer Inhalt (nur im KLON!)
-    convertFormElementsToStaticText(clone);
+    // D) Warten bis Fonts & Bilder im Iframe geladen sind
+    if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
+    const imgs = doc.images;
+    await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
+      : new Promise(res => { img.onload = img.onerror = res; })));
 
-    // Thumbnails im PDF groß darstellen
-    clone.querySelectorAll('.preview-container img').forEach(img => {
-      img.style.maxWidth = '100%';
-      img.style.maxHeight = '';
-      img.style.border = '0';
-      img.style.display = 'block';
-    });
-
-    // 4) Bilder im KLON laden lassen
-    const images = clone.querySelectorAll('img');
-    await Promise.all([...images].map(img =>
-      img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))
-    ));
-
-    // 5) Dateiname
+    // E) Dateiname
     const auftragIdField = document.getElementById("auftrag_id");
     let auftragId = auftragIdField?.value?.trim();
     if (!auftragId) {
       const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
-      auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+      auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0,4).toUpperCase()}`;
       if (auftragIdField) auftragIdField.value = auftragId;
     }
     const filename = `${auftragId}.pdf`;
 
-    // 6) html2pdf-Optionen
+    // F) html2pdf-Optionen (fester Layout-Kontext!)
+    const height = doc.getElementById('root').scrollHeight;
     const opt = {
       margin: 0,
       filename,
@@ -1263,24 +1282,22 @@ if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: 0,
-        logging: true,
+        scrollX: 0, scrollY: 0,
+        windowWidth: 794,         // wichtig
+        windowHeight: height,     // wichtig
+        logging: false,
         foreignObjectRendering: false
       },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
-    // 7) Layout stabilisieren
+    // G) Rendern
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-    // 8) PDF erzeugen
-    const worker  = window.html2pdf().set(opt).from(clone).toPdf();
+    const worker  = window.html2pdf().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
-    console.log('PDF Blob size:', pdfBlob.size);
 
-    // 9) Upload
+    // H) Upload & UI
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1293,10 +1310,11 @@ if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
   } finally {
-    // 10) Aufräumen
-    try { renderRoot.remove(); } catch {}
+    // optional: Iframe leeren (nicht entfernen)
+    try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
