@@ -1211,6 +1211,17 @@ async function generatePDFAndFinish() {
   </html>`);
   doc.close();
 
+  // ✳️ html2pdf INS IFRAME laden (falls noch nicht vorhanden)
+  if (!frame.contentWindow.html2pdf) {
+    await new Promise((resolve, reject) => {
+      const s = doc.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('html2pdf im Iframe konnte nicht geladen werden.'));
+      doc.head.appendChild(s);
+    });
+  }
+
   // C) Inhalt klonen & vorbereiten (nur im KLON ändern)
   const clone = src.cloneNode(true);
   clone.id = 'pdfExportContainerClone';
@@ -1283,8 +1294,8 @@ async function generatePDFAndFinish() {
         useCORS: true,
         backgroundColor: '#ffffff',
         scrollX: 0, scrollY: 0,
-        windowWidth: 794,         // wichtig
-        windowHeight: height,     // wichtig
+        windowWidth: 794,
+        windowHeight: height,
         logging: false,
         foreignObjectRendering: false
       },
@@ -1292,9 +1303,10 @@ async function generatePDFAndFinish() {
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
-    // G) Rendern
+    // G) Rendern (IM IFRAME!)
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const worker  = window.html2pdf().set(opt).from(doc.getElementById('root')).toPdf();
+    const h2p = frame.contentWindow.html2pdf;
+    const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
     // H) Upload & UI
@@ -1314,6 +1326,7 @@ async function generatePDFAndFinish() {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
