@@ -1123,30 +1123,49 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-// 1d) Reinigung Maschine/Umfeld erforderlich – robust (kein option:checked)
+// 1d) Reinigung Maschine/Umfeld erforderlich – robust
 const processedIds = new Set();
 {
   const sel = container.querySelector('#reinigung_erforderlich');
   if (sel) {
-    // Label direkt vor dem Select
-    const labelEl = (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
-      ? sel.previousElementSibling
-      : container.querySelector('label[for="reinigung_erforderlich"]');
+    // Label finden
+    const labelEl =
+      (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
+        ? sel.previousElementSibling
+        : container.querySelector('label[for="reinigung_erforderlich"]');
 
-    // Nur über value gehen, sicher auf „Ja/Nein“ mappen
-    const v = (sel.value || '').trim().toLowerCase();
-    let txt = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : (sel.value || '').trim();
+    // 1) bevorzugt: gesicherten sichtbaren Text aus dem Klon
+    let txt = (sel.getAttribute('data-selected-text') || '').trim();
 
-    // Falls es noch leer ist, letztes Fallback: selectedIndex
+    // 2) Fallback: mappe value -> "Ja/Nein"
+    if (!txt) {
+      const v = (sel.value || '').trim().toLowerCase();
+      if (v === 'ja')  txt = 'Ja';
+      if (v === 'nein') txt = 'Nein';
+    }
+
+    // 3) letzter Fallback: option[selected]
     if (!txt) {
       const o = sel.options[sel.selectedIndex];
       txt = (o?.text || o?.value || '').trim();
     }
 
     const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
-      .replace(/:\s*$/, '').trim();
+      .replace(/:\s*$/, '')
+      .trim();
 
-    if (txt) addRow(labelTxt, txt, sel);  // Zeile an der Position des Selects einfügen
+    if (txt) {
+      // Zeile an Position des Selects einfügen
+      const row = container.ownerDocument.createElement('div');
+      row.className = 'print-field';
+      const l = container.ownerDocument.createElement('div');
+      l.className = 'print-label'; l.textContent = labelTxt;
+      const vDiv = container.ownerDocument.createElement('div');
+      vDiv.className = 'print-value'; vDiv.textContent = txt;
+      row.append(l, vDiv);
+      sel.parentNode.insertBefore(row, sel);
+    }
+
     labelEl?.remove();
     sel.remove();
     processedIds.add('reinigung_erforderlich');
@@ -1156,54 +1175,74 @@ const processedIds = new Set();
 
 
 
-  // ===== 2) Generisch für alle restlichen Felder =====
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
-  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-  fields.forEach(el => {
-    if (processedIds.has(el.id)) return; // bereits als Spezialfall behandelt
+ // ===== 2) Generisch für alle restlichen Felder =====
+const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+const isPlaceholder = (t) => placeholders.has((t || '').trim());
+const formatDate = (v) => {
+  try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); }
+  catch { return v || ''; }
+};
 
-    const cs = win.getComputedStyle(el);
-    if (el.type === 'hidden' || el.type === 'file' ||
-        cs.display === 'none' || cs.visibility === 'hidden') {
-      el.remove();
-      return;
-    }
+const fields = Array.from(container.querySelectorAll('input, select, textarea'));
+fields.forEach(el => {
+  if (processedIds.has(el.id)) return; // bereits als Spezialfall behandelt
 
-    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
-
-    let val = '';
-    if (el.tagName === 'SELECT') {
-      const opt = el.options[el.selectedIndex];
-      const txt = (opt?.text || '').trim();
-      val = isPlaceholder(txt) ? '' : txt;
-    } else if (el.type === 'date') {
-      val = formatDate(el.value);
-    } else if (el.tagName === 'TEXTAREA') {
-      val = (el.value || '').trim();
-    } else {
-      val = (el.value || '').trim();
-    }
-
-    if (!val) {
-      el.remove();
-      label?.remove();
-      return;
-    }
-
-    const row = d.createElement('div'); row.className = 'print-field';
-    const l   = d.createElement('div'); l.className   = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-    row.append(l, vDiv);
-
-    const parent = label ? label.parentNode : el.parentNode;
-    parent.insertBefore(row, label || el);
-    label?.remove();
+  const cs = win.getComputedStyle(el);
+  if (el.type === 'hidden' || el.type === 'file' ||
+      cs.display === 'none' || cs.visibility === 'hidden') {
     el.remove();
-  });
+    return;
+  }
+
+  const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
+
+  let val = '';
+  if (el.tagName === 'SELECT') {
+    // 1) Primär: Sichtbaren Text verwenden, den wir beim Klonen als Attribut gesichert haben
+    let txt = (el.getAttribute('data-selected-text') || '').trim();
+
+    // 2) Fallbacks: option:checked -> selectedIndex -> value
+    if (!txt) {
+      const optChecked = el.querySelector('option:checked');
+      const opt = optChecked || el.options[el.selectedIndex];
+      txt = (opt?.text || opt?.value || '').trim();
+    }
+
+    // 3) Platzhalter unterdrücken
+    val = isPlaceholder(txt) ? '' : txt;
+
+    // 4) Sonderfall: „Reinigungsausführung: Sonstiges + Zusatztext“
+    if (el.id === 'reinigungsart_zusatz') {
+      const extra = (container.querySelector('#sonstige_reinigungsart_zusatz')?.value || '').trim();
+      if (val === 'Sonstiges' && extra) val = `Sonstiges: ${extra}`;
+    }
+  } else if (el.type === 'date') {
+    val = formatDate(el.value);
+  } else if (el.tagName === 'TEXTAREA') {
+    val = (el.value || '').trim();
+  } else {
+    val = (el.value || '').trim();
+  }
+
+  if (!val) {
+    el.remove();
+    label?.remove();
+    return;
+  }
+
+  const row = d.createElement('div'); row.className = 'print-field';
+  const l   = d.createElement('div'); l.className   = 'print-label';
+  l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+  const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+  row.append(l, vDiv);
+
+  const parent = label ? label.parentNode : el.parentNode;
+  parent.insertBefore(row, label || el);
+  label?.remove();
+  el.remove();
+});
+
 
   // 3) Canvas → IMG (falls noch vorhanden)
   container.querySelectorAll('canvas').forEach(c => {
