@@ -140,26 +140,26 @@
 
 
 <style>
-  /* Fallback-Layout nur für die PDF-Erstellung */
-  #pdfExportContainer.pdf-snapshot .print-field {
-    display: block;
-    padding: 6px 0;
-    border-bottom: 1px solid #e9e9e9;
-  }
-  #pdfExportContainer.pdf-snapshot .print-label {
-    font-weight: 700;
-    margin: 2px 0 2px;
-    white-space: normal; /* im Fallback darf umgebrochen werden */
-    min-width: 0;
-  }
-  #pdfExportContainer.pdf-snapshot .print-value {
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere; /* wichtig: behalten! */
-    line-height: 1.35;
-    margin-bottom: 6px;
-    min-width: 0;
-  }
+#pdfExportContainer.pdf-snapshot .print-field {
+  display: grid !important;
+  grid-template-columns: 38% 62%;
+  column-gap: 12px;
+  align-items: start;
+  padding: 6px 0;
+  border-bottom: 1px solid #e9e9e9;
+}
+#pdfExportContainer.pdf-snapshot .print-label,
+#pdfExportContainer.pdf-snapshot .print-value {
+  min-width: 0;              /* verhindert „Reinlaufen“ */
+}
+#pdfExportContainer.pdf-snapshot .print-value {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
 </style>
 
 
