@@ -1123,42 +1123,36 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-// 1d) „Reinigung Maschine/Umfeld erforderlich“ separat & robust
+// 1d) Reinigung Maschine/Umfeld erforderlich – robust (kein option:checked)
 const processedIds = new Set();
 {
   const sel = container.querySelector('#reinigung_erforderlich');
   if (sel) {
-    const labelEl =
-      container.querySelector('label[for="reinigung_erforderlich"]') ||
-      (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL'
-        ? sel.previousElementSibling
-        : null);
+    // Label direkt vor dem Select
+    const labelEl = (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
+      ? sel.previousElementSibling
+      : container.querySelector('label[for="reinigung_erforderlich"]');
 
-    // 1) Bevorzugt den beim Klonen gespeicherten Text
-    let txt = (sel.getAttribute('data-selected-text') || '').trim();
+    // Nur über value gehen, sicher auf „Ja/Nein“ mappen
+    const v = (sel.value || '').trim().toLowerCase();
+    let txt = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : (sel.value || '').trim();
 
-    // 2) Falls leer, direkt aus dem DOM lesen
+    // Falls es noch leer ist, letztes Fallback: selectedIndex
     if (!txt) {
-      const checked = sel.querySelector('option:checked');
-      txt = (checked?.textContent || checked?.innerText || '').trim();
+      const o = sel.options[sel.selectedIndex];
+      txt = (o?.text || o?.value || '').trim();
     }
 
-    // 3) Letzter Fallback: value → „Ja/Nein“ mappen
-    if (!txt) {
-      const v = (sel.value || '').toLowerCase();
-      if (v === 'ja')   txt = 'Ja';
-      if (v === 'nein') txt = 'Nein';
-    }
-
-    const cleanLabel = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
+    const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
       .replace(/:\s*$/, '').trim();
 
-    if (txt) addRow(cleanLabel, txt, sel);   // Zeile an Position des Selects einfügen
+    if (txt) addRow(labelTxt, txt, sel);  // Zeile an der Position des Selects einfügen
     labelEl?.remove();
     sel.remove();
     processedIds.add('reinigung_erforderlich');
   }
 }
+
 
 
 
