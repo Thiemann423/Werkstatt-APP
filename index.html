@@ -1885,20 +1885,17 @@ document.addEventListener('DOMContentLoaded', () => {
     ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
-    // beim „Filter löschen“ wieder auf 30 Tage stellen
     window.showAllOrders = false;
     if (rangeBtn){ rangeBtn.dataset.mode = '30'; rangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
     applyFiltersToDashboard();
   });
 
-  // 30 Tage <-> alle umschalten
   rangeBtn?.addEventListener('click', () => {
     const mode = rangeBtn.dataset.mode || '30';
     if (mode === '30') {
       window.showAllOrders = true;
       rangeBtn.dataset.mode = 'all';
       rangeBtn.textContent  = '🗓️ Alle Aufträge';
-      // optional: Datumseingabe leeren (sonst wirkt sie zusätzlich)
       const d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
     } else {
       window.showAllOrders = false;
@@ -1908,11 +1905,11 @@ document.addEventListener('DOMContentLoaded', () => {
     applyFiltersToDashboard();
   });
 
-  // Live-Filter
   ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
   });
 });
+
 async function loadDashboard(){
   await signInAndAcquireToken(true);
   await resolveShareLinkToFolder();
@@ -1927,7 +1924,7 @@ async function loadDashboard(){
   try{
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // 1) PDFs IM HAUPTORDNER holen (bleiben dort)
+    // PDFs im Hauptordner (bleiben dort)
     const listPdfUrl =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
       `/children?$top=2000&$select=id,name,webUrl,file,folder`;
@@ -1935,14 +1932,13 @@ async function loadDashboard(){
     const mainItems = (await pdfRes.json()).value || [];
 
     const pdfMap = new Map(
-      mainItems
-        .filter(i => i.file && /\.pdf$/i.test(i.name))
-        .map(i => [i.name, i.webUrl])
+      mainItems.filter(i => i.file && /\.pdf$/i.test(i.name))
+               .map(i => [i.name, i.webUrl])
     );
 
-    // 2) META-Dateien: bevorzugt AUS DEM META-ORDNER lesen, sonst Fallback Hauptordner
+    // META-Dateien: zuerst Meta-Ordner, sonst Fallback Hauptordner
     let metaItems = [];
-    if (window.TARGET_META_ITEM_ID){
+    if (TARGET_META_ITEM_ID) { // <— FIX: kein window.
       const listMetaUrl =
         `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}` +
         `/children?$top=2000&$select=id,name,file`;
@@ -1952,12 +1948,10 @@ async function loadDashboard(){
         metaItems = (data.value || []).filter(i => i.file && i.name.endsWith(META_SUFFIX));
       }
     }
-    // Fallback: falls Meta-Ordner leer/nicht vorhanden
     if (!metaItems.length){
       metaItems = mainItems.filter(i => i.file && i.name.endsWith(META_SUFFIX));
     }
 
-    // 3) Zeilen bauen
     const rows = [];
     for (const m of metaItems){
       const mres = await fetch(
@@ -1981,7 +1975,6 @@ async function loadDashboard(){
       });
     }
 
-    // neueste zuerst
     rows.sort((a,b) => (b.dateIso||'').localeCompare(a.dateIso||''));
 
     if (!rows.length){
@@ -2007,6 +2000,7 @@ async function loadDashboard(){
     tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Fehler beim Laden.</td></tr>';
   }
 }
+
 
 
 function applyFiltersToDashboard(){
