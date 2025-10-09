@@ -1137,124 +1137,90 @@ function convertFormElementsToStaticText(container) {
     addTechniker('techniker2', 'Techniker 2');
   }
 
-  // 1d) Reinigung Maschine/Umfeld erforderlich – robust (einzig gültiger Block)
-  {
-    const sel = container.querySelector('#reinigung_erforderlich');
-    if (sel) {
-      const labelEl =
-        (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
-          ? sel.previousElementSibling
-          : container.querySelector('label[for="reinigung_erforderlich"]');
+ // 1d) Gesamter Reinigungs-Block als Spezialfall:
+//     - "Reinigung Maschine/Umfeld erforderlich" (Ja/Nein)
+//     - "Reinigungsausführung" (+ Sonstiges)
+//     Danach: ganze Section entfernen, damit der generische Loop nichts mehr ändert.
+{
+  const requiredSel = container.querySelector('#reinigung_erforderlich');
+  if (requiredSel) {
+    // Versuche die umgebende Section des Blocks zu finden
+    const section = requiredSel.closest('.section') || requiredSel.parentElement;
 
-      // 1) bevorzugt: im Klon vorgespeicherten Text nutzen
-      let txt = (sel.getAttribute('data-selected-text') || '').trim();
+    // Label „Reinigung Maschine/Umfeld erforderlich“
+    const reqLabelEl =
+      (requiredSel.previousElementSibling && requiredSel.previousElementSibling.tagName === 'LABEL')
+        ? requiredSel.previousElementSibling
+        : container.querySelector('label[for="reinigung_erforderlich"]');
 
-      // 2) wenn leer: aus dem ausgewählten <option>
-      if (!txt) {
-        const o = sel.options[sel.selectedIndex];
-        txt = ((o && (o.textContent || o.innerText)) || '').trim();
+    // Wert robust ermitteln: erst data-selected-text, dann ausgewählte Option, dann Value → Ja/Nein mappen
+    let reqText = (requiredSel.getAttribute('data-selected-text') || '').trim();
+    if (!reqText) {
+      const o = requiredSel.options[requiredSel.selectedIndex];
+      reqText = ((o && (o.textContent || o.innerText)) || '').trim();
+    }
+    if (!reqText) {
+      const v = (requiredSel.value || '').trim().toLowerCase();
+      reqText = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : (requiredSel.value || '').trim();
+    }
+
+    const reqLabelText = (reqLabelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
+      .replace(/:\s*$/, '')
+      .trim();
+
+    // Zeile 1: Ja/Nein
+    if (reqText) {
+      addRow(reqLabelText, reqText, section);
+      processedIds.add('reinigung_erforderlich');
+    }
+
+    // Jetzt ggf. zweite Zeile: „Reinigungsausführung“
+    const execSel = section.querySelector('#reinigungsart_zusatz');
+    if (execSel) {
+      const execLabelEl =
+        (execSel.previousElementSibling && execSel.previousElementSibling.tagName === 'LABEL')
+          ? execSel.previousElementSibling
+          : section.querySelector('label[for="reinigungsart_zusatz"]');
+
+      let execText = (execSel.getAttribute('data-selected-text') || '').trim();
+      if (!execText) {
+        const eo = execSel.options[execSel.selectedIndex];
+        execText = ((eo && (eo.textContent || eo.innerText)) || '').trim();
+      }
+      if (!execText || execText === 'Bitte auswählen') execText = '';
+
+      // „Sonstiges“ ergänzen, falls sichtbar/gefüllt
+      const execSonstige = section.querySelector('#sonstige_reinigungsart_zusatz');
+      if (execText && execText.toLowerCase() === 'sonstiges' && execSonstige && execSonstige.value.trim()) {
+        execText = `Sonstiges: ${execSonstige.value.trim()}`;
       }
 
-      // 3) wenn immer noch leer: Value sicher auf Ja/Nein mappen
-      if (!txt) {
-        const v = (sel.value || '').trim().toLowerCase();
-        txt = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : (sel.value || '').trim();
-      }
-
-      const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
+      const execLabelText = (execLabelEl?.textContent || 'Reinigungsausführung')
         .replace(/:\s*$/, '')
         .trim();
 
-      if (txt) addRow(labelTxt, txt, sel);
-
-      labelEl?.remove();
-      sel.remove();
-      processedIds.add('reinigung_erforderlich');
-    }
-  }
-
-  // ===== 2) Generisch für alle restlichen Felder =====
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t || '').trim());
-  const formatDate = (v) => {
-    try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); }
-    catch { return v || ''; }
-  };
-
-  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-  fields.forEach(el => {
-    if (processedIds.has(el.id)) return; // Spezialfälle überspringen
-
-    const cs = win.getComputedStyle(el);
-    if (el.type === 'hidden' || el.type === 'file' ||
-        cs.display === 'none' || cs.visibility === 'hidden') {
-      el.remove();
-      return;
-    }
-
-    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
-
-    let val = '';
-    if (el.tagName === 'SELECT') {
-      // 1) bevorzugt den im Klon gespeicherten Text nehmen
-      val = (el.getAttribute('data-selected-text') || '').trim();
-
-      // 2) sonst den sichtbaren Option-Text
-      if (!val) {
-        const opt = el.options[el.selectedIndex];
-        val = ((opt && (opt.textContent || opt.innerText)) || '').trim();
+      if (execText) {
+        addRow(execLabelText, execText, section);
+        processedIds.add('reinigungsart_zusatz');
+        processedIds.add('sonstige_reinigungsart_zusatz');
       }
+    }
 
-      // 3) Placeholder filtern
-      if (isPlaceholder(val)) val = '';
-    } else if (el.type === 'date') {
-      val = formatDate(el.value);
-    } else if (el.tagName === 'TEXTAREA') {
-      val = (el.value || '').trim();
+    // Section komplett entfernen, damit der generische Loop nichts daraus verarbeitet
+    // (damit kann nichts mehr überschrieben werden)
+    if (section && section.parentNode) {
+      section.parentNode.removeChild(section);
     } else {
-      val = (el.value || '').trim();
-    }
-
-    if (!val) {
-      el.remove();
-      label?.remove();
-      return;
-    }
-
-    const row = d.createElement('div'); row.className = 'print-field';
-    const l   = d.createElement('div'); l.className   = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-    row.append(l, vDiv);
-
-    const parent = label ? label.parentNode : el.parentNode;
-    parent.insertBefore(row, label || el);
-    label?.remove();
-    el.remove();
-  });
-
-  // 3) Canvas → IMG (falls noch vorhanden)
-  container.querySelectorAll('canvas').forEach(c => {
-    const img = d.createElement('img');
-    try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
-    img.style.width = '100%';
-    img.className = 'avoid-break';
-    c.parentNode.replaceChild(img, c);
-  });
-
-  // 4) Bilderblöcke zusammenhalten
-  container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
-
-  // 5) Sicherheit: Duplikate entfernen (gleicher Text in zwei aufeinanderfolgenden Reihen)
-  const rows = Array.from(container.querySelectorAll('.print-field'));
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1];
-    const curr = rows[i];
-    if (prev && curr && prev.textContent.trim() === curr.textContent.trim()) {
-      curr.remove();
+      // Mindestfalls: einzelne Elemente rausnehmen
+      reqLabelEl?.remove();
+      requiredSel.remove();
+      section?.querySelector('label[for="reinigungsart_zusatz"]')?.remove();
+      section?.querySelector('#reinigungsart_zusatz')?.remove();
+      section?.querySelector('#sonstige_reinigungsart_zusatz')?.remove();
     }
   }
 }
+
 
 
 
