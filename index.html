@@ -952,11 +952,8 @@ async function resolveShareLinkToFolder(){
     TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
     TARGET_META_ITEM_ID   = cache.metaItemId   || null;
 
-    // Nur sofort raus, wenn BEIDE IDs vorhanden
-    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID){
-      console.info("[resolve] IDs aus Cache:", {TARGET_DRAFTS_ITEM_ID, TARGET_META_ITEM_ID});
-      return;
-    }
+    // ⚠️ Nur sofort zurück, wenn BEIDE Unterordner-IDs vorhanden sind
+    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) return;
   } else {
     // --- Share-Link → Drive & Ordner auflösen ---
     const encoded = _b64Url(SHARE_URL);
@@ -976,59 +973,16 @@ async function resolveShareLinkToFolder(){
     TARGET.parentItemId = folderItemId;
   }
 
-  // (Optional) Hier könntest du – wie vorher – die Unterordner gleich anlegen/listen.
-} //  ⬅️ WICHTIG: Funktion sauber schließen!
+  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
+  const listUrl =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+    `/children?$select=id,name,folder`;
+  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
+  const children = (await listRes.json()).value || [];
 
-// ⬇️ direkt NACH deiner resolveShareLinkToFolder() einfügen
-// ⬇️ außerhalb / hinter resolveShareLinkToFolder
-async function ensureMetaFolderId(){
-  await resolveShareLinkToFolder();
-  if (TARGET_META_ITEM_ID) return TARGET_META_ITEM_ID;
-
-  const base = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}`;
-  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
-
-  // Existenz prüfen
-  let r = await fetch(`${base}/children?$select=id,name,folder&$top=2000`, { headers });
-  let data = await r.json();
-  let hit = (data.value || []).find(x => x.folder && x.name === META_FOLDER_NAME);
-  if (hit) TARGET_META_ITEM_ID = hit.id;
-
-  // Falls nicht vorhanden: anlegen
-  if (!TARGET_META_ITEM_ID){
-    const create = await fetch(`${base}/children`, {
-      method: "POST", headers,
-      body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
-    });
-    if (create.ok){
-      const created = await create.json();
-      TARGET_META_ITEM_ID = created.id;
-    }
-  }
-
-  // Cache aktualisieren
-  const cache2 = JSON.parse(localStorage.getItem("TARGET_CACHE") || "{}");
-  localStorage.setItem("TARGET_CACHE", JSON.stringify({ ...cache2, metaItemId: TARGET_META_ITEM_ID }));
-
-  return TARGET_META_ITEM_ID;
-}
-
-  // Helper: Kinder holen (große Page Size)
-  async function listChildren(){
-    const url =
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-      `/children?$select=id,name,folder&$top=2000`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!r.ok) throw new Error(`children list failed: ${r.status}`);
-    const data = await r.json();
-    return data.value || [];
-  }
-
-  // 1) vorhandene Kinder laden
-  let children = await listChildren();
-
-  // Entwürfe ermitteln/erstellen
-  let drafts = children.find(x => x.folder && x.name === DRAFTS_FOLDER_NAME);
+  // Entwürfe
+  let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
   if (!drafts){
     const createDrafts = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
@@ -1038,14 +992,12 @@ async function ensureMetaFolderId(){
         body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
       }
     );
-    // egal ob 201 oder 409: danach nochmal listen
-    children = await listChildren();
-    drafts = children.find(x => x.folder && x.name === DRAFTS_FOLDER_NAME) || drafts;
+    if (createDrafts.ok) drafts = await createDrafts.json();
   }
   TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
 
-  // Meta ermitteln/erstellen
-  let meta = children.find(x => x.folder && x.name === META_FOLDER_NAME);
+  // Meta
+  let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
   if (!meta){
     const createMeta = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
@@ -1055,20 +1007,11 @@ async function ensureMetaFolderId(){
         body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
       }
     );
-    // egal ob 201 oder 409: danach nochmal listen
-    children = await listChildren();
-    meta = children.find(x => x.folder && x.name === META_FOLDER_NAME) || meta;
+    if (createMeta.ok) meta = await createMeta.json();
   }
   TARGET_META_ITEM_ID = meta?.id || null;
 
-  console.info("[resolve] Ergebnis:", {
-    driveId: TARGET.driveId,
-    parentItemId: TARGET.parentItemId,
-    draftsId: TARGET_DRAFTS_ITEM_ID,
-    metaId: TARGET_META_ITEM_ID
-  });
-
-  // Cache aktualisieren
+  // --- Cache schreiben (inkl. IDs der Unterordner) ---
   localStorage.setItem("TARGET_CACHE", JSON.stringify({
     shareUrl:      SHARE_URL,
     driveId:       TARGET.driveId,
@@ -1077,7 +1020,6 @@ async function ensureMetaFolderId(){
     metaItemId:    TARGET_META_ITEM_ID
   }));
 }
-
 
 
 
@@ -1660,25 +1602,22 @@ async function generatePDFAndFinish() {
         anlagenteil_text:   document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
       };
 
-      // ⬇️ NEU: Meta-Unterordner sicherstellen und dort speichern
-      let metaParentId;
-      try {
-        metaParentId = await ensureMetaFolderId();       // erstellt/ermittelt „Reparatur-Meta“
-      } catch (e) {
-        console.warn("ensureMetaFolderId fehlgeschlagen, schreibe ins Hauptverzeichnis:", e);
-        metaParentId = TARGET.parentItemId;              // Fallback
+      // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
+      if (!TARGET_META_ITEM_ID) {
+        try { await resolveShareLinkToFolder(); }
+        catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
       }
 
       const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
 
+      // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
       const metaOk = await uploadToOneDrive(
         `${auftragId}.meta.json`,
         metaBlob,
         "application/json",
-        metaParentId
+        TARGET_META_ITEM_ID || TARGET.parentItemId
       );
       if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
-
       // ---- /META ----
 
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1696,7 +1635,6 @@ async function generatePDFAndFinish() {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
-
 
 
 
