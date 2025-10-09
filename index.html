@@ -1015,18 +1015,28 @@ const fieldIds = [
 
 
 
+// ====================
+// OneDrive-Upload (robuster, mit Fehlertext)
+// ====================
 async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
   if (!accessToken) { alert("⚠️ Kein Zugriffstoken. Bitte anmelden."); return false; }
   if (!TARGET.driveId || !TARGET.parentItemId) { alert("⚠️ Zielordner nicht initialisiert."); return false; }
+
   const url =
     `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
     `/items/${TARGET.parentItemId}:/${encodeURIComponent(filename)}:/content`;
+
   try {
     const res = await fetch(url, {
       method: "PUT",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mime },
       body: blob
     });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("Upload-Fehler:", res.status, text);
+    }
     return res.ok;
   } catch (err) {
     console.error("Fehler beim Upload:", err);
@@ -1038,7 +1048,7 @@ async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
 // ====================
 // Formular → statischer Inhalt (für PDF)
 // ====================
-function convertFormElementsToStaticText(container){
+function convertFormElementsToStaticText(container) {
   // immer im Kontext des IFRAME-Dokuments arbeiten
   const d   = container.ownerDocument;
   const win = d.defaultView || window;
@@ -1056,8 +1066,8 @@ function convertFormElementsToStaticText(container){
   });
 
   // Helper: 2-Spalten-Zeile
-  function addRow(labelText, valueText, beforeNode){
-    if(!valueText || !valueText.toString().trim()) return;
+  function addRow(labelText, valueText, beforeNode) {
+    if (!valueText || !valueText.toString().trim()) return;
     const row = d.createElement('div'); row.className = 'print-field';
     const l   = d.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
     const v   = d.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
@@ -1066,14 +1076,15 @@ function convertFormElementsToStaticText(container){
     parent.insertBefore(row, beforeNode || null);
   }
 
-  // ===== 1) Spezialfälle vorab =====
+  // ===== Spezialfälle vorab =====
+  const processedIds = new Set(); // << EINMAL hier deklarieren
 
   // 1a) Ausfallzeit (2 Inputs → 1 Zeile)
   {
     const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
     const ausSt  = container.querySelector('#ausfall_stunden');
     const ausMin = container.querySelector('#ausfall_minuten');
-    if (ausSt || ausMin){
+    if (ausSt || ausMin) {
       const value =
         (ausSt?.value ? `${ausSt.value} h` : '') +
         (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
@@ -1081,6 +1092,7 @@ function convertFormElementsToStaticText(container){
       ausSt?.remove(); ausMin?.remove();
       const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
       ausLabel?.remove();
+      processedIds.add('ausfall_stunden'); processedIds.add('ausfall_minuten');
     }
   }
 
@@ -1090,10 +1102,11 @@ function convertFormElementsToStaticText(container){
     const end   = container.querySelector('#endzeit');
     const dur   = container.querySelector('#dauer');
     const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
-    if (start || end || dur){
+    if (start || end || dur) {
       const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
       addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
       start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+      processedIds.add('startzeit'); processedIds.add('endzeit'); processedIds.add('dauer');
     }
   }
 
@@ -1117,132 +1130,108 @@ function convertFormElementsToStaticText(container){
       if (txt) addRow(cleanLabel(labelEl, fallback), txt, labelEl || sel);
       sel.remove();
       labelEl?.remove();
+      processedIds.add(id);
     }
 
     addTechniker('techniker1', 'Techniker 1');
     addTechniker('techniker2', 'Techniker 2');
   }
 
-// 1d) Reinigung Maschine/Umfeld erforderlich – robust
-const processedIds = new Set();
-{
-  const sel = container.querySelector('#reinigung_erforderlich');
-  if (sel) {
-    // Label finden
-    const labelEl =
-      (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
-        ? sel.previousElementSibling
-        : container.querySelector('label[for="reinigung_erforderlich"]');
+  // 1d) Reinigung Maschine/Umfeld erforderlich – robust (einzig gültiger Block)
+  {
+    const sel = container.querySelector('#reinigung_erforderlich');
+    if (sel) {
+      const labelEl =
+        (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL')
+          ? sel.previousElementSibling
+          : container.querySelector('label[for="reinigung_erforderlich"]');
 
-    // 1) bevorzugt: gesicherten sichtbaren Text aus dem Klon
-    let txt = (sel.getAttribute('data-selected-text') || '').trim();
+      // 1) bevorzugt: im Klon vorgespeicherten Text nutzen
+      let txt = (sel.getAttribute('data-selected-text') || '').trim();
 
-    // 2) Fallback: mappe value -> "Ja/Nein"
-    if (!txt) {
-      const v = (sel.value || '').trim().toLowerCase();
-      if (v === 'ja')  txt = 'Ja';
-      if (v === 'nein') txt = 'Nein';
+      // 2) wenn leer: aus dem ausgewählten <option>
+      if (!txt) {
+        const o = sel.options[sel.selectedIndex];
+        txt = ((o && (o.textContent || o.innerText)) || '').trim();
+      }
+
+      // 3) wenn immer noch leer: Value sicher auf Ja/Nein mappen
+      if (!txt) {
+        const v = (sel.value || '').trim().toLowerCase();
+        txt = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : (sel.value || '').trim();
+      }
+
+      const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
+        .replace(/:\s*$/, '')
+        .trim();
+
+      if (txt) addRow(labelTxt, txt, sel);
+
+      labelEl?.remove();
+      sel.remove();
+      processedIds.add('reinigung_erforderlich');
     }
-
-    // 3) letzter Fallback: option[selected]
-    if (!txt) {
-      const o = sel.options[sel.selectedIndex];
-      txt = (o?.text || o?.value || '').trim();
-    }
-
-    const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
-      .replace(/:\s*$/, '')
-      .trim();
-
-    if (txt) {
-      // Zeile an Position des Selects einfügen
-      const row = container.ownerDocument.createElement('div');
-      row.className = 'print-field';
-      const l = container.ownerDocument.createElement('div');
-      l.className = 'print-label'; l.textContent = labelTxt;
-      const vDiv = container.ownerDocument.createElement('div');
-      vDiv.className = 'print-value'; vDiv.textContent = txt;
-      row.append(l, vDiv);
-      sel.parentNode.insertBefore(row, sel);
-    }
-
-    labelEl?.remove();
-    sel.remove();
-    processedIds.add('reinigung_erforderlich');
-  }
-}
-
-
-
-
-
- // ===== 2) Generisch für alle restlichen Felder =====
-const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-const isPlaceholder = (t) => placeholders.has((t || '').trim());
-const formatDate = (v) => {
-  try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); }
-  catch { return v || ''; }
-};
-
-const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-fields.forEach(el => {
-  if (processedIds.has(el.id)) return; // bereits als Spezialfall behandelt
-
-  const cs = win.getComputedStyle(el);
-  if (el.type === 'hidden' || el.type === 'file' ||
-      cs.display === 'none' || cs.visibility === 'hidden') {
-    el.remove();
-    return;
   }
 
-  const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
+  // ===== 2) Generisch für alle restlichen Felder =====
+  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const isPlaceholder = (t) => placeholders.has((t || '').trim());
+  const formatDate = (v) => {
+    try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); }
+    catch { return v || ''; }
+  };
 
-  let val = '';
-  if (el.tagName === 'SELECT') {
-    // 1) Primär: Sichtbaren Text verwenden, den wir beim Klonen als Attribut gesichert haben
-    let txt = (el.getAttribute('data-selected-text') || '').trim();
+  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
+  fields.forEach(el => {
+    if (processedIds.has(el.id)) return; // Spezialfälle überspringen
 
-    // 2) Fallbacks: option:checked -> selectedIndex -> value
-    if (!txt) {
-      const optChecked = el.querySelector('option:checked');
-      const opt = optChecked || el.options[el.selectedIndex];
-      txt = (opt?.text || opt?.value || '').trim();
+    const cs = win.getComputedStyle(el);
+    if (el.type === 'hidden' || el.type === 'file' ||
+        cs.display === 'none' || cs.visibility === 'hidden') {
+      el.remove();
+      return;
     }
 
-    // 3) Platzhalter unterdrücken
-    val = isPlaceholder(txt) ? '' : txt;
+    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
-    // 4) Sonderfall: „Reinigungsausführung: Sonstiges + Zusatztext“
-    if (el.id === 'reinigungsart_zusatz') {
-      const extra = (container.querySelector('#sonstige_reinigungsart_zusatz')?.value || '').trim();
-      if (val === 'Sonstiges' && extra) val = `Sonstiges: ${extra}`;
+    let val = '';
+    if (el.tagName === 'SELECT') {
+      // 1) bevorzugt den im Klon gespeicherten Text nehmen
+      val = (el.getAttribute('data-selected-text') || '').trim();
+
+      // 2) sonst den sichtbaren Option-Text
+      if (!val) {
+        const opt = el.options[el.selectedIndex];
+        val = ((opt && (opt.textContent || opt.innerText)) || '').trim();
+      }
+
+      // 3) Placeholder filtern
+      if (isPlaceholder(val)) val = '';
+    } else if (el.type === 'date') {
+      val = formatDate(el.value);
+    } else if (el.tagName === 'TEXTAREA') {
+      val = (el.value || '').trim();
+    } else {
+      val = (el.value || '').trim();
     }
-  } else if (el.type === 'date') {
-    val = formatDate(el.value);
-  } else if (el.tagName === 'TEXTAREA') {
-    val = (el.value || '').trim();
-  } else {
-    val = (el.value || '').trim();
-  }
 
-  if (!val) {
-    el.remove();
+    if (!val) {
+      el.remove();
+      label?.remove();
+      return;
+    }
+
+    const row = d.createElement('div'); row.className = 'print-field';
+    const l   = d.createElement('div'); l.className   = 'print-label';
+    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+    row.append(l, vDiv);
+
+    const parent = label ? label.parentNode : el.parentNode;
+    parent.insertBefore(row, label || el);
     label?.remove();
-    return;
-  }
-
-  const row = d.createElement('div'); row.className = 'print-field';
-  const l   = d.createElement('div'); l.className   = 'print-label';
-  l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-  const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-  row.append(l, vDiv);
-
-  const parent = label ? label.parentNode : el.parentNode;
-  parent.insertBefore(row, label || el);
-  label?.remove();
-  el.remove();
-});
-
+    el.remove();
+  });
 
   // 3) Canvas → IMG (falls noch vorhanden)
   container.querySelectorAll('canvas').forEach(c => {
@@ -1256,7 +1245,7 @@ fields.forEach(el => {
   // 4) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 
-  // 5) Sicherheit: versehentliche Duplikate entfernen (gleicher Text in zwei aufeinanderfolgenden Reihen)
+  // 5) Sicherheit: Duplikate entfernen (gleicher Text in zwei aufeinanderfolgenden Reihen)
   const rows = Array.from(container.querySelectorAll('.print-field'));
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1];
@@ -1266,6 +1255,7 @@ fields.forEach(el => {
     }
   }
 }
+
 
 
 
@@ -1368,57 +1358,65 @@ doc.close();
     });
   }
 
-  // D) Inhalt klonen (nur im KLON ändern)
-  const clone = src.cloneNode(true);
-  clone.id = 'pdfExportContainerClone';
-  clone.classList.add('pdf-snapshot');
-  clone.style.width = '794px';
-  clone.style.maxWidth = '794px';
-  clone.style.margin = '0';
-  clone.style.padding = '20px';
-  clone.style.background = '#ffffff';
+// D) Inhalt klonen (nur im KLON ändern)
+const clone = src.cloneNode(true);
+clone.id = 'pdfExportContainerClone';
+clone.classList.add('pdf-snapshot');
+clone.style.width = '794px';
+clone.style.maxWidth = '794px';
+clone.style.margin = '0';
+clone.style.padding = '20px';
+clone.style.background = '#ffffff';
 
-// Select-Werte übernehmen + ausgewählten Text zwischenspeichern
+/* Select-Werte übernehmen + sichtbaren Text zwischenspeichern */
 clone.querySelectorAll('select').forEach(sel => {
   const orig = src.querySelector('#' + sel.id);
   if (!orig) return;
 
+  // 1) Wert vom Original übernehmen
   sel.value = orig.value;
   Array.from(sel.options).forEach(o => { o.selected = (o.value === orig.value); });
 
-  // NEU: den sichtbaren Text sichern (falls selectedIndex im Klon mal zickt)
+  // 2) Sichtbaren Text sichern (Fallback, falls :checked im Klon zickt)
   const checked = sel.querySelector('option:checked');
-  sel.setAttribute('data-selected-text',
-    (checked?.textContent || checked?.innerText || sel.value || '').trim()
-  );
+  let displayText = (checked?.textContent || checked?.innerText || sel.value || '').trim();
+
+  // 3) Spezieller Fix für "Reinigung Maschine/Umfeld erforderlich"
+  if (sel.id === 'reinigung_erforderlich') {
+    const v = (sel.value || displayText || '').trim().toLowerCase();
+    displayText = (v === 'ja') ? 'Ja' : (v === 'nein') ? 'Nein' : displayText;
+  }
+
+  // 4) Als Data-Attribut ablegen (wird im Converter ausgelesen)
+  sel.setAttribute('data-selected-text', displayText);
 });
 
+/* Canvas -> IMG mit gesicherter DataURL */
+clone.querySelectorAll('canvas').forEach(c => {
+  const url = signatureMap.get(c.id);
+  if (!url) return;
+  const img = doc.createElement('img');
+  img.src = url;
+  img.style.maxWidth = '100%';
+  img.style.height = 'auto';
+  img.className = 'avoid-break';
+  c.parentNode.replaceChild(img, c);
+});
 
-  // Canvas -> IMG mit gesicherter DataURL
-  clone.querySelectorAll('canvas').forEach(c => {
-    const url = signatureMap.get(c.id);
-    if (!url) return;
-    const img = doc.createElement('img');
-    img.src = url;
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.className = 'avoid-break';
-    c.parentNode.replaceChild(img, c);
-  });
+/* Klon ins iFrame hängen … */
+doc.getElementById('root').appendChild(clone);
 
-  // ❗ Klon ins Iframe hängen …
-  doc.getElementById('root').appendChild(clone);
+/* … und JETZT Formular → statischen Inhalt wandeln */
+convertFormElementsToStaticText(clone);
 
-  // … und JETZT Formular → statischen Inhalt wandeln
-  convertFormElementsToStaticText(clone);
+/* Thumbnails im PDF groß darstellen */
+clone.querySelectorAll('.preview-container img').forEach(img => {
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '';
+  img.style.border = '0';
+  img.style.display = 'block';
+});
 
-  // Thumbnails im PDF groß darstellen
-  clone.querySelectorAll('.preview-container img').forEach(img => {
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '';
-    img.style.border = '0';
-    img.style.display = 'block';
-  });
 
   try {
     // E) Warten bis Fonts & Bilder im Iframe geladen sind
