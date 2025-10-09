@@ -81,13 +81,26 @@
   }
 
   /* 2-Spalten-Layout für „Label : Wert“ */
-  .print-field{
-    display:grid; grid-template-columns:38% 62%;
-    column-gap:12px; align-items:start; padding:6px 0;
-    border-bottom:1px solid #e9e9e9;
-  }
-  .print-label{ font-weight:700; white-space:nowrap; }
-  .print-value{ white-space:pre-wrap; word-break:break-word; line-height:1.35; }
+ .print-field{
+  display:grid; grid-template-columns:38% 62%;
+  column-gap:12px; align-items:start; padding:6px 0;
+  border-bottom:1px solid #e9e9e9;
+}
+.print-label{
+  font-weight:700;
+  white-space:nowrap;
+  min-width: 0;                 /* NEU */
+}
+.print-value{
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;      /* NEU */
+  line-height: 1.35;
+  min-width: 0;                 /* NEU */
+}
+/* optional – stellt sicher, dass beide Spalten schrumpfen dürfen */
+.print-field > * { min-width: 0; }  /* NEU */
+
 
   /* Brüche in Signaturen/Bildblöcken vermeiden */
   .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
@@ -129,11 +142,16 @@
 
   <style>
   /* Fallback-Layout nur für die PDF-Erstellung */
-  #pdfExportContainer.pdf-snapshot .print-field { 
-    display: block; 
-    padding: 6px 0; 
-    border-bottom: 1px solid #e9e9e9;
-  }
+#pdfExportContainer.pdf-snapshot .print-value {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;  /* NEU */
+  line-height: 1.35;
+  margin-bottom: 6px;
+  min-width: 0;             /* NEU */
+}
+
+
   #pdfExportContainer.pdf-snapshot .print-label { 
     font-weight: 700; 
     margin: 2px 0 2px; 
@@ -1195,7 +1213,7 @@ async function generatePDFAndFinish() {
   const doc = frame.contentDocument;
   doc.open();
   doc.write(`<!doctype html>
-<html>
+<html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -1219,13 +1237,20 @@ async function generatePDFAndFinish() {
       padding:6px 0;
       border-bottom:1px solid #e9e9e9;
     }
-    .print-label{ font-weight:700; white-space:nowrap; }
-.print-value{
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;   /* <— HIER AUCH */
-}
-
+    .print-label{
+      font-weight:700;
+      white-space:nowrap;
+      min-width:0;               /* verhindert Überlaufen */
+    }
+    .print-value{
+      white-space:pre-wrap;
+      word-break:break-word;     /* bricht sehr lange Wörter */
+      overflow-wrap:anywhere;    /* zusätzliche Sicherheit */
+      hyphens:auto;              /* DE-Silbentrennung aktiv */
+      line-height:1.4;
+      min-width:0;
+    }
+    .print-field > * { min-width:0; } /* für beide Spalten */
 
     .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
     img{ max-width:100% !important; height:auto !important; border:0 !important; display:block; }
@@ -1280,7 +1305,7 @@ async function generatePDFAndFinish() {
     c.parentNode.replaceChild(img, c);
   });
 
-  // ❗ WICHTIG: Klon zuerst ins Iframe einhängen …
+  // ❗ Klon ins Iframe hängen …
   doc.getElementById('root').appendChild(clone);
 
   // … und JETZT Formular → statischen Inhalt wandeln
@@ -1358,6 +1383,7 @@ async function generatePDFAndFinish() {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
