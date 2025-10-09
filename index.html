@@ -464,7 +464,7 @@ async function loadHtml2PdfIfNeeded(){
 <textarea cols="50" id="fehlerbeschreibung" name="fehlerbeschreibung" placeholder="Was war defekt? Was wurde unternommen?" rows="4"></textarea>
 </div>
 <div class="section">
-<label>Reinigung Maschine/Umfeld erforderlich:</label>
+<label for="reinigung_erforderlich">Reinigung Maschine/Umfeld erforderlich:</label>
 <select id="reinigung_erforderlich" name="reinigung_erforderlich">
 <option value="ja">Ja</option>
 <option value="nein">Nein</option>
@@ -1123,21 +1123,39 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-  // 1d) ***FIX*** „Reinigung Maschine/Umfeld erforderlich“ separat verarbeiten
-  //     (damit Ja/Nein nicht durch die nächste Zeile überlagert wird)
-  const processedIds = new Set();
-  {
-    const sel = container.querySelector('#reinigung_erforderlich');
-    if (sel) {
-      const labelEl = container.querySelector('label[for="reinigung_erforderlich"]')
-                   || (sel.previousElementSibling?.tagName === 'LABEL' ? sel.previousElementSibling : null);
-      const txt = (sel.options[sel.selectedIndex]?.text || sel.value || '').trim();
-      if (txt) addRow(labelEl?.textContent?.replace(/:\s*$/,'') || 'Reinigung Maschine/Umfeld erforderlich', txt, labelEl || sel);
-      labelEl?.remove();
-      sel.remove();
-      processedIds.add('reinigung_erforderlich');
+// 1d) „Reinigung Maschine/Umfeld erforderlich“ separat & robust
+const processedIds = new Set();
+{
+  const sel = container.querySelector('#reinigung_erforderlich');
+  if (sel) {
+    // Label sicher finden (mit for= oder als direkter Vorgänger)
+    const labelEl =
+      container.querySelector('label[for="reinigung_erforderlich"]') ||
+      (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL'
+        ? sel.previousElementSibling
+        : null);
+
+    // Text robust auslesen (egal ob selectedIndex, selectedOptions, value)
+    const txt =
+      (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) ||
+      (sel.options && sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].text) ||
+      sel.value || '';
+
+    const cleanLabel = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich').replace(/:\s*$/, '').trim();
+    const cleanValue = String(txt).trim();
+
+    if (cleanValue) {
+      // Zeile direkt an der Stelle des Selects einfügen
+      addRow(cleanLabel, cleanValue, sel);
     }
+
+    // Original-Elemente entfernen, damit nichts mehr „überstempelt“
+    labelEl?.remove();
+    sel.remove();
+    processedIds.add('reinigung_erforderlich');
   }
+}
+
 
   // ===== 2) Generisch für alle restlichen Felder =====
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
