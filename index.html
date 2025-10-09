@@ -976,6 +976,43 @@ async function resolveShareLinkToFolder(){
     TARGET.parentItemId = folderItemId;
   }
 
+  // (Optional) Hier könntest du – wie vorher – die Unterordner gleich anlegen/listen.
+} //  ⬅️ WICHTIG: Funktion sauber schließen!
+
+// ⬇️ direkt NACH deiner resolveShareLinkToFolder() einfügen
+// ⬇️ außerhalb / hinter resolveShareLinkToFolder
+async function ensureMetaFolderId(){
+  await resolveShareLinkToFolder();
+  if (TARGET_META_ITEM_ID) return TARGET_META_ITEM_ID;
+
+  const base = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}`;
+  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+  // Existenz prüfen
+  let r = await fetch(`${base}/children?$select=id,name,folder&$top=2000`, { headers });
+  let data = await r.json();
+  let hit = (data.value || []).find(x => x.folder && x.name === META_FOLDER_NAME);
+  if (hit) TARGET_META_ITEM_ID = hit.id;
+
+  // Falls nicht vorhanden: anlegen
+  if (!TARGET_META_ITEM_ID){
+    const create = await fetch(`${base}/children`, {
+      method: "POST", headers,
+      body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
+    });
+    if (create.ok){
+      const created = await create.json();
+      TARGET_META_ITEM_ID = created.id;
+    }
+  }
+
+  // Cache aktualisieren
+  const cache2 = JSON.parse(localStorage.getItem("TARGET_CACHE") || "{}");
+  localStorage.setItem("TARGET_CACHE", JSON.stringify({ ...cache2, metaItemId: TARGET_META_ITEM_ID }));
+
+  return TARGET_META_ITEM_ID;
+}
+
   // Helper: Kinder holen (große Page Size)
   async function listChildren(){
     const url =
@@ -1623,22 +1660,25 @@ async function generatePDFAndFinish() {
         anlagenteil_text:   document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
       };
 
-      // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
-      if (!TARGET_META_ITEM_ID) {
-        try { await resolveShareLinkToFolder(); }
-        catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
+      // ⬇️ NEU: Meta-Unterordner sicherstellen und dort speichern
+      let metaParentId;
+      try {
+        metaParentId = await ensureMetaFolderId();       // erstellt/ermittelt „Reparatur-Meta“
+      } catch (e) {
+        console.warn("ensureMetaFolderId fehlgeschlagen, schreibe ins Hauptverzeichnis:", e);
+        metaParentId = TARGET.parentItemId;              // Fallback
       }
 
       const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
 
-      // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
       const metaOk = await uploadToOneDrive(
         `${auftragId}.meta.json`,
         metaBlob,
         "application/json",
-        TARGET_META_ITEM_ID || TARGET.parentItemId
+        metaParentId
       );
       if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
+
       // ---- /META ----
 
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1656,6 +1696,7 @@ async function generatePDFAndFinish() {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
