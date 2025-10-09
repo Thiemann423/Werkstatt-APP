@@ -266,13 +266,16 @@ async function loadHtml2PdfIfNeeded(){
               style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
         🔄 Neu laden
       </button>
-      <button type="button" id="dashClear"
-              style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
-        ❌ Filter löschen
-      
-      <button type="button" id="dashRangeBtn" data-mode="30"
+  <button type="button" id="dashClear"
+        style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
+  ❌ Filter löschen
+</button>
+
+<button type="button" id="dashRangeBtn" data-mode="30"
         style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
   🗓️ Letzte 30 Tage
+</button>
+
 </button>
 
     </div>
@@ -1621,7 +1624,8 @@ if (success) {
   document.getElementById("abschlussScreen").style.display = "flex";
 
   // optional: Dashboard aktualisieren, falls vorhanden
-  try { if (document.getElementById("dashboardPanel")) await loadDashboard(); } catch {}
+try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
+
 } else {
   alert("⚠️ Fehler beim Hochladen in OneDrive.");
 }
