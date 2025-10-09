@@ -1052,11 +1052,15 @@ async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
 // Formular → statischer Inhalt (für PDF)
 // ====================
 function convertFormElementsToStaticText(container){
-  // UI-Elemente ausblenden
+  // Immer im Kontext des IFRAME-Dokuments arbeiten
+  const d   = container.ownerDocument;
+  const win = d.defaultView || window;
+
+  // 0) UI-Elemente ausblenden
   container.querySelectorAll('button, input[type="file"], .delete-button')
            .forEach(el => el.style.display = 'none');
 
-  // Thumbnails groß machen
+  // Vorschau-Thumbnails im PDF groß & ohne Rahmen
   container.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = 'none';
@@ -1067,16 +1071,18 @@ function convertFormElementsToStaticText(container){
   // Helper
   const processedIds = new Set();
   const addRow = (labelText, valueText, beforeNode) => {
-    if(!valueText || !valueText.toString().trim()) return;
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l   = document.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
-    const v   = document.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
+    if (!valueText || !valueText.toString().trim()) return;
+    const row = d.createElement('div'); row.className = 'print-field';
+    const l   = d.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
+    const v   = d.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
     row.append(l, v);
     const parent = (beforeNode && beforeNode.parentNode) || container;
     parent.insertBefore(row, beforeNode || null);
   };
 
-  // 1) Ausfallzeit
+  // ===== 1) Spezialfälle vorab =====
+
+  // 1a) Ausfallzeit (2 Inputs → 1 Zeile)
   {
     const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
     const ausSt  = container.querySelector('#ausfall_stunden');
@@ -1089,10 +1095,11 @@ function convertFormElementsToStaticText(container){
       ausSt?.remove(); ausMin?.remove();
       const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
       ausLabel?.remove();
+      processedIds.add('ausfall_stunden'); processedIds.add('ausfall_minuten');
     }
   }
 
-  // 2) Reparaturdauer
+  // 1b) Reparaturdauer (Start/Ende/Dauer → 1 Zeile)
   {
     const start = container.querySelector('#startzeit');
     const end   = container.querySelector('#endzeit');
@@ -1102,10 +1109,11 @@ function convertFormElementsToStaticText(container){
       const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
       addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
       start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+      processedIds.add('startzeit'); processedIds.add('endzeit'); processedIds.add('dauer');
     }
   }
 
-  // 2a) Techniker 1/2 – Spezial
+  // 1c) Techniker 1/2 – Spezial
   {
     const cleanLabel = (el, fb) => ((el?.textContent || fb || '')
       .replace(/:\s*$/, '')
@@ -1115,18 +1123,26 @@ function convertFormElementsToStaticText(container){
       const sel = container.querySelector('#' + id);
       if (!sel) return;
       const labelEl = (sel.previousElementSibling?.tagName === 'LABEL') ? sel.previousElementSibling : null;
+
+      // sichtbarer Text und value
       const val = (sel.value || '').trim();
       const txt = (sel.options[sel.selectedIndex]?.text || val).trim();
-      if (id === 'techniker2' && (!val || val === '–')) { sel.remove(); labelEl?.remove(); return; }
+
+      // TK2: Platzhalter (leer/„–“) überspringen
+      if (id === 'techniker2' && (!val || val === '–')) {
+        sel.remove(); labelEl?.remove(); processedIds.add(id); return;
+      }
+
       if (txt) addRow(cleanLabel(labelEl, fb), txt, labelEl || sel);
       sel.remove(); labelEl?.remove();
       processedIds.add(id);
     }
+
     addTechniker('techniker1', 'Techniker 1');
     addTechniker('techniker2', 'Techniker 2');
   }
 
-  // 2b) Reinigung – Spezial
+  // 1d) Reinigung (Ja/Nein + Ausführung + Sonstiges) – robust inkl. data-selected-text
   {
     const reqSel   = container.querySelector('#reinigung_erforderlich');
     const artSel   = container.querySelector('#reinigungsart_zusatz');
@@ -1135,8 +1151,13 @@ function convertFormElementsToStaticText(container){
 
     const getSelectText = (sel) => {
       if (!sel) return '';
-      const opt = sel.options[sel.selectedIndex];
-      return ((opt && (opt.textContent || opt.innerText)) || '').trim();
+      // bevorzugt den im Klon hinterlegten sichtbaren Text
+      let txt = (sel.getAttribute('data-selected-text') || '').trim();
+      if (!txt) {
+        const o = sel.options[sel.selectedIndex];
+        txt = ((o && (o.textContent || o.innerText)) || '').trim();
+      }
+      return txt;
     };
 
     // Ja/Nein
@@ -1160,8 +1181,7 @@ function convertFormElementsToStaticText(container){
     if (artSel) {
       const artTxt = getSelectText(artSel);
       if (artTxt && artTxt !== 'Bitte auswählen') {
-        const anchor = section || artSel;
-        addRow('Reinigungsausführung', artTxt, anchor);
+        addRow('Reinigungsausführung', artTxt, section || artSel);
       }
       const labelArt = (artSel.previousElementSibling?.tagName === 'LABEL') ? artSel.previousElementSibling : null;
       labelArt?.remove();
@@ -1172,10 +1192,7 @@ function convertFormElementsToStaticText(container){
     // Sonstiges-Text
     if (artOther) {
       const otherVal = (artOther.value || '').trim();
-      if (otherVal) {
-        const anchor = section || artOther;
-        addRow('Reinigungsausführung (Sonstiges)', otherVal, anchor);
-      }
+      if (otherVal) addRow('Reinigungsausführung (Sonstiges)', otherVal, section || artOther);
       const labelOther = (artOther.previousElementSibling?.tagName === 'LABEL') ? artOther.previousElementSibling : null;
       labelOther?.remove();
       artOther.remove();
@@ -1183,15 +1200,16 @@ function convertFormElementsToStaticText(container){
     }
   }
 
-  // 3) Generisch
+  // ===== 2) Generisch für alle restlichen Felder =====
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
   const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
+  const formatDate = (v) => { try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
   const fields = Array.from(container.querySelectorAll('input, select, textarea'));
   fields.forEach(el => {
-    if (processedIds.has(el.id)) { el.remove(); return; } // << wichtig
-    const cs = getComputedStyle(el);
+    if (processedIds.has(el.id)) { el.remove(); return; } // Spezialfälle überspringen
+
+    const cs = win.getComputedStyle(el);
     if (el.type === 'hidden' || el.type === 'file' ||
         cs.display === 'none' || cs.visibility === 'hidden' ||
         (el.offsetWidth === 0 && el.offsetHeight === 0)) {
@@ -1199,11 +1217,18 @@ function convertFormElementsToStaticText(container){
     }
 
     const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
-    let val = '';
 
+    let val = '';
     if (el.tagName === 'SELECT') {
-      const txt = el.options[el.selectedIndex]?.text?.trim() || '';
-      val = !isPlaceholder(txt) ? txt : '';
+      // 1) bevorzugt im Klon gespeicherten Text nehmen
+      val = (el.getAttribute('data-selected-text') || '').trim();
+      // 2) sonst den sichtbaren Option-Text
+      if (!val) {
+        const opt = el.options[el.selectedIndex];
+        val = ((opt && (opt.textContent || opt.innerText)) || '').trim();
+      }
+      // 3) Placeholder filtern
+      if (isPlaceholder(val)) val = '';
     } else if (el.type === 'date') {
       val = formatDate(el.value);
     } else if (el.tagName === 'TEXTAREA') {
@@ -1214,29 +1239,41 @@ function convertFormElementsToStaticText(container){
 
     if (!val) { el.remove(); label?.remove(); return; }
 
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l   = document.createElement('div'); l.className   = 'print-label';
+    const row = d.createElement('div'); row.className = 'print-field';
+    const l   = d.createElement('div'); l.className   = 'print-label';
     l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
     row.append(l, vDiv);
 
     const parent = label ? label.parentNode : el.parentNode;
     parent.insertBefore(row, label || el);
-    label?.remove(); el.remove();
+    label?.remove();
+    el.remove();
   });
 
-  // 4) Canvas → IMG
+  // ===== 3) Canvas → IMG (falls noch vorhanden)
   container.querySelectorAll('canvas').forEach(c => {
-    const img = document.createElement('img');
+    const img = d.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
     img.style.width = '100%';
     img.className = 'avoid-break';
     c.parentNode.replaceChild(img, c);
   });
 
-  // 5) Bilderblöcke zusammenhalten
+  // ===== 4) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
+
+  // ===== 5) Sicherheit: versehentliche Duplikate entfernen
+  const rows = Array.from(container.querySelectorAll('.print-field'));
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const curr = rows[i];
+    if (prev && curr && prev.textContent.trim() === curr.textContent.trim()) {
+      curr.remove();
+    }
+  }
 }
+
 
 
 
