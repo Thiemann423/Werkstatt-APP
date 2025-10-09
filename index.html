@@ -1066,32 +1066,38 @@ function convertFormElementsToStaticText(container){
     parent.insertBefore(row, beforeNode || null);
   }
 
-  // 1) Ausfallzeit (2 Inputs → 1 Zeile)
-  const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
-  const ausSt = container.querySelector('#ausfall_stunden');
-  const ausMin = container.querySelector('#ausfall_minuten');
-  if (ausSt || ausMin){
-    const value =
-      (ausSt?.value ? `${ausSt.value} h` : '') +
-      (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
-    addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
-    ausSt?.remove(); ausMin?.remove();
-    const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
-    ausLabel?.remove();
+  // ===== 1) Spezialfälle vorab =====
+
+  // 1a) Ausfallzeit (2 Inputs → 1 Zeile)
+  {
+    const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
+    const ausSt  = container.querySelector('#ausfall_stunden');
+    const ausMin = container.querySelector('#ausfall_minuten');
+    if (ausSt || ausMin){
+      const value =
+        (ausSt?.value ? `${ausSt.value} h` : '') +
+        (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
+      addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
+      ausSt?.remove(); ausMin?.remove();
+      const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
+      ausLabel?.remove();
+    }
   }
 
-  // 2) Reparaturdauer (Start/Ende/Dauer → 1 Zeile)
-  const start = container.querySelector('#startzeit');
-  const end   = container.querySelector('#endzeit');
-  const dur   = container.querySelector('#dauer');
-  const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
-  if (start || end || dur){
-    const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
-    addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
-    start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+  // 1b) Reparaturdauer (Start/Ende/Dauer → 1 Zeile)
+  {
+    const start = container.querySelector('#startzeit');
+    const end   = container.querySelector('#endzeit');
+    const dur   = container.querySelector('#dauer');
+    const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
+    if (start || end || dur){
+      const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
+      addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
+      start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
+    }
   }
 
-  // 2a) Techniker 1/2 – Spezial
+  // 1c) Techniker 1/2 – Spezial
   {
     const cleanLabel = (el, fallback) =>
       ((el?.textContent || fallback || '')
@@ -1117,15 +1123,32 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-  // 3) Rest generisch
+  // 1d) ***FIX*** „Reinigung Maschine/Umfeld erforderlich“ separat verarbeiten
+  //     (damit Ja/Nein nicht durch die nächste Zeile überlagert wird)
+  const processedIds = new Set();
+  {
+    const sel = container.querySelector('#reinigung_erforderlich');
+    if (sel) {
+      const labelEl = container.querySelector('label[for="reinigung_erforderlich"]')
+                   || (sel.previousElementSibling?.tagName === 'LABEL' ? sel.previousElementSibling : null);
+      const txt = (sel.options[sel.selectedIndex]?.text || sel.value || '').trim();
+      if (txt) addRow(labelEl?.textContent?.replace(/:\s*$/,'') || 'Reinigung Maschine/Umfeld erforderlich', txt, labelEl || sel);
+      labelEl?.remove();
+      sel.remove();
+      processedIds.add('reinigung_erforderlich');
+    }
+  }
+
+  // ===== 2) Generisch für alle restlichen Felder =====
   const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
   const isPlaceholder = (t) => placeholders.has((t||'').trim());
   const formatDate = (v) => { try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
   const fields = Array.from(container.querySelectorAll('input, select, textarea'));
   fields.forEach(el => {
+    if (processedIds.has(el.id)) return; // bereits als Spezialfall behandelt
+
     const cs = win.getComputedStyle(el);
-    // KEIN offsetWidth/offsetHeight-Check mehr!
     if (el.type === 'hidden' || el.type === 'file' ||
         cs.display === 'none' || cs.visibility === 'hidden') {
       el.remove();
@@ -1165,7 +1188,7 @@ function convertFormElementsToStaticText(container){
     el.remove();
   });
 
-  // 4) (falls noch Canvas übrig wären) Canvas → IMG
+  // 3) Canvas → IMG (falls noch vorhanden)
   container.querySelectorAll('canvas').forEach(c => {
     const img = d.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
@@ -1174,9 +1197,20 @@ function convertFormElementsToStaticText(container){
     c.parentNode.replaceChild(img, c);
   });
 
-  // 5) Bilderblöcke zusammenhalten
+  // 4) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
+
+  // 5) Sicherheit: versehentliche Duplikate entfernen (gleicher Text in zwei aufeinanderfolgenden Reihen)
+  const rows = Array.from(container.querySelectorAll('.print-field'));
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const curr = rows[i];
+    if (prev && curr && prev.textContent.trim() === curr.textContent.trim()) {
+      curr.remove();
+    }
+  }
 }
+
 
 
 
