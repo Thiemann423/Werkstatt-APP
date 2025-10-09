@@ -1321,9 +1321,13 @@ doc.write(`<!doctype html>
         logging: false,
         foreignObjectRendering: false
       },
-      jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
+     jsPDF: {
+    unit: 'px',
+    format: [794, 1123],   // ⇠ exakt A4 @96DPI: Breite 794, Höhe 1123
+    orientation: 'portrait'
+  },
+  pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+};
 
     // G) Rendern (IM IFRAME!)
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
