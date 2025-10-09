@@ -1104,46 +1104,58 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-  // 3) Rest generisch
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
+// 3) Rest generisch
+const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+const isPlaceholder = (t) => placeholders.has((t||'').trim());
+const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
-  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-  fields.forEach(el => {
-    const cs = getComputedStyle(el);
-    if (el.type === 'hidden' || el.type === 'file' ||
-        cs.display === 'none' || cs.visibility === 'hidden' ||
-        (el.offsetWidth === 0 && el.offsetHeight === 0)) {
-      el.remove(); return;
-    }
+const fields = Array.from(container.querySelectorAll('input, select, textarea'));
+fields.forEach(el => {
+  const cs = getComputedStyle(el);
+  if (el.type === 'hidden' || el.type === 'file' ||
+      cs.display === 'none' || cs.visibility === 'hidden' ||
+      (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+    el.remove(); return;
+  }
 
-    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
+  const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
-    let val = '';
-    if (el.tagName === 'SELECT') {
-      const txt = el.options[el.selectedIndex]?.text?.trim() || '';
-      val = !isPlaceholder(txt) ? txt : '';
-    } else if (el.type === 'date') {
-      val = formatDate(el.value);
-    } else if (el.tagName === 'TEXTAREA') {
-      val = (el.value || '').trim();
-    } else {
-      val = (el.value || '').trim();
-    }
+  let val = '';
+  if (el.tagName === 'SELECT') {
+    const opt = el.options[el.selectedIndex];
+    const txt = (opt?.text || '').trim();
+    val = !isPlaceholder(txt) ? txt : '';
+  } else if (el.type === 'date') {
+    val = formatDate(el.value);
+  } else if (el.tagName === 'TEXTAREA') {
+    val = (el.value || '').trim();
+  } else {
+    val = (el.value || '').trim();
+  }
 
-    if (!val) { el.remove(); label?.remove(); return; }
+  // ❗️NEU: Prüfe nur, ob val WIRKLICH leer ist – nicht, ob value=""!
+  if (!val) { 
+    // leere Label-Felder entfernen, aber keine sichtbaren Texte verlieren
+    el.remove(); 
+    if (label && !label.textContent.match(/:$/)) label.remove();
+    return;
+  }
 
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l   = document.createElement('div'); l.className = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-    row.append(l, vDiv);
+  const row = document.createElement('div'); 
+  row.className = 'print-field';
+  const l = document.createElement('div'); 
+  l.className = 'print-label';
+  l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+  const vDiv = document.createElement('div'); 
+  vDiv.className = 'print-value'; 
+  vDiv.textContent = val;
+  row.append(l, vDiv);
 
-    const parent = label ? label.parentNode : el.parentNode;
-    parent.insertBefore(row, label || el);
-    label?.remove(); el.remove();
-  });
+  const parent = label ? label.parentNode : el.parentNode;
+  parent.insertBefore(row, label || el);
+  label?.remove(); el.remove();
+});
+
 
   // 4) Signaturen Canvas → IMG
   container.querySelectorAll('canvas').forEach(c => {
