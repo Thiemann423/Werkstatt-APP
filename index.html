@@ -1023,6 +1023,10 @@ async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
 // Formular → statischer Inhalt (für PDF)
 // ====================
 function convertFormElementsToStaticText(container){
+  // immer im Kontext des IFRAME-Dokuments arbeiten
+  const d   = container.ownerDocument;
+  const win = d.defaultView || window;
+
   // 0) UI-Elemente ausblenden
   container.querySelectorAll('button, input[type="file"], .delete-button')
            .forEach(el => el.style.display = 'none');
@@ -1038,9 +1042,9 @@ function convertFormElementsToStaticText(container){
   // Helper: 2-Spalten-Zeile
   function addRow(labelText, valueText, beforeNode){
     if(!valueText || !valueText.toString().trim()) return;
-    const row = document.createElement('div'); row.className = 'print-field';
-    const l = document.createElement('div'); l.className = 'print-label'; l.textContent = labelText;
-    const v = document.createElement('div'); v.className = 'print-value'; v.textContent = valueText;
+    const row = d.createElement('div'); row.className = 'print-field';
+    const l   = d.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
+    const v   = d.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
     row.append(l, v);
     const parent = (beforeNode && beforeNode.parentNode) || container;
     parent.insertBefore(row, beforeNode || null);
@@ -1071,7 +1075,7 @@ function convertFormElementsToStaticText(container){
     start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
   }
 
-  // 2a) 🔴 Techniker 1/2 – SPEZIALBEHANDLUNG (MUSS vor dem generischen Loop stehen!)
+  // 2a) Techniker 1/2 – Spezial
   {
     const cleanLabel = (el, fallback) =>
       ((el?.textContent || fallback || '')
@@ -1083,19 +1087,12 @@ function convertFormElementsToStaticText(container){
       if (!sel) return;
 
       const labelEl = (sel.previousElementSibling?.tagName === 'LABEL') ? sel.previousElementSibling : null;
-
-      // sichtbarer Text und value ermitteln
-      const val = (sel.value || '').trim(); // entspricht <option value="...">
+      const val = (sel.value || '').trim();
       const txt = (sel.options[sel.selectedIndex]?.text || val).trim();
 
-      // TK2: Platzhalter (leer/„–“) überspringen
-      if (id === 'techniker2') {
-        if (!val || val === '–') { sel.remove(); labelEl?.remove(); return; }
-      }
+      if (id === 'techniker2' && (!val || val === '–')) { sel.remove(); labelEl?.remove(); return; }
 
       if (txt) addRow(cleanLabel(labelEl, fallback), txt, labelEl || sel);
-
-      // entfernen, damit der generische Loop sie nicht nochmal verarbeitet
       sel.remove();
       labelEl?.remove();
     }
@@ -1104,59 +1101,57 @@ function convertFormElementsToStaticText(container){
     addTechniker('techniker2', 'Techniker 2');
   }
 
-// 3) Rest generisch
-const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-const isPlaceholder = (t) => placeholders.has((t||'').trim());
-const formatDate = (v) => { try { if (!v) return ''; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('de-DE'); } catch { return v || ''; } };
+  // 3) Rest generisch
+  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
+  const isPlaceholder = (t) => placeholders.has((t||'').trim());
+  const formatDate = (v) => { try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); } catch { return v || ''; } };
 
-const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-fields.forEach(el => {
-  const cs = getComputedStyle(el);
-  // ❌ KEIN offsetWidth/offsetHeight-Check mehr!
-  if (el.type === 'hidden' || el.type === 'file' ||
-      cs.display === 'none' || cs.visibility === 'hidden') {
-    el.remove(); 
-    return;
-  }
+  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
+  fields.forEach(el => {
+    const cs = win.getComputedStyle(el);
+    // KEIN offsetWidth/offsetHeight-Check mehr!
+    if (el.type === 'hidden' || el.type === 'file' ||
+        cs.display === 'none' || cs.visibility === 'hidden') {
+      el.remove();
+      return;
+    }
 
-  const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
+    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
 
-  let val = '';
-  if (el.tagName === 'SELECT') {
-    const opt = el.options[el.selectedIndex];
-    const txt = (opt?.text || '').trim();
-    val = isPlaceholder(txt) ? '' : txt;
-  } else if (el.type === 'date') {
-    val = formatDate(el.value);
-  } else if (el.tagName === 'TEXTAREA') {
-    val = (el.value || '').trim();
-  } else {
-    val = (el.value || '').trim();
-  }
+    let val = '';
+    if (el.tagName === 'SELECT') {
+      const opt = el.options[el.selectedIndex];
+      const txt = (opt?.text || '').trim();
+      val = isPlaceholder(txt) ? '' : txt;
+    } else if (el.type === 'date') {
+      val = formatDate(el.value);
+    } else if (el.tagName === 'TEXTAREA') {
+      val = (el.value || '').trim();
+    } else {
+      val = (el.value || '').trim();
+    }
 
-  if (!val) { 
-    el.remove(); 
+    if (!val) {
+      el.remove();
+      label?.remove();
+      return;
+    }
+
+    const row = d.createElement('div'); row.className = 'print-field';
+    const l   = d.createElement('div'); l.className   = 'print-label';
+    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
+    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
+    row.append(l, vDiv);
+
+    const parent = label ? label.parentNode : el.parentNode;
+    parent.insertBefore(row, label || el);
     label?.remove();
-    return;
-  }
+    el.remove();
+  });
 
-  const row = document.createElement('div'); row.className = 'print-field';
-  const l = document.createElement('div');  l.className = 'print-label';
-  l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-  const vDiv = document.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-  row.append(l, vDiv);
-
-  const parent = label ? label.parentNode : el.parentNode;
-  parent.insertBefore(row, label || el);
-  label?.remove(); 
-  el.remove();
-});
-
-
-
-  // 4) Signaturen Canvas → IMG
+  // 4) (falls noch Canvas übrig wären) Canvas → IMG
   container.querySelectorAll('canvas').forEach(c => {
-    const img = document.createElement('img');
+    const img = d.createElement('img');
     try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
     img.style.width = '100%';
     img.className = 'avoid-break';
@@ -1166,6 +1161,7 @@ fields.forEach(el => {
   // 5) Bilderblöcke zusammenhalten
   container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
 }
+
 
 
 
