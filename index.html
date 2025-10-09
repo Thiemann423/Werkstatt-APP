@@ -921,6 +921,12 @@ const SHARE_URL = "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten
 const TARGET = { driveId: null, parentItemId: null }; // <- war bei dir nicht definiert
 const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
 let TARGET_DRAFTS_ITEM_ID = null;
+  const DRAFTS_FOLDER_NAME = "Reparatur-Entwürfe";
+let   TARGET_DRAFTS_ITEM_ID = null;
+
+const META_FOLDER_NAME = "Reparatur-Meta";   // <— NEU
+let   TARGET_META_ITEM_ID = null;            // <— NEU
+
 
 // richtig: shareId = 'u!' + base64url( UTF8( SHARING_URL ) )
 function _b64Url(u) {
@@ -936,16 +942,17 @@ function _b64Url(u) {
 async function resolveShareLinkToFolder(){
   if (!accessToken) throw new Error("Kein Access Token");
 
-  // Cache
+  // --- Cache lesen ---
   const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
   if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId){
-    TARGET.driveId = cache.driveId;
-    TARGET.parentItemId = cache.parentItemId;
+    TARGET.driveId        = cache.driveId;
+    TARGET.parentItemId   = cache.parentItemId;
     TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
+    TARGET_META_ITEM_ID   = cache.metaItemId   || null;   // <— NEU
     return;
   }
 
-  // Share-Link → Drive & Ordner
+  // --- Share-Link → Drive & Ordner auflösen ---
   const encoded = _b64Url(SHARE_URL);
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
@@ -956,41 +963,67 @@ async function resolveShareLinkToFolder(){
   }
   const item = await res.json();
   const folderItemId = item.folder ? item.id : item.parentReference?.id;
-  const driveId = item.parentReference?.driveId;
+  const driveId      = item.parentReference?.driveId;
   if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden.");
 
-  TARGET.driveId = driveId;
+  TARGET.driveId      = driveId;
   TARGET.parentItemId = folderItemId;
 
-  // Optional: Unterordner für Entwürfe anlegen
+  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
   const r2 = await fetch(
     `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (r2.ok){
     const data = await r2.json();
+
+    // Entwürfe
     const drafts = (data.value||[]).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-    if (drafts) TARGET_DRAFTS_ITEM_ID = drafts.id;
-    else {
-      const create = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
-          body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
-        }
-      );
-      if (create.ok) TARGET_DRAFTS_ITEM_ID = (await create.json()).id;
+    if (drafts) {
+      TARGET_DRAFTS_ITEM_ID = drafts.id;
+    } else {
+      try {
+        const create = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
+            body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
+          }
+        );
+        if (create.ok) TARGET_DRAFTS_ITEM_ID = (await create.json()).id;
+      } catch {}
+    }
+
+    // Meta  <— NEU
+    const meta = (data.value||[]).find(x => x.name === META_FOLDER_NAME && x.folder);
+    if (meta) {
+      TARGET_META_ITEM_ID = meta.id;
+    } else {
+      try {
+        const createMeta = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
+            body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
+          }
+        );
+        if (createMeta.ok) TARGET_META_ITEM_ID = (await createMeta.json()).id;
+      } catch {}
     }
   }
 
+  // --- Cache schreiben (inkl. Meta-ID) ---
   localStorage.setItem("TARGET_CACHE", JSON.stringify({
-    shareUrl: SHARE_URL,
-    driveId: TARGET.driveId,
-    parentItemId: TARGET.parentItemId,
-    draftsItemId: TARGET_DRAFTS_ITEM_ID
+    shareUrl:      SHARE_URL,
+    driveId:       TARGET.driveId,
+    parentItemId:  TARGET.parentItemId,
+    draftsItemId:  TARGET_DRAFTS_ITEM_ID,
+    metaItemId:    TARGET_META_ITEM_ID          // <— NEU
   }));
 }
+
 
 //<!-- ... alles davor: msalConfig, scopes, msalInstance, handleRedirectPromise, resolveShareLinkToFolder, signInAndAcquireToken ... -->
 
@@ -1097,13 +1130,14 @@ const fieldIds = [
 // ====================
 // OneDrive-Upload (robuster, mit Fehlertext)
 // ====================
-async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
+async function uploadToOneDrive(filename, blob, mime = "application/pdf", parentIdOverride = null) {
   if (!accessToken) { alert("⚠️ Kein Zugriffstoken. Bitte anmelden."); return false; }
   if (!TARGET.driveId || !TARGET.parentItemId) { alert("⚠️ Zielordner nicht initialisiert."); return false; }
 
+  const parentId = parentIdOverride || TARGET.parentItemId;  // <— NEU
   const url =
     `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-    `/items/${TARGET.parentItemId}:/${encodeURIComponent(filename)}:/content`;
+    `/items/${parentId}:/${encodeURIComponent(filename)}:/content`;
 
   try {
     const res = await fetch(url, {
@@ -1111,7 +1145,6 @@ async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mime },
       body: blob
     });
-
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       console.error("Upload-Fehler:", res.status, text);
@@ -1122,6 +1155,7 @@ async function uploadToOneDrive(filename, blob, mime = "application/pdf") {
     return false;
   }
 }
+
 
 
 // ====================
@@ -1612,11 +1646,13 @@ if (success) {
     anlagenteil_text:  document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
   };
 
-  await uploadToOneDrive(
-    `${auftragId}.meta.json`,
-    new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" }),
-    "application/json"
-  );
+ await uploadToOneDrive(
+  `${auftragId}.meta.json`,
+  new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" }),
+  "application/json",
+  TARGET_META_ITEM_ID || TARGET.parentItemId     // <— NEU: in Meta-Ordner
+);
+
   // ---- /META ----
 
   alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1877,7 +1913,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
   });
 });
-
 async function loadDashboard(){
   await signInAndAcquireToken(true);
   await resolveShareLinkToFolder();
@@ -1890,27 +1925,44 @@ async function loadDashboard(){
   if (empty) empty.style.display = 'none';
 
   try{
-    // Ordnerinhalt holen
-    const listUrl =
+    const headers = { Authorization: `Bearer ${accessToken}` };
+
+    // 1) PDFs IM HAUPTORDNER holen (bleiben dort)
+    const listPdfUrl =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
       `/children?$top=2000&$select=id,name,webUrl,file,folder`;
-    const res = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` }});
-    const items = (await res.json()).value || [];
+    const pdfRes = await fetch(listPdfUrl, { headers });
+    const mainItems = (await pdfRes.json()).value || [];
 
-    // PDF-Namen -> webUrl
     const pdfMap = new Map(
-      items.filter(i => i.file && /\.pdf$/i.test(i.name))
-           .map(i => [i.name, i.webUrl])
+      mainItems
+        .filter(i => i.file && /\.pdf$/i.test(i.name))
+        .map(i => [i.name, i.webUrl])
     );
 
-    // nur Meta-Dateien
-    const metas = items.filter(i => i.file && i.name.endsWith(META_SUFFIX));
+    // 2) META-Dateien: bevorzugt AUS DEM META-ORDNER lesen, sonst Fallback Hauptordner
+    let metaItems = [];
+    if (window.TARGET_META_ITEM_ID){
+      const listMetaUrl =
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}` +
+        `/children?$top=2000&$select=id,name,file`;
+      const metaRes = await fetch(listMetaUrl, { headers });
+      if (metaRes.ok){
+        const data = await metaRes.json();
+        metaItems = (data.value || []).filter(i => i.file && i.name.endsWith(META_SUFFIX));
+      }
+    }
+    // Fallback: falls Meta-Ordner leer/nicht vorhanden
+    if (!metaItems.length){
+      metaItems = mainItems.filter(i => i.file && i.name.endsWith(META_SUFFIX));
+    }
 
+    // 3) Zeilen bauen
     const rows = [];
-    for (const m of metas){
+    for (const m of metaItems){
       const mres = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers }
       );
       if (!mres.ok) continue;
       const meta = await mres.json();
@@ -1919,7 +1971,7 @@ async function loadDashboard(){
       const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
       rows.push({
-        dateIso:  meta.bearbeitet_am || '',                                  // ISO yyyy-mm-dd
+        dateIso:  meta.bearbeitet_am || '',
         dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
         tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
         maschine: meta.maschine_text || meta.maschine_value || '',
@@ -1929,7 +1981,7 @@ async function loadDashboard(){
       });
     }
 
-    // neueste zuerst (nach ISO sortiert)
+    // neueste zuerst
     rows.sort((a,b) => (b.dateIso||'').localeCompare(a.dateIso||''));
 
     if (!rows.length){
@@ -1938,7 +1990,6 @@ async function loadDashboard(){
       return;
     }
 
-    // WICHTIG: data-iso mitschreiben, damit Datumsfilter sauber funktionieren
     tbody.innerHTML = rows.map(r => {
       const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
       return `<tr>
@@ -1956,6 +2007,7 @@ async function loadDashboard(){
     tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Fehler beim Laden.</td></tr>';
   }
 }
+
 
 function applyFiltersToDashboard(){
   const valDate   = (document.getElementById('f_bearbeitet_am')?.value || '').trim(); // ISO yyyy-mm-dd
