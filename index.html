@@ -141,7 +141,7 @@
 
 <style>
 /* Snapshot: zweispaltig halten */
-#pdfExportContainer.pdf-snapshot .print-field {
+.pdf-snapshot .print-field {
   display: grid !important;
   grid-template-columns: 38% 62%;
   column-gap: 12px;
@@ -150,18 +150,17 @@
   border-bottom: 1px solid #e9e9e9;
 }
 
-#pdfExportContainer.pdf-snapshot .print-label,
-#pdfExportContainer.pdf-snapshot .print-value {
-  min-width: 0;            /* verhindert Reinlaufen */
-}
+.pdf-snapshot .print-label,
+.pdf-snapshot .print-value { min-width: 0; }
 
-#pdfExportContainer.pdf-snapshot .print-value {
+.pdf-snapshot .print-value {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
   line-height: 1.35;
   margin-bottom: 6px;
 }
+
 
 
 </style>
