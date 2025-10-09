@@ -1813,126 +1813,130 @@ window.confirmUpdate = function () {
     setTimeout(() => { msg.style.display = 'none'; }, 2500);
   }
 };
-  // ===== Dashboard =====
-const META_SUFFIX = ".meta.json";
+// ===== Dashboard (fixed IDs) =====
+const META_SUFFIX = '.meta.json';
 
-document.addEventListener("DOMContentLoaded", () => {
-  const toggle = document.getElementById("toggleDashboard");
-  const panel  = document.getElementById("dashboardPanel");
-  const reload = document.getElementById("reloadDashboard");
-  const clear  = document.getElementById("clearFilters");
+// Toggle & Buttons
+document.getElementById('toggleDashBtn')?.addEventListener('click', () => {
+  const p = document.getElementById('dashPanel');
+  if (!p) return;
+  const show = p.style.display === 'none' || !p.style.display;
+  p.style.display = show ? 'block' : 'none';
+  if (show) loadDashboard();
+});
+document.getElementById('dashReload')?.addEventListener('click', loadDashboard);
+document.getElementById('dashClear')?.addEventListener('click', () => {
+  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  applyFiltersToDashboard();
+});
 
-  toggle?.addEventListener("click", () => {
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-    if (panel.style.display !== "none") loadDashboard();
-  });
-  reload?.addEventListener("click", loadDashboard);
-  clear?.addEventListener("click", () => {
-    document.querySelectorAll(".dash-filter").forEach(e => e.value = "");
-    applyFiltersToDashboard();
-  });
-  document.querySelectorAll(".dash-filter")
-    .forEach(e => e.addEventListener("input", applyFiltersToDashboard));
+// Filter live anwenden
+['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
 });
 
 async function loadDashboard(){
   await signInAndAcquireToken(true);
   await resolveShareLinkToFolder();
 
-  const body  = document.getElementById("dashboardBody");
-  const count = document.getElementById("dashboardCount");
-  body.innerHTML = '<tr><td colspan="5">Lade…</td></tr>';
+  const tbody = document.querySelector('#dashTable tbody');
+  const empty = document.getElementById('dashEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Lade…</td></tr>';
+  empty.style.display = 'none';
 
   try{
-    // Alle Dateien im Zielordner holen (PDFs + Metas)
-    const listRes = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children?$top=999&$select=id,name,webUrl,file,folder`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    const files = (await listRes.json()).value || [];
+    // Ordnerinhalt holen
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+      `/children?$top=2000&$select=id,name,webUrl,file,folder`;
+    const res = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` }});
+    const items = (await res.json()).value || [];
 
-    // Map: PDF-Name -> webUrl
+    // PDF-Namen -> webUrl
     const pdfMap = new Map(
-      files.filter(i => i.file && /\.pdf$/i.test(i.name))
+      items.filter(i => i.file && /\.pdf$/i.test(i.name))
            .map(i => [i.name, i.webUrl])
     );
 
-    // Nur Meta-Dateien
-    const metas = files.filter(i => i.file && i.name.endsWith(META_SUFFIX));
+    // nur Metas
+    const metas = items.filter(i => i.file && i.name.endsWith(META_SUFFIX));
 
     const rows = [];
     for (const m of metas){
-      const metaRes = await fetch(
+      const mres = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      const meta = await metaRes.json();
+      if (!mres.ok) continue;
+      const meta = await mres.json();
 
-      const auftragsId  = meta.auftrag_id || m.name.replace(META_SUFFIX, "");
-      const pdfName     = meta.pdfName || `${auftragsId}.pdf`;
-      const maschine    = meta.maschine || meta.sonstige_maschine || "";
-      const anlagenteil = meta.anlagenteil || meta.sonstige_anlagenteil || "";
+      const auftragsId = (meta.auftrags_id || m.name.replace(META_SUFFIX,'')).trim();
+      const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
       rows.push({
-        auftragsId,
-        bearbeitet_am: meta.bearbeitet_am || "",
-        techniker:     meta.techniker1 || "",
-        maschine,
-        anlagenteil,
-        webUrl: pdfMap.get(pdfName) || null
+        date: meta.bearbeitet_am || '',
+        tech: [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
+        maschine: meta.maschine_text || meta.maschine_value || '',
+        teil: meta.anlagenteil_text || meta.anlagenteil_value || '',
+        id: auftragsId,
+        url: pdfMap.get(pdfName) || null
       });
     }
 
+    // neueste zuerst
+    rows.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
     if (!rows.length){
-      body.innerHTML = '<tr><td colspan="5">Keine Aufträge gefunden.</td></tr>';
-      count.textContent = "0";
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
       return;
     }
 
-    body.innerHTML = rows.map(r => {
-      const link = r.webUrl
-        ? `<a href="${r.webUrl}" target="_blank" rel="noopener">${r.auftragsId}</a>`
-        : r.auftragsId;
+    tbody.innerHTML = rows.map(r => {
+      const d = r.date ? new Date(r.date).toLocaleDateString('de-DE') : '';
+      const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
       return `<tr>
-        <td data-k="bearbeitet_am">${r.bearbeitet_am}</td>
-        <td data-k="techniker">${r.techniker}</td>
+        <td data-k="bearbeitet_am">${d}</td>
+        <td data-k="techniker">${r.tech}</td>
         <td data-k="maschine">${r.maschine}</td>
-        <td data-k="anlagenteil">${r.anlagenteil}</td>
-        <td data-k="auftrag_id">${link}</td>
+        <td data-k="anlagenteil">${r.teil}</td>
+        <td data-k="auftrag_id">${idCell}</td>
       </tr>`;
-    }).join("");
+    }).join('');
 
-    count.textContent = String(rows.length);
     applyFiltersToDashboard();
   }catch(e){
-    console.error("Dashboard:", e);
-    body.innerHTML = '<tr><td colspan="5">Fehler beim Laden.</td></tr>';
+    console.error('Dashboard:', e);
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Fehler beim Laden.</td></tr>';
   }
 }
 
 function applyFiltersToDashboard(){
   const vals = {
-    bearbeitet_am: (document.getElementById("f_bearbeitet_am")?.value || "").trim().toLowerCase(),
-    techniker:     (document.getElementById("f_techniker")?.value     || "").trim().toLowerCase(),
-    maschine:      (document.getElementById("f_maschine")?.value      || "").trim().toLowerCase(),
-    anlagenteil:   (document.getElementById("f_anlagenteil")?.value   || "").trim().toLowerCase(),
-    auftrag_id:    (document.getElementById("f_auftrag_id")?.value    || "").trim().toLowerCase(),
+    bearbeitet_am: (document.getElementById('f_bearbeitet_am')?.value || '').trim().toLowerCase(),
+    techniker:     (document.getElementById('f_techniker')?.value     || '').trim().toLowerCase(),
+    maschine:      (document.getElementById('f_maschine')?.value      || '').trim().toLowerCase(),
+    anlagenteil:   (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase()
   };
-  const rows = document.querySelectorAll("#dashboardBody tr");
+  const rows = document.querySelectorAll('#dashTable tbody tr');
   let shown = 0;
   rows.forEach(tr => {
-    const hit = Object.entries(vals).every(([k,v]) => {
+    const ok = Object.entries(vals).every(([k,v]) => {
       if (!v) return true;
       const cell = tr.querySelector(`[data-k="${k}"]`);
-      return (cell?.textContent || "").toLowerCase().includes(v);
+      return (cell?.textContent || '').toLowerCase().includes(v);
     });
-    tr.style.display = hit ? "" : "none";
-    if (hit) shown++;
+    tr.style.display = ok ? '' : 'none';
+    if (ok) shown++;
   });
-  const count = document.getElementById("dashboardCount");
-  if (count) count.textContent = String(shown);
+  document.getElementById('dashEmpty').style.display = shown ? 'none' : 'block';
 }
 // ===== /Dashboard =====
+
 
 </script>
 
