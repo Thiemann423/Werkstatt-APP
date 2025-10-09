@@ -940,6 +940,7 @@ function _b64Url(u) {
 
 
 // WICHTIG: als "function ..." deklarieren (wird gehoistet)
+// WICHTIG: als "function ..." deklarieren (wird gehoistet)
 async function resolveShareLinkToFolder(){
   if (!accessToken) throw new Error("Kein Access Token");
 
@@ -949,81 +950,77 @@ async function resolveShareLinkToFolder(){
     TARGET.driveId        = cache.driveId;
     TARGET.parentItemId   = cache.parentItemId;
     TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
-    TARGET_META_ITEM_ID   = cache.metaItemId   || null;   // <— NEU
-    return;
-  }
+    TARGET_META_ITEM_ID   = cache.metaItemId   || null;
 
-  // --- Share-Link → Drive & Ordner auflösen ---
-  const encoded = _b64Url(SHARE_URL);
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  if (!res.ok){
-    throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
-  }
-  const item = await res.json();
-  const folderItemId = item.folder ? item.id : item.parentReference?.id;
-  const driveId      = item.parentReference?.driveId;
-  if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden.");
+    // ⚠️ Nur sofort zurück, wenn BEIDE Unterordner-IDs vorhanden sind
+    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) return;
+  } else {
+    // --- Share-Link → Drive & Ordner auflösen ---
+    const encoded = _b64Url(SHARE_URL);
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok){
+      throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
+    }
+    const item = await res.json();
+    const folderItemId = item.folder ? item.id : item.parentReference?.id;
+    const driveId      = item.parentReference?.driveId;
+    if (!driveId || !folderItemId) throw new Error("Zielordner konnte nicht bestimmt werden.");
 
-  TARGET.driveId      = driveId;
-  TARGET.parentItemId = folderItemId;
+    TARGET.driveId      = driveId;
+    TARGET.parentItemId = folderItemId;
+  }
 
   // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
-  const r2 = await fetch(
-    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children?$select=id,name,folder`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  if (r2.ok){
-    const data = await r2.json();
+  const listUrl =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+    `/children?$select=id,name,folder`;
+  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
+  const children = (await listRes.json()).value || [];
 
-    // Entwürfe
-    const drafts = (data.value||[]).find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-    if (drafts) {
-      TARGET_DRAFTS_ITEM_ID = drafts.id;
-    } else {
-      try {
-        const create = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
-            body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
-          }
-        );
-        if (create.ok) TARGET_DRAFTS_ITEM_ID = (await create.json()).id;
-      } catch {}
-    }
-
-    // Meta  <— NEU
-    const meta = (data.value||[]).find(x => x.name === META_FOLDER_NAME && x.folder);
-    if (meta) {
-      TARGET_META_ITEM_ID = meta.id;
-    } else {
-      try {
-        const createMeta = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderItemId}/children`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
-            body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "ignore" })
-          }
-        );
-        if (createMeta.ok) TARGET_META_ITEM_ID = (await createMeta.json()).id;
-      } catch {}
-    }
+  // Entwürfe
+  let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+  if (!drafts){
+    const createDrafts = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
+      }
+    );
+    if (createDrafts.ok) drafts = await createDrafts.json();
   }
+  TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
 
-  // --- Cache schreiben (inkl. Meta-ID) ---
+  // Meta
+  let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
+  if (!meta){
+    const createMeta = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
+      }
+    );
+    if (createMeta.ok) meta = await createMeta.json();
+  }
+  TARGET_META_ITEM_ID = meta?.id || null;
+
+  // --- Cache schreiben (inkl. IDs der Unterordner) ---
   localStorage.setItem("TARGET_CACHE", JSON.stringify({
     shareUrl:      SHARE_URL,
     driveId:       TARGET.driveId,
     parentItemId:  TARGET.parentItemId,
     draftsItemId:  TARGET_DRAFTS_ITEM_ID,
-    metaItemId:    TARGET_META_ITEM_ID          // <— NEU
+    metaItemId:    TARGET_META_ITEM_ID
   }));
 }
+
 
 
 //<!-- ... alles davor: msalConfig, scopes, msalInstance, handleRedirectPromise, resolveShareLinkToFolder, signInAndAcquireToken ... -->
@@ -1449,71 +1446,39 @@ async function generatePDFAndFinish() {
     })
   );
 
-// B) Isoliertes OFFSCREEN-IFRAME benutzen (ignoriert Seiten-/Text-Zoom)
-const frame = document.getElementById('pdfSandbox');
-if (!frame) { alert("PDF-Frame fehlt."); return; }
+  // B) Offscreen-Iframe
+  const frame = document.getElementById('pdfSandbox');
+  if (!frame) { alert("PDF-Frame fehlt."); return; }
+  const doc = frame.contentDocument || frame.contentWindow?.document;
+  if (!doc) { alert("PDF-Dokumentkontext nicht verfügbar."); return; }
 
-const doc = frame.contentDocument || frame.contentWindow?.document;
-if (!doc) { alert("PDF-Dokumentkontext nicht verfügbar."); return; }
+  doc.open();
+  doc.write(`<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#fff;}
+  #root{width:794px; box-sizing:border-box; padding:0;}
+  html,body,#root{-webkit-text-size-adjust:none;text-size-adjust:none;}
+  #root, #root *{ font-family:"Inter", Arial, sans-serif !important; line-height:1.35; box-sizing:border-box; }
+  #pdfExportContainerClone{ width:794px; padding:20px; margin:0 auto; background:#fff; }
+  .print-field{ display:grid !important; grid-template-columns:38% 62%; column-gap:12px; align-items:start; padding:6px 0; border-bottom:1px solid #e9e9e9; }
+  .print-label{ font-weight:700; white-space:normal; overflow-wrap:anywhere; word-break:break-word; min-width:0; }
+  .print-value{ white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; hyphens:auto; line-height:1.4; min-width:0; }
+  .print-field > * { min-width:0; }
+  .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
+  img{ max-width:100% !important; height:auto !important; border:0 !important; display:block; }
+  canvas{ display:block !important; }
+  h1{ font-size:24px; margin:0 0 8px; text-align:center; }
+  @page { size: A4; margin: 0; }
+</style>
+</head><body><div id="root"></div></body></html>`);
+  doc.close();
 
-doc.open();
-doc.write(`<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    html,body{margin:0;padding:0;background:#fff;}
-    #root{width:794px; box-sizing:border-box; padding:0;}
-    html,body,#root{-webkit-text-size-adjust:none;text-size-adjust:none;}
-    #root, #root *{ font-family:"Inter", Arial, sans-serif !important; line-height:1.35; box-sizing:border-box; }
-
-    /* Container im Iframe */
-    #pdfExportContainerClone{ width:794px; padding:20px; margin:0 auto; background:#fff; }
-
-    /* 2-Spalten-Layout erzwingen */
-    .print-field{
-      display:grid !important;
-      grid-template-columns:38% 62%;
-      column-gap:12px;
-      align-items:start;
-      padding:6px 0;
-      border-bottom:1px solid #e9e9e9;
-    }
-  .print-label{
-  font-weight:700;
-  white-space: normal;        /* umbrechen erlauben */
-  overflow-wrap: anywhere;    /* lange Wörter trennen */
-  word-break: break-word;
-  min-width: 0;
-}
-
-    .print-value{
-      white-space:pre-wrap;
-      word-break:break-word;     /* bricht sehr lange Wörter */
-      overflow-wrap:anywhere;    /* zusätzliche Sicherheit */
-      hyphens:auto;              /* DE-Silbentrennung aktiv */
-      line-height:1.4;
-      min-width:0;
-    }
-    .print-field > * { min-width:0; } /* für beide Spalten */
-
-    .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
-    img{ max-width:100% !important; height:auto !important; border:0 !important; display:block; }
-    canvas{ display:block !important; }
-
-    h1{ font-size:24px; margin:0 0 8px; text-align:center; }
-    @page { size: A4; margin: 0; }
-  </style>
-</head>
-<body><div id="root"></div></body>
-</html>`);
-doc.close();
-
-
-  // C) html2pdf INS IFRAME laden (falls noch nicht vorhanden)
+  // C) html2pdf INS IFRAME laden (falls nötig)
   if (!frame.contentWindow.html2pdf) {
     await new Promise((resolve, reject) => {
       const s = doc.createElement('script');
@@ -1524,61 +1489,55 @@ doc.close();
     });
   }
 
-// D) Inhalt klonen (nur im KLON ändern)
-const clone = src.cloneNode(true);
-clone.id = 'pdfExportContainerClone';
-clone.classList.add('pdf-snapshot');
-clone.style.width = '794px';
-clone.style.maxWidth = '794px';
-clone.style.margin = '0';
-clone.style.padding = '20px';
-clone.style.background = '#ffffff';
+  // D) Inhalt klonen
+  const clone = src.cloneNode(true);
+  clone.id = 'pdfExportContainerClone';
+  clone.classList.add('pdf-snapshot');
+  clone.style.width = '794px';
+  clone.style.maxWidth = '794px';
+  clone.style.margin = '0';
+  clone.style.padding = '20px';
+  clone.style.background = '#ffffff';
 
-/* Select-Werte übernehmen + sichtbaren Text zwischenspeichern */
-clone.querySelectorAll('select').forEach(sel => {
-  const orig = src.querySelector('#' + sel.id);
-  if (!orig) return;
-  sel.value = orig.value;
-  Array.from(sel.options).forEach(o => o.selected = (o.value === orig.value));
-  const checked = sel.querySelector('option:checked');
-  let displayText = (checked?.textContent || checked?.innerText || sel.value || '').trim();
-  if (sel.id === 'reinigung_erforderlich') {
-    const v = (sel.value || displayText || '').trim().toLowerCase();
-    displayText = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : displayText;
-  }
-  sel.setAttribute('data-selected-text', displayText);
-});
-;
+  // Select-Werte übernehmen
+  clone.querySelectorAll('select').forEach(sel => {
+    const orig = src.querySelector('#' + sel.id);
+    if (!orig) return;
+    sel.value = orig.value;
+    Array.from(sel.options).forEach(o => o.selected = (o.value === orig.value));
+    const checked = sel.querySelector('option:checked');
+    let displayText = (checked?.textContent || checked?.innerText || sel.value || '').trim();
+    if (sel.id === 'reinigung_erforderlich') {
+      const v = (sel.value || displayText || '').trim().toLowerCase();
+      displayText = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : displayText;
+    }
+    sel.setAttribute('data-selected-text', displayText);
+  });
 
-/* Canvas -> IMG mit gesicherter DataURL */
-clone.querySelectorAll('canvas').forEach(c => {
-  const url = signatureMap.get(c.id);
-  if (!url) return;
-  const img = doc.createElement('img');
-  img.src = url;
-  img.style.maxWidth = '100%';
-  img.style.height = 'auto';
-  img.className = 'avoid-break';
-  c.parentNode.replaceChild(img, c);
-});
+  // Canvas -> IMG
+  clone.querySelectorAll('canvas').forEach(c => {
+    const url = signatureMap.get(c.id);
+    if (!url) return;
+    const img = doc.createElement('img');
+    img.src = url;
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.className = 'avoid-break';
+    c.parentNode.replaceChild(img, c);
+  });
 
-/* Klon ins iFrame hängen … */
-doc.getElementById('root').appendChild(clone);
-
-/* … und JETZT Formular → statischen Inhalt wandeln */
-convertFormElementsToStaticText(clone);
-
-/* Thumbnails im PDF groß darstellen */
-clone.querySelectorAll('.preview-container img').forEach(img => {
-  img.style.maxWidth = '100%';
-  img.style.maxHeight = '';
-  img.style.border = '0';
-  img.style.display = 'block';
-});
-
+  // In iFrame einfügen & in statischen Inhalt wandeln
+  doc.getElementById('root').appendChild(clone);
+  convertFormElementsToStaticText(clone);
+  clone.querySelectorAll('.preview-container img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '';
+    img.style.border = '0';
+    img.style.display = 'block';
+  });
 
   try {
-    // E) Warten bis Fonts & Bilder im Iframe geladen sind
+    // E) Laden abwarten
     if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
     const imgs = doc.images;
     await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
@@ -1594,7 +1553,7 @@ clone.querySelectorAll('.preview-container img').forEach(img => {
     }
     const filename = `${auftragId}.pdf`;
 
-    // G) html2pdf-Optionen (fester Layout-Kontext!)
+    // G) html2pdf-Optionen
     const height = doc.getElementById('root').scrollHeight;
     const opt = {
       margin: 0,
@@ -1610,70 +1569,73 @@ clone.querySelectorAll('.preview-container img').forEach(img => {
         logging: false,
         foreignObjectRendering: false
       },
-      jsPDF: {
-        unit: 'px',
-        format: [794, 1123], // A4 @96DPI
-        orientation: 'portrait'
-      },
+      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
-    // H) Rendern (IM IFRAME!)
+    // H) Rendern
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const h2p = frame.contentWindow.html2pdf;
     const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
-// I) Upload & UI
-const success = await uploadToOneDrive(filename, pdfBlob);
-if (success) {
-  // ---- META-Datei für das Dashboard mitschreiben ----
-  const selText = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return "";
-    const opt = el.options?.[el.selectedIndex];
-    return (opt?.text || el.value || "").trim();
-  };
+    // I) Upload & UI
+    const success = await uploadToOneDrive(filename, pdfBlob);
+    if (success) {
+      // ---- META-Datei für das Dashboard mitschreiben ----
+      const selText = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return "";
+        const opt = el.options?.[el.selectedIndex];
+        return (opt?.text || el.value || "").trim();
+      };
 
-  const meta = {
-    auftrags_id:   auftragId,
-    pdfName:       filename,
-    bearbeitet_am: document.getElementById("bearbeitet_am")?.value || "",
-    techniker1:    selText("techniker1"),
-    techniker2:    (selText("techniker2") || "").replace(/^–$/, ""),
-    maschine_value:    document.getElementById("maschine")?.value || "",
-    maschine_text:     document.getElementById("sonstige_maschine")?.value?.trim() || selText("maschine"),
-    anlagenteil_value: document.getElementById("anlagenteil")?.value || "",
-    anlagenteil_text:  document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
-  };
+      const meta = {
+        auftrags_id:        auftragId,
+        pdfName:            filename,
+        bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
+        techniker1:         selText("techniker1"),
+        techniker2:         (selText("techniker2") || "").replace(/^–$/, ""),
+        maschine_value:     document.getElementById("maschine")?.value || "",
+        maschine_text:      document.getElementById("sonstige_maschine")?.value?.trim() || selText("maschine"),
+        anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
+        anlagenteil_text:   document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
+      };
 
- await uploadToOneDrive(
-  `${auftragId}.meta.json`,
-  new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" }),
-  "application/json",
-  TARGET_META_ITEM_ID || TARGET.parentItemId     // <— NEU: in Meta-Ordner
-);
+      // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
+      if (!TARGET_META_ITEM_ID) {
+        try { await resolveShareLinkToFolder(); }
+        catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
+      }
 
-  // ---- /META ----
+      const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
 
-  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-  await deleteDraftFile?.();
-  document.getElementById("abschlussScreen").style.display = "flex";
+      // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
+      const metaOk = await uploadToOneDrive(
+        `${auftragId}.meta.json`,
+        metaBlob,
+        "application/json",
+        TARGET_META_ITEM_ID || TARGET.parentItemId
+      );
+      if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
+      // ---- /META ----
 
-  // optional: Dashboard aktualisieren, falls vorhanden
-try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
+      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+      await deleteDraftFile?.();
+      document.getElementById("abschlussScreen").style.display = "flex";
 
-} else {
-  alert("⚠️ Fehler beim Hochladen in OneDrive.");
+      try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
+    } else {
+      alert("⚠️ Fehler beim Hochladen in OneDrive.");
+    }
+  } catch (err) {
+    console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
+    alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
+  } finally {
+    try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
+  }
 }
-} catch (err) {
-  console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
-  alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
-} finally {
-  // optional: Iframe leeren (nicht entfernen)
-  try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
-}
-}
+
 
 
 
