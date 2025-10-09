@@ -1179,7 +1179,7 @@ fields.forEach(el => {
 
 
 async function generatePDFAndFinish() {
-  // 0) Lib + Login wie bei dir
+  // 0) Lib + Login
   await loadHtml2PdfIfNeeded();
   if (!window.html2pdf) { alert("html2pdf konnte nicht geladen werden."); return; }
 
@@ -1201,7 +1201,7 @@ async function generatePDFAndFinish() {
   const frame = document.getElementById('pdfSandbox');
   const doc = frame.contentDocument;
   doc.open();
-doc.write(`<!doctype html>
+  doc.write(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -1210,15 +1210,14 @@ doc.write(`<!doctype html>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
   <style>
     html,body{margin:0;padding:0;background:#fff;}
-    /* A4-Breite: alles im Root auf 794px, incl. Padding (border-box!) */
     #root{width:794px; box-sizing:border-box; padding:0;}
     html,body,#root{-webkit-text-size-adjust:none;text-size-adjust:none;}
     #root, #root *{ font-family:"Inter", Arial, sans-serif !important; line-height:1.35; box-sizing:border-box; }
 
-    /* Container im Iframe: feste Breite + Innenabstand */
+    /* Container im Iframe */
     #pdfExportContainerClone{ width:794px; padding:20px; margin:0 auto; background:#fff; }
 
-    /* >>> PDF-Layout: 2-Spalten-GRID (erzwingen, auch im Snapshot) */
+    /* 2-Spalten-Layout erzwingen */
     .print-field{
       display:grid !important;
       grid-template-columns:38% 62%;
@@ -1230,9 +1229,7 @@ doc.write(`<!doctype html>
     .print-label{ font-weight:700; white-space:nowrap; }
     .print-value{ white-space:pre-wrap; word-break:break-word; }
 
-    /* Brüche in Bildern/Signaturen vermeiden */
     .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
-
     img{ max-width:100% !important; height:auto !important; border:0 !important; display:block; }
     canvas{ display:block !important; }
 
@@ -1242,10 +1239,9 @@ doc.write(`<!doctype html>
 </head>
 <body><div id="root"></div></body>
 </html>`);
-
   doc.close();
 
-  // ✳️ html2pdf INS IFRAME laden (falls noch nicht vorhanden)
+  // C) html2pdf INS IFRAME laden (falls noch nicht vorhanden)
   if (!frame.contentWindow.html2pdf) {
     await new Promise((resolve, reject) => {
       const s = doc.createElement('script');
@@ -1256,7 +1252,7 @@ doc.write(`<!doctype html>
     });
   }
 
-  // C) Inhalt klonen & vorbereiten (nur im KLON ändern)
+  // D) Inhalt klonen (nur im KLON ändern)
   const clone = src.cloneNode(true);
   clone.id = 'pdfExportContainerClone';
   clone.classList.add('pdf-snapshot');
@@ -1286,10 +1282,13 @@ doc.write(`<!doctype html>
     c.parentNode.replaceChild(img, c);
   });
 
-  // Formular-Elemente in statisches DOM wandeln (deine bestehende Helper-Funktion)
+  // ❗ WICHTIG: Klon zuerst ins Iframe einhängen …
+  doc.getElementById('root').appendChild(clone);
+
+  // … und JETZT Formular → statischen Inhalt wandeln
   convertFormElementsToStaticText(clone);
 
-  // Thumbnails größer im PDF
+  // Thumbnails im PDF groß darstellen
   clone.querySelectorAll('.preview-container img').forEach(img => {
     img.style.maxWidth = '100%';
     img.style.maxHeight = '';
@@ -1297,17 +1296,14 @@ doc.write(`<!doctype html>
     img.style.display = 'block';
   });
 
-  // Klon ins Iframe einhängen
-  doc.getElementById('root').appendChild(clone);
-
   try {
-    // D) Warten bis Fonts & Bilder im Iframe geladen sind
+    // E) Warten bis Fonts & Bilder im Iframe geladen sind
     if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
     const imgs = doc.images;
     await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
       : new Promise(res => { img.onload = img.onerror = res; })));
 
-    // E) Dateiname
+    // F) Dateiname
     const auftragIdField = document.getElementById("auftrag_id");
     let auftragId = auftragIdField?.value?.trim();
     if (!auftragId) {
@@ -1317,7 +1313,7 @@ doc.write(`<!doctype html>
     }
     const filename = `${auftragId}.pdf`;
 
-    // F) html2pdf-Optionen (fester Layout-Kontext!)
+    // G) html2pdf-Optionen (fester Layout-Kontext!)
     const height = doc.getElementById('root').scrollHeight;
     const opt = {
       margin: 0,
@@ -1333,21 +1329,21 @@ doc.write(`<!doctype html>
         logging: false,
         foreignObjectRendering: false
       },
-     jsPDF: {
-    unit: 'px',
-    format: [794, 1123],   // ⇠ exakt A4 @96DPI: Breite 794, Höhe 1123
-    orientation: 'portrait'
-  },
-  pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-};
+      jsPDF: {
+        unit: 'px',
+        format: [794, 1123], // A4 @96DPI
+        orientation: 'portrait'
+      },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
 
-    // G) Rendern (IM IFRAME!)
+    // H) Rendern (IM IFRAME!)
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const h2p = frame.contentWindow.html2pdf;
     const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
-    // H) Upload & UI
+    // I) Upload & UI
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
@@ -1364,6 +1360,7 @@ doc.write(`<!doctype html>
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
