@@ -1580,22 +1580,52 @@ clone.querySelectorAll('.preview-container img').forEach(img => {
     const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
-    // I) Upload & UI
-    const success = await uploadToOneDrive(filename, pdfBlob);
-    if (success) {
-      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-      await deleteDraftFile?.();
-      document.getElementById("abschlussScreen").style.display = "flex";
-    } else {
-      alert("⚠️ Fehler beim Hochladen in OneDrive.");
-    }
-  } catch (err) {
-    console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
-    alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
-  } finally {
-    // optional: Iframe leeren (nicht entfernen)
-    try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
-  }
+// I) Upload & UI
+const success = await uploadToOneDrive(filename, pdfBlob);
+if (success) {
+  // ---- META-Datei für das Dashboard mitschreiben ----
+  const selText = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return "";
+    const opt = el.options?.[el.selectedIndex];
+    return (opt?.text || el.value || "").trim();
+  };
+
+  const meta = {
+    auftrags_id:   auftragId,
+    pdfName:       filename,
+    bearbeitet_am: document.getElementById("bearbeitet_am")?.value || "",
+    techniker1:    selText("techniker1"),
+    techniker2:    (selText("techniker2") || "").replace(/^–$/, ""),
+    maschine_value:    document.getElementById("maschine")?.value || "",
+    maschine_text:     document.getElementById("sonstige_maschine")?.value?.trim() || selText("maschine"),
+    anlagenteil_value: document.getElementById("anlagenteil")?.value || "",
+    anlagenteil_text:  document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
+  };
+
+  await uploadToOneDrive(
+    `${auftragId}.meta.json`,
+    new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" }),
+    "application/json"
+  );
+  // ---- /META ----
+
+  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+  await deleteDraftFile?.();
+  document.getElementById("abschlussScreen").style.display = "flex";
+
+  // optional: Dashboard aktualisieren, falls vorhanden
+  try { if (document.getElementById("dashboardPanel")) await loadDashboard(); } catch {}
+} else {
+  alert("⚠️ Fehler beim Hochladen in OneDrive.");
+}
+} catch (err) {
+  console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
+  alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
+} finally {
+  // optional: Iframe leeren (nicht entfernen)
+  try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
+}
 }
 
 
@@ -1783,6 +1813,127 @@ window.confirmUpdate = function () {
     setTimeout(() => { msg.style.display = 'none'; }, 2500);
   }
 };
+  // ===== Dashboard =====
+const META_SUFFIX = ".meta.json";
+
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("toggleDashboard");
+  const panel  = document.getElementById("dashboardPanel");
+  const reload = document.getElementById("reloadDashboard");
+  const clear  = document.getElementById("clearFilters");
+
+  toggle?.addEventListener("click", () => {
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+    if (panel.style.display !== "none") loadDashboard();
+  });
+  reload?.addEventListener("click", loadDashboard);
+  clear?.addEventListener("click", () => {
+    document.querySelectorAll(".dash-filter").forEach(e => e.value = "");
+    applyFiltersToDashboard();
+  });
+  document.querySelectorAll(".dash-filter")
+    .forEach(e => e.addEventListener("input", applyFiltersToDashboard));
+});
+
+async function loadDashboard(){
+  await signInAndAcquireToken(true);
+  await resolveShareLinkToFolder();
+
+  const body  = document.getElementById("dashboardBody");
+  const count = document.getElementById("dashboardCount");
+  body.innerHTML = '<tr><td colspan="5">Lade…</td></tr>';
+
+  try{
+    // Alle Dateien im Zielordner holen (PDFs + Metas)
+    const listRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children?$top=999&$select=id,name,webUrl,file,folder`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const files = (await listRes.json()).value || [];
+
+    // Map: PDF-Name -> webUrl
+    const pdfMap = new Map(
+      files.filter(i => i.file && /\.pdf$/i.test(i.name))
+           .map(i => [i.name, i.webUrl])
+    );
+
+    // Nur Meta-Dateien
+    const metas = files.filter(i => i.file && i.name.endsWith(META_SUFFIX));
+
+    const rows = [];
+    for (const m of metas){
+      const metaRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const meta = await metaRes.json();
+
+      const auftragsId  = meta.auftrag_id || m.name.replace(META_SUFFIX, "");
+      const pdfName     = meta.pdfName || `${auftragsId}.pdf`;
+      const maschine    = meta.maschine || meta.sonstige_maschine || "";
+      const anlagenteil = meta.anlagenteil || meta.sonstige_anlagenteil || "";
+
+      rows.push({
+        auftragsId,
+        bearbeitet_am: meta.bearbeitet_am || "",
+        techniker:     meta.techniker1 || "",
+        maschine,
+        anlagenteil,
+        webUrl: pdfMap.get(pdfName) || null
+      });
+    }
+
+    if (!rows.length){
+      body.innerHTML = '<tr><td colspan="5">Keine Aufträge gefunden.</td></tr>';
+      count.textContent = "0";
+      return;
+    }
+
+    body.innerHTML = rows.map(r => {
+      const link = r.webUrl
+        ? `<a href="${r.webUrl}" target="_blank" rel="noopener">${r.auftragsId}</a>`
+        : r.auftragsId;
+      return `<tr>
+        <td data-k="bearbeitet_am">${r.bearbeitet_am}</td>
+        <td data-k="techniker">${r.techniker}</td>
+        <td data-k="maschine">${r.maschine}</td>
+        <td data-k="anlagenteil">${r.anlagenteil}</td>
+        <td data-k="auftrag_id">${link}</td>
+      </tr>`;
+    }).join("");
+
+    count.textContent = String(rows.length);
+    applyFiltersToDashboard();
+  }catch(e){
+    console.error("Dashboard:", e);
+    body.innerHTML = '<tr><td colspan="5">Fehler beim Laden.</td></tr>';
+  }
+}
+
+function applyFiltersToDashboard(){
+  const vals = {
+    bearbeitet_am: (document.getElementById("f_bearbeitet_am")?.value || "").trim().toLowerCase(),
+    techniker:     (document.getElementById("f_techniker")?.value     || "").trim().toLowerCase(),
+    maschine:      (document.getElementById("f_maschine")?.value      || "").trim().toLowerCase(),
+    anlagenteil:   (document.getElementById("f_anlagenteil")?.value   || "").trim().toLowerCase(),
+    auftrag_id:    (document.getElementById("f_auftrag_id")?.value    || "").trim().toLowerCase(),
+  };
+  const rows = document.querySelectorAll("#dashboardBody tr");
+  let shown = 0;
+  rows.forEach(tr => {
+    const hit = Object.entries(vals).every(([k,v]) => {
+      if (!v) return true;
+      const cell = tr.querySelector(`[data-k="${k}"]`);
+      return (cell?.textContent || "").toLowerCase().includes(v);
+    });
+    tr.style.display = hit ? "" : "none";
+    if (hit) shown++;
+  });
+  const count = document.getElementById("dashboardCount");
+  if (count) count.textContent = String(shown);
+}
+// ===== /Dashboard =====
+
 </script>
 
 
