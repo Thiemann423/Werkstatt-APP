@@ -269,23 +269,29 @@ async function loadHtml2PdfIfNeeded(){
       <button type="button" id="dashClear"
               style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
         ❌ Filter löschen
-      </button>
+      
+      <button type="button" id="dashRangeBtn" data-mode="30"
+        style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+  🗓️ Letzte 30 Tage
+</button>
+
     </div>
 
     <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
-      <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-        <thead style="position:sticky;top:0;background:#fafafa;">
-          <tr>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+  <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead style="position:sticky;top:0;background:#fafafa;">
+      <tr>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
+      </tr>
+    </thead>
+    <tbody id="dashboardBody"></tbody>
+  </table>
+</div>
+
 
     <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
   </div>
@@ -1813,28 +1819,59 @@ window.confirmUpdate = function () {
     setTimeout(() => { msg.style.display = 'none'; }, 2500);
   }
 };
-// ===== Dashboard (fixed IDs) =====
+
+// ===== Dashboard (mit 30-Tage-Schalter) =====
 const META_SUFFIX = '.meta.json';
 
-// Toggle & Buttons
-document.getElementById('toggleDashBtn')?.addEventListener('click', () => {
-  const p = document.getElementById('dashPanel');
-  if (!p) return;
-  const show = p.style.display === 'none' || !p.style.display;
-  p.style.display = show ? 'block' : 'none';
-  if (show) loadDashboard();
-});
-document.getElementById('dashReload')?.addEventListener('click', loadDashboard);
-document.getElementById('dashClear')?.addEventListener('click', () => {
-  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  applyFiltersToDashboard();
-});
+// false = nur letzte 30 Tage, true = alle
+window.showAllOrders = false;
 
-// Filter live anwenden
-['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
-  document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
+document.addEventListener('DOMContentLoaded', () => {
+  const panel    = document.getElementById('dashPanel');
+  const toggle   = document.getElementById('toggleDashBtn');
+  const reload   = document.getElementById('dashReload');
+  const clearBtn = document.getElementById('dashClear');
+  const rangeBtn = document.getElementById('dashRangeBtn');
+
+  toggle?.addEventListener('click', () => {
+    const show = panel.style.display === 'none' || !panel.style.display;
+    panel.style.display = show ? 'block' : 'none';
+    if (show) loadDashboard();
+  });
+
+  reload?.addEventListener('click', loadDashboard);
+
+  clearBtn?.addEventListener('click', () => {
+    ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    // beim „Filter löschen“ wieder auf 30 Tage stellen
+    window.showAllOrders = false;
+    if (rangeBtn){ rangeBtn.dataset.mode = '30'; rangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
+    applyFiltersToDashboard();
+  });
+
+  // 30 Tage <-> alle umschalten
+  rangeBtn?.addEventListener('click', () => {
+    const mode = rangeBtn.dataset.mode || '30';
+    if (mode === '30') {
+      window.showAllOrders = true;
+      rangeBtn.dataset.mode = 'all';
+      rangeBtn.textContent  = '🗓️ Alle Aufträge';
+      // optional: Datumseingabe leeren (sonst wirkt sie zusätzlich)
+      const d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
+    } else {
+      window.showAllOrders = false;
+      rangeBtn.dataset.mode = '30';
+      rangeBtn.textContent  = '🗓️ Letzte 30 Tage';
+    }
+    applyFiltersToDashboard();
+  });
+
+  // Live-Filter
+  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
+  });
 });
 
 async function loadDashboard(){
@@ -1846,7 +1883,7 @@ async function loadDashboard(){
   if (!tbody) return;
 
   tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Lade…</td></tr>';
-  empty.style.display = 'none';
+  if (empty) empty.style.display = 'none';
 
   try{
     // Ordnerinhalt holen
@@ -1862,7 +1899,7 @@ async function loadDashboard(){
            .map(i => [i.name, i.webUrl])
     );
 
-    // nur Metas
+    // nur Meta-Dateien
     const metas = items.filter(i => i.file && i.name.endsWith(META_SUFFIX));
 
     const rows = [];
@@ -1878,29 +1915,30 @@ async function loadDashboard(){
       const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
       rows.push({
-        date: meta.bearbeitet_am || '',
-        tech: [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
+        dateIso:  meta.bearbeitet_am || '',                                  // ISO yyyy-mm-dd
+        dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
+        tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
         maschine: meta.maschine_text || meta.maschine_value || '',
-        teil: meta.anlagenteil_text || meta.anlagenteil_value || '',
-        id: auftragsId,
-        url: pdfMap.get(pdfName) || null
+        teil:     meta.anlagenteil_text || meta.anlagenteil_value || '',
+        id:       auftragsId,
+        url:      pdfMap.get(pdfName) || null
       });
     }
 
-    // neueste zuerst
-    rows.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    // neueste zuerst (nach ISO sortiert)
+    rows.sort((a,b) => (b.dateIso||'').localeCompare(a.dateIso||''));
 
     if (!rows.length){
       tbody.innerHTML = '';
-      empty.style.display = 'block';
+      if (empty) empty.style.display = 'block';
       return;
     }
 
+    // WICHTIG: data-iso mitschreiben, damit Datumsfilter sauber funktionieren
     tbody.innerHTML = rows.map(r => {
-      const d = r.date ? new Date(r.date).toLocaleDateString('de-DE') : '';
       const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
       return `<tr>
-        <td data-k="bearbeitet_am">${d}</td>
+        <td data-k="bearbeitet_am" data-iso="${r.dateIso}">${r.dateDisp}</td>
         <td data-k="techniker">${r.tech}</td>
         <td data-k="maschine">${r.maschine}</td>
         <td data-k="anlagenteil">${r.teil}</td>
@@ -1916,28 +1954,54 @@ async function loadDashboard(){
 }
 
 function applyFiltersToDashboard(){
-  const vals = {
-    bearbeitet_am: (document.getElementById('f_bearbeitet_am')?.value || '').trim().toLowerCase(),
-    techniker:     (document.getElementById('f_techniker')?.value     || '').trim().toLowerCase(),
-    maschine:      (document.getElementById('f_maschine')?.value      || '').trim().toLowerCase(),
-    anlagenteil:   (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase()
-  };
+  const valDate   = (document.getElementById('f_bearbeitet_am')?.value || '').trim(); // ISO yyyy-mm-dd
+  const valTech   = (document.getElementById('f_techniker')?.value     || '').trim().toLowerCase();
+  const valMach   = (document.getElementById('f_maschine')?.value      || '').trim().toLowerCase();
+  const valTeil   = (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase();
+
   const rows = document.querySelectorAll('#dashTable tbody tr');
   let shown = 0;
+
+  // Grenze für „letzte 30 Tage“
+  const now   = new Date();
+  const last30 = new Date(now.getTime() - 30*24*60*60*1000);
+
   rows.forEach(tr => {
-    const ok = Object.entries(vals).every(([k,v]) => {
-      if (!v) return true;
-      const cell = tr.querySelector(`[data-k="${k}"]`);
-      return (cell?.textContent || '').toLowerCase().includes(v);
-    });
+    const cDate = tr.querySelector('[data-k="bearbeitet_am"]');
+    const cTech = tr.querySelector('[data-k="techniker"]');
+    const cMac  = tr.querySelector('[data-k="maschine"]');
+    const cTeil = tr.querySelector('[data-k="anlagenteil"]');
+
+    let ok = true;
+
+    // Textfilter
+    if (valTech && !(cTech?.textContent || '').toLowerCase().includes(valTech)) ok = false;
+    if (valMach && !(cMac ?.textContent || '').toLowerCase().includes(valMach)) ok = false;
+    if (valTeil && !(cTeil?.textContent || '').toLowerCase().includes(valTeil)) ok = false;
+
+    // Datumsfilter per Eingabefeld (zeigt nur >= ausgewähltem Datum)
+    if (ok && valDate) {
+      const rowIso = cDate?.dataset.iso || '';
+      if (!rowIso || rowIso < valDate) ok = false;
+    }
+
+    // 30-Tage-Einschränkung (wenn nicht „alle“ aktiv)
+    if (ok && !window.showAllOrders) {
+      const rowIso = cDate?.dataset.iso || '';
+      if (rowIso) {
+        const d = new Date(rowIso);
+        if (!(d >= last30)) ok = false;
+      }
+    }
+
     tr.style.display = ok ? '' : 'none';
     if (ok) shown++;
   });
-  document.getElementById('dashEmpty').style.display = shown ? 'none' : 'block';
+
+  const empty = document.getElementById('dashEmpty');
+  if (empty) empty.style.display = shown ? 'none' : 'block';
 }
 // ===== /Dashboard =====
-
-
 </script>
 
 
