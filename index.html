@@ -1128,33 +1128,38 @@ const processedIds = new Set();
 {
   const sel = container.querySelector('#reinigung_erforderlich');
   if (sel) {
-    // Label sicher finden (mit for= oder als direkter Vorgänger)
     const labelEl =
       container.querySelector('label[for="reinigung_erforderlich"]') ||
       (sel.previousElementSibling && sel.previousElementSibling.tagName === 'LABEL'
         ? sel.previousElementSibling
         : null);
 
-    // Text robust auslesen (egal ob selectedIndex, selectedOptions, value)
-    const txt =
-      (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) ||
-      (sel.options && sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].text) ||
-      sel.value || '';
+    // 1) Bevorzugt den beim Klonen gespeicherten Text
+    let txt = (sel.getAttribute('data-selected-text') || '').trim();
 
-    const cleanLabel = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich').replace(/:\s*$/, '').trim();
-    const cleanValue = String(txt).trim();
-
-    if (cleanValue) {
-      // Zeile direkt an der Stelle des Selects einfügen
-      addRow(cleanLabel, cleanValue, sel);
+    // 2) Falls leer, direkt aus dem DOM lesen
+    if (!txt) {
+      const checked = sel.querySelector('option:checked');
+      txt = (checked?.textContent || checked?.innerText || '').trim();
     }
 
-    // Original-Elemente entfernen, damit nichts mehr „überstempelt“
+    // 3) Letzter Fallback: value → „Ja/Nein“ mappen
+    if (!txt) {
+      const v = (sel.value || '').toLowerCase();
+      if (v === 'ja')   txt = 'Ja';
+      if (v === 'nein') txt = 'Nein';
+    }
+
+    const cleanLabel = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
+      .replace(/:\s*$/, '').trim();
+
+    if (txt) addRow(cleanLabel, txt, sel);   // Zeile an Position des Selects einfügen
     labelEl?.remove();
     sel.remove();
     processedIds.add('reinigung_erforderlich');
   }
 }
+
 
 
   // ===== 2) Generisch für alle restlichen Felder =====
@@ -1340,13 +1345,21 @@ doc.close();
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
 
-  // Select-Werte übernehmen
-  clone.querySelectorAll('select').forEach(sel => {
-    const orig = src.querySelector('#' + sel.id);
-    if (!orig) return;
-    sel.value = orig.value;
-    Array.from(sel.options).forEach(o => { o.selected = (o.value === orig.value); });
-  });
+// Select-Werte übernehmen + ausgewählten Text zwischenspeichern
+clone.querySelectorAll('select').forEach(sel => {
+  const orig = src.querySelector('#' + sel.id);
+  if (!orig) return;
+
+  sel.value = orig.value;
+  Array.from(sel.options).forEach(o => { o.selected = (o.value === orig.value); });
+
+  // NEU: den sichtbaren Text sichern (falls selectedIndex im Klon mal zickt)
+  const checked = sel.querySelector('option:checked');
+  sel.setAttribute('data-selected-text',
+    (checked?.textContent || checked?.innerText || sel.value || '').trim()
+  );
+});
+
 
   // Canvas -> IMG mit gesicherter DataURL
   clone.querySelectorAll('canvas').forEach(c => {
