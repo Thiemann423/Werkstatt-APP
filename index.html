@@ -952,8 +952,11 @@ async function resolveShareLinkToFolder(){
     TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
     TARGET_META_ITEM_ID   = cache.metaItemId   || null;
 
-    // ⚠️ Nur sofort zurück, wenn BEIDE Unterordner-IDs vorhanden sind
-    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) return;
+    // Nur sofort raus, wenn BEIDE IDs vorhanden
+    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID){
+      console.info("[resolve] IDs aus Cache:", {TARGET_DRAFTS_ITEM_ID, TARGET_META_ITEM_ID});
+      return;
+    }
   } else {
     // --- Share-Link → Drive & Ordner auflösen ---
     const encoded = _b64Url(SHARE_URL);
@@ -973,16 +976,22 @@ async function resolveShareLinkToFolder(){
     TARGET.parentItemId = folderItemId;
   }
 
-  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
-  const listUrl =
-    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-    `/children?$select=id,name,folder`;
-  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
-  const children = (await listRes.json()).value || [];
+  // Helper: Kinder holen (große Page Size)
+  async function listChildren(){
+    const url =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+      `/children?$select=id,name,folder&$top=2000`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) throw new Error(`children list failed: ${r.status}`);
+    const data = await r.json();
+    return data.value || [];
+  }
 
-  // Entwürfe
-  let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+  // 1) vorhandene Kinder laden
+  let children = await listChildren();
+
+  // Entwürfe ermitteln/erstellen
+  let drafts = children.find(x => x.folder && x.name === DRAFTS_FOLDER_NAME);
   if (!drafts){
     const createDrafts = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
@@ -992,12 +1001,14 @@ async function resolveShareLinkToFolder(){
         body: JSON.stringify({ name: DRAFTS_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
       }
     );
-    if (createDrafts.ok) drafts = await createDrafts.json();
+    // egal ob 201 oder 409: danach nochmal listen
+    children = await listChildren();
+    drafts = children.find(x => x.folder && x.name === DRAFTS_FOLDER_NAME) || drafts;
   }
   TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
 
-  // Meta
-  let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
+  // Meta ermitteln/erstellen
+  let meta = children.find(x => x.folder && x.name === META_FOLDER_NAME);
   if (!meta){
     const createMeta = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
@@ -1007,11 +1018,20 @@ async function resolveShareLinkToFolder(){
         body: JSON.stringify({ name: META_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior":"ignore" })
       }
     );
-    if (createMeta.ok) meta = await createMeta.json();
+    // egal ob 201 oder 409: danach nochmal listen
+    children = await listChildren();
+    meta = children.find(x => x.folder && x.name === META_FOLDER_NAME) || meta;
   }
   TARGET_META_ITEM_ID = meta?.id || null;
 
-  // --- Cache schreiben (inkl. IDs der Unterordner) ---
+  console.info("[resolve] Ergebnis:", {
+    driveId: TARGET.driveId,
+    parentItemId: TARGET.parentItemId,
+    draftsId: TARGET_DRAFTS_ITEM_ID,
+    metaId: TARGET_META_ITEM_ID
+  });
+
+  // Cache aktualisieren
   localStorage.setItem("TARGET_CACHE", JSON.stringify({
     shareUrl:      SHARE_URL,
     driveId:       TARGET.driveId,
@@ -1020,6 +1040,7 @@ async function resolveShareLinkToFolder(){
     metaItemId:    TARGET_META_ITEM_ID
   }));
 }
+
 
 
 
