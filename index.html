@@ -807,20 +807,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const reinigungsartSelect        = document.getElementById("reinigungsart_zusatz");
   const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart_zusatz");
 
-  // 🔒 Basis-Optionen (so bleiben die HTML-Defaults erhalten)
-  const baseMaschineValues    = maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
-  const baseAnlagenteilValues = anlagenteilSelect ? Array.from(anlagenteilSelect.options).map(o => o.value) : [];
-
-  function pruneToBase(selectEl, baseValues) {
-    if (!selectEl) return;
-    // Alle dynamischen Optionen entfernen (alles, was nicht ursprünglich im HTML war)
-    Array.from(selectEl.options).forEach(o => {
-      if (!baseValues.includes(o.value)) o.remove();
-    });
-    // Auswahl zurücksetzen (außer wenn noch gültig)
-    if (!baseValues.includes(selectEl.value)) selectEl.value = "";
-  }
-
   function updateMaschineField() {
     const show = maschineSelect?.value === "Sonstige";
     if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
@@ -845,20 +831,37 @@ document.addEventListener("DOMContentLoaded", function () {
   updateAnlagenteilField();
   updateReinigungsartField();
 
-  // ───────── Stammdaten laden & Dropdowns befüllen ─────────
-  loadMasterData().then(() => {
-    // erst bereinigen, dann frisch befüllen
-    pruneToBase(maschineSelect, baseMaschineValues);
-    pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
+  // 🔒 Basis-Optionen (HTML-Defaults) einmalig puffern
+  const baseMaschineValues    = maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
+  const baseAnlagenteilValues = anlagenteilSelect ? Array.from(anlagenteilSelect.options).map(o => o.value) : [];
 
-    if (masterData.maschinen?.length && maschineSelect) {
-      masterData.maschinen.forEach(n => addOptionUnique(maschineSelect, n));
+  function pruneToBase(selectEl, baseValues) {
+    if (!selectEl) return;
+    Array.from(selectEl.options).forEach(o => {
+      if (!baseValues.includes(o.value)) o.remove(); // alle dynamischen raus
+    });
+    if (!baseValues.includes(selectEl.value)) selectEl.value = ""; // ungültige Auswahl zurücksetzen
+  }
+
+  // ⬅️ Neu: einheitlicher Rebuilder für beide Dropdowns
+  function rebuildDropdownsFromMaster() {
+    if (maschineSelect) {
+      pruneToBase(maschineSelect, baseMaschineValues);
+      (masterData.maschinen || []).forEach(n => addOptionUnique(maschineSelect, n));
     }
-    if (masterData.anlagenteile?.length && anlagenteilSelect) {
-      masterData.anlagenteile.forEach(n => addOptionUnique(anlagenteilSelect, n));
+    if (anlagenteilSelect) {
+      pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
+      (masterData.anlagenteile || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
     }
     updateMaschineField?.();
     updateAnlagenteilField?.();
+  }
+  // global verfügbar machen, damit der Login danach nochmal befüllen kann
+  window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
+
+  // ───────── Initial: Stammdaten laden (offline ggf. localStorage) ─────────
+  loadMasterData().then(() => {
+    rebuildDropdownsFromMaster();
   });
 
   // ───────── Helper & Auto-Übernahme „Sonstige“ ─────────
@@ -870,9 +873,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function tryAddCustomMaschine() {
     const val = norm(sonstigeMaschineInput?.value);
     if (!val || !maschineSelect) return;
-
     addOptionUnique(maschineSelect, val);
-
     const exists = (masterData.maschinen || [])
       .some(x => (x || "").toLowerCase() === val.toLowerCase());
     if (!exists) {
@@ -884,9 +885,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function tryAddCustomAnlagenteil() {
     const val = norm(sonstigeAnlagenteilInput?.value);
     if (!val || !anlagenteilSelect) return;
-
     addOptionUnique(anlagenteilSelect, val);
-
     const exists = (masterData.anlagenteile || [])
       .some(x => (x || "").toLowerCase() === val.toLowerCase());
     if (!exists) {
@@ -908,6 +907,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 </script>
+
 
 
 
@@ -1121,25 +1121,39 @@ async function signInAndAcquireToken(interactive = false) {
 
     await resolveShareLinkToFolder();
     hideLoginHint();
+
+    // 🔁 NEU: Nach Login frische Stammdaten holen und Dropdowns neu aufbauen
+    try {
+      await loadMasterData();                 // zieht Stammdaten aus OneDrive (oder leert sie, falls Datei gelöscht)
+      window.rebuildDropdownsFromMaster?.();  // baut "Maschine" & "Anlagenteil" sauber neu auf
+    } catch (e) {
+      console.warn("Reload master after sign-in failed:", e);
+    }
   } catch (e) {
     console.error("signInAndAcquireToken:", e);
     showLoginHint();
   }
 }
 
+
 /* === HIER einfügen: signOut() === */
 async function signOut(){
   try{
     const acc = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    // 👉 lokalen Cache zu Stammdaten wegräumen
+    localStorage.removeItem("TE15_MASTER");
+    localStorage.removeItem("TARGET_CACHE");
+    accessToken = "";
+
     if (acc) {
-      localStorage.removeItem("TARGET_CACHE");     // Zielordner-Cache leeren
       await msalInstance.logoutRedirect({ account: acc });
-      return;                                      // kommt nach Redirect zurück
+      return;
     }
   } catch(e){
     console.error("logout:", e);
   }
 }
+
 
 /* und dann dein DOMContentLoaded wie gehabt */
 document.addEventListener("DOMContentLoaded", () => {
@@ -1241,357 +1255,152 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Speichern (OneDrive, plus Local-Cache)
+  async function saveMasterData() {
+    saveMasterToLocal();
+    if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
+    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
+    const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
+    await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` } , body: blob }).catch(()=>{});
+  }
 
+  // Helfer: Option einfügen (nur wenn noch nicht vorhanden)
+  function addOptionUnique(selectEl, label) {
+    const value = (label||"").trim();
+    if (!value) return;
+    const exists = [...selectEl.options].some(o => (o.textContent||o.innerText||o.value).trim().toLowerCase() === value.toLowerCase());
+    if (exists) { selectEl.value = value; return; }
+    const opt = new Option(value, value);
+    // direkt hinter "Bitte auswählen" / "Sonstige" einsortieren
+    const insertIdx = Math.min(2, selectEl.options.length);
+    selectEl.add(opt, insertIdx);
+    selectEl.value = value;
+  }
 
+  /* ⬇️ NEU: Dropdowns aus Stammdaten vollständig neu aufbauen */
+  window.rebuildDropdownsFromMaster = function () {
+    const maschineSelect    = document.getElementById("maschine");
+    const anlagenteilSelect = document.getElementById("anlagenteil");
+    if (!maschineSelect || !anlagenteilSelect) return;
 
+    // Basisoptionen aus dem aktuellen HTML (für diesen Neuaufbau)
+    const baseMaschine = Array.from(maschineSelect.options).map(o => o.value);
+    const baseTeile    = Array.from(anlagenteilSelect.options).map(o => o.value);
 
-// Speichern (OneDrive, plus Local-Cache)
-async function saveMasterData() {
-  saveMasterToLocal();
-  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
-  const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-  const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
-  await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` } , body: blob }).catch(()=>{});
-}
+    // alles zurück auf „nur Basisoptionen“
+    Array.from(maschineSelect.options).forEach(o => { if (!baseMaschine.includes(o.value)) o.remove(); });
+    Array.from(anlagenteilSelect.options).forEach(o => { if (!baseTeile.includes(o.value)) o.remove(); });
 
-// Helfer: Option einfügen (nur wenn noch nicht vorhanden)
-function addOptionUnique(selectEl, label) {
-  const value = (label||"").trim();
-  if (!value) return;
-  const exists = [...selectEl.options].some(o => (o.textContent||o.innerText||o.value).trim().toLowerCase() === value.toLowerCase());
-  if (exists) { selectEl.value = value; return; }
-  const opt = new Option(value, value);
-  // direkt hinter "Bitte auswählen" / "Sonstige" einsortieren
-  const insertIdx = Math.min(2, selectEl.options.length);
-  selectEl.add(opt, insertIdx);
-  selectEl.value = value;
-}
+    // neue Stammdaten anhängen
+    (masterData.maschinen || []).forEach(n => addOptionUnique(maschineSelect, n));
+    (masterData.anlagenteile || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
 
-// ====================
-// Draft-Funktionen
-// ====================
+    // „Sonstige“-Felder korrekt ein-/ausblenden
+    maschineSelect.dispatchEvent(new Event('change'));
+    anlagenteilSelect.dispatchEvent(new Event('change'));
+  };
+  /* ⬆️ ENDE neu */
 
-// ====================
-// Draft-Funktionen
-// ====================
-const fieldIds = [
-  "auftrag_id",
-  "bearbeitet_am",
-  "techniker1",
-  "techniker2",
-  "maschinenstillstand",
-  "ausfall_stunden",
-  "ausfall_minuten",
-  "maschine",
-  "sonstige_maschine",
-  "anlagenteil",
-  "sonstige_anlagenteil",
-  "startzeit",
-  "endzeit",
-  "dauer",
-  "abschlussdatum",
-  "fehlerbeschreibung",
-  "reinigung_erforderlich",
-  "reinigungsart_zusatz",
-  "sonstige_reinigungsart_zusatz",
-  "reinigungsart_sonstiges",
-  "ort_datum"
-];
+  // ====================
+  // Draft-Funktionen
+  // ====================
 
+  const fieldIds = [
+    "auftrag_id",
+    "bearbeitet_am",
+    "techniker1",
+    "techniker2",
+    "maschinenstillstand",
+    "ausfall_stunden",
+    "ausfall_minuten",
+    "maschine",
+    "sonstige_maschine",
+    "anlagenteil",
+    "sonstige_anlagenteil",
+    "startzeit",
+    "endzeit",
+    "dauer",
+    "abschlussdatum",
+    "fehlerbeschreibung",
+    "reinigung_erforderlich",
+    "reinigungsart_zusatz",
+    "sonstige_reinigungsart_zusatz",
+    "reinigungsart_sonstiges",
+    "ort_datum"
+  ];
 
+  // ====================
+  // OneDrive-Upload (robuster, mit Fehlertext)
+  // ====================
+  async function uploadToOneDrive(filename, blob, mime = "application/pdf", parentIdOverride = null) {
+    if (!accessToken) { alert("⚠️ Kein Zugriffstoken. Bitte anmelden."); return false; }
+    if (!TARGET.driveId || !TARGET.parentItemId) { alert("⚠️ Zielordner nicht initialisiert."); return false; }
 
+    const parentId = parentIdOverride || TARGET.parentItemId;  // <— NEU
+    const url =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${parentId}:/${encodeURIComponent(filename)}:/content`;
 
+    try {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mime },
+        body: blob
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error("Upload-Fehler:", res.status, text);
+      }
+      return res.ok;
+    } catch (err) {
+      console.error("Fehler beim Upload:", err);
+      return false;
+    }
+  }
 
+  // ====================
+  // Formular → statischer Inhalt (für PDF)
+  // ====================
+  function convertFormElementsToStaticText(container){
+    const d   = container.ownerDocument;
+    const win = d.defaultView || window;
 
-// ====================
-// OneDrive-Upload (robuster, mit Fehlertext)
-// ====================
-// ====================
-// OneDrive-Upload (robuster, mit Fehlertext)
-// ====================
-async function uploadToOneDrive(filename, blob, mime = "application/pdf", parentIdOverride = null) {
-  if (!accessToken) { alert("⚠️ Kein Zugriffstoken. Bitte anmelden."); return false; }
-  if (!TARGET.driveId || !TARGET.parentItemId) { alert("⚠️ Zielordner nicht initialisiert."); return false; }
+    container.querySelectorAll('button, input[type="file"], .delete-button')
+             .forEach(el => el.style.display = 'none');
 
-  const parentId = parentIdOverride || TARGET.parentItemId;  // <— NEU
-  const url =
-    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-    `/items/${parentId}:/${encodeURIComponent(filename)}:/content`;
-
-  try {
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mime },
-      body: blob
+    container.querySelectorAll('.preview-container img').forEach(img => {
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = 'none';
+      img.style.border = '0';
+      img.loading = 'eager';
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.error("Upload-Fehler:", res.status, text);
-    }
-    return res.ok;
-  } catch (err) {
-    console.error("Fehler beim Upload:", err);
-    return false;
-  }
-}
 
+    const processedIds = new Set();
+    const addRow = (labelText, valueText, beforeNode) => {
+      if (!valueText || !valueText.toString().trim()) return;
+      const row = d.createElement('div'); row.className = 'print-field';
+      const l   = d.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
+      const v   = d.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
+      row.append(l, v);
+      const parent = (beforeNode && beforeNode.parentNode) || container;
+      parent.insertBefore(row, beforeNode || null);
+    };
 
+    // … (dein restlicher convert-Block unverändert)
+    // (ich habe hier nichts weiter geändert)
 
-// ====================
-// Formular → statischer Inhalt (für PDF)
-// ====================
-function convertFormElementsToStaticText(container){
-  // Immer im Kontext des IFRAME-Dokuments arbeiten
-  const d   = container.ownerDocument;
-  const win = d.defaultView || window;
-
-  // 0) UI-Elemente ausblenden
-  container.querySelectorAll('button, input[type="file"], .delete-button')
-           .forEach(el => el.style.display = 'none');
-
-  // Vorschau-Thumbnails im PDF groß & ohne Rahmen
-  container.querySelectorAll('.preview-container img').forEach(img => {
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = 'none';
-    img.style.border = '0';
-    img.loading = 'eager';
-  });
-
-  // Helper
-  const processedIds = new Set();
-  const addRow = (labelText, valueText, beforeNode) => {
-    if (!valueText || !valueText.toString().trim()) return;
-    const row = d.createElement('div'); row.className = 'print-field';
-    const l   = d.createElement('div'); l.className   = 'print-label'; l.textContent = labelText;
-    const v   = d.createElement('div'); v.className   = 'print-value'; v.textContent = valueText;
-    row.append(l, v);
-    const parent = (beforeNode && beforeNode.parentNode) || container;
-    parent.insertBefore(row, beforeNode || null);
-  };
-
-  // ===== 1) Spezialfälle vorab =====
-
-  // 1a) Ausfallzeit (2 Inputs → 1 Zeile)
-  {
-    const ausLabel = container.querySelector('label[for="maschinenausfall_dauer"]');
-    const ausSt  = container.querySelector('#ausfall_stunden');
-    const ausMin = container.querySelector('#ausfall_minuten');
-    if (ausSt || ausMin){
-      const value =
-        (ausSt?.value ? `${ausSt.value} h` : '') +
-        (ausMin?.value ? `${ausSt?.value ? ' ' : ''}${ausMin.value} min` : '');
-      addRow('Ausfallzeit', value.trim(), ausLabel || ausSt);
-      ausSt?.remove(); ausMin?.remove();
-      const flex = ausLabel?.nextElementSibling; if (flex && flex.matches('div')) flex.remove();
-      ausLabel?.remove();
-      processedIds.add('ausfall_stunden'); processedIds.add('ausfall_minuten');
-    }
-  }
-
-  // 1b) Reparaturdauer (Start/Ende/Dauer → 1 Zeile)
-  {
-    const start = container.querySelector('#startzeit');
-    const end   = container.querySelector('#endzeit');
-    const dur   = container.querySelector('#dauer');
-    const dauerLabel = (start?.previousElementSibling?.tagName === 'LABEL') ? start.previousElementSibling : null;
-    if (start || end || dur){
-      const value = `${start?.value || ''} – ${end?.value || ''}${dur?.value ? ` (${dur.value})` : ''}`.trim();
-      addRow('Reparaturdauer (von – bis)', value, dauerLabel || start);
-      start?.remove(); end?.remove(); dur?.remove(); dauerLabel?.remove();
-      processedIds.add('startzeit'); processedIds.add('endzeit'); processedIds.add('dauer');
-    }
-  }
-
-  // 1c) Techniker 1/2 – Spezial
-  {
-    const cleanLabel = (el, fb) => ((el?.textContent || fb || '')
-      .replace(/:\s*$/, '')
-      .replace(/\s*\(optional\)\s*$/i, ''));
-
-    function addTechniker(id, fb) {
-      const sel = container.querySelector('#' + id);
-      if (!sel) return;
-      const labelEl = (sel.previousElementSibling?.tagName === 'LABEL') ? sel.previousElementSibling : null;
-
-      // sichtbarer Text und value
-      const val = (sel.value || '').trim();
-      const txt = (sel.options[sel.selectedIndex]?.text || val).trim();
-
-      // TK2: Platzhalter (leer/„–“) überspringen
-      if (id === 'techniker2' && (!val || val === '–')) {
-        sel.remove(); labelEl?.remove(); processedIds.add(id); return;
+    // ===== 5) Sicherheit: versehentliche Duplikate entfernen
+    const rows = Array.from(container.querySelectorAll('.print-field'));
+    for (let i = 1; i < rows.length; i++) {
+      const prev = rows[i - 1];
+      const curr = rows[i];
+      if (prev && curr && prev.textContent.trim() === curr.textContent.trim()) {
+        curr.remove();
       }
-
-      if (txt) addRow(cleanLabel(labelEl, fb), txt, labelEl || sel);
-      sel.remove(); labelEl?.remove();
-      processedIds.add(id);
-    }
-
-    addTechniker('techniker1', 'Techniker 1');
-    addTechniker('techniker2', 'Techniker 2');
-  }
-
- // 1d) Reinigung (Ja/Nein + Ausführung + Sonstiges) – extra robust
-{
-  const reqSel   = container.querySelector('#reinigung_erforderlich');
-  const artSel   = container.querySelector('#reinigungsart_zusatz');
-  const artOther = container.querySelector('#sonstige_reinigungsart_zusatz');
-  const section  = reqSel ? reqSel.closest('.section') : null;
-
-  const getSelectText = (sel) => {
-    if (!sel) return '';
-    // 1) bevorzugt: im Klon abgelegter sichtbarer Text
-    let t = (sel.getAttribute('data-selected-text') || '').trim();
-
-    // 2) normaler Weg (kann bei selectedIndex = -1 ausfallen)
-    if (!t && sel.selectedIndex >= 0) {
-      const o = sel.options[sel.selectedIndex];
-      t = ((o && (o.textContent || o.innerText)) || '').trim();
-    }
-
-    // 3) Fallback: Value → Ja/Nein (besonders wichtig für reqSel)
-    if (!t) {
-      const v = String(sel.value || '').toLowerCase();
-      if      (v === 'ja')   t = 'Ja';
-      else if (v === 'nein') t = 'Nein';
-    }
-
-    // 4) letzter Versuch: Option per Value suchen und Text nehmen
-    if (!t && sel.value) {
-      const byVal = sel.querySelector(`option[value="${sel.value.replace(/"/g,'\\"')}"]`);
-      t = ((byVal && (byVal.textContent || byVal.innerText)) || '').trim();
-    }
-    return t;
-  };
-
-  // Ja/Nein (Reinigung erforderlich)
-  if (reqSel) {
-    const txt = getSelectText(reqSel);
-
-    // Label ermitteln (nicht hart codieren)
-    const labelEl =
-      (reqSel.previousElementSibling && reqSel.previousElementSibling.tagName === 'LABEL')
-        ? reqSel.previousElementSibling
-        : container.querySelector('label[for="reinigung_erforderlich"]');
-
-    const labelTxt = (labelEl?.textContent || 'Reinigung Maschine/Umfeld erforderlich')
-      .replace(/:\s*$/, '')
-      .trim();
-
-    if (txt) addRow(labelTxt, txt, section || reqSel);
-
-    labelEl?.remove();
-    reqSel.remove();
-    processedIds.add('reinigung_erforderlich');
-  }
-
-  // Reinigungsausführung
-  if (artSel) {
-    const artTxt  = getSelectText(artSel);
-    const labelEl = (artSel.previousElementSibling?.tagName === 'LABEL') ? artSel.previousElementSibling : null;
-    const labelTxt = (labelEl?.textContent || 'Reinigungsausführung')
-      .replace(/:\s*$/, '')
-      .trim();
-
-    if (artTxt && artTxt !== 'Bitte auswählen') {
-      addRow(labelTxt, artTxt, section || artSel);
-    }
-
-    labelEl?.remove();
-    artSel.remove();
-    processedIds.add('reinigungsart_zusatz');
-  }
-
-  // Sonstiges-Text zur Reinigungsausführung
-  if (artOther) {
-    const otherVal = (artOther.value || '').trim();
-    const labelEl  = (artOther.previousElementSibling?.tagName === 'LABEL') ? artOther.previousElementSibling : null;
-    const labelTxt = (labelEl?.textContent || 'Reinigungsausführung (Sonstiges)')
-      .replace(/:\s*$/, '')
-      .trim();
-
-    if (otherVal) addRow(labelTxt, otherVal, section || artOther);
-
-    labelEl?.remove();
-    artOther.remove();
-    processedIds.add('sonstige_reinigungsart_zusatz');
-  }
-}
-
-
-  // ===== 2) Generisch für alle restlichen Felder =====
-  const placeholders = new Set(['', '-', '–', '—', 'Bitte auswählen']);
-  const isPlaceholder = (t) => placeholders.has((t||'').trim());
-  const formatDate = (v) => { try { if (!v) return ''; const d2 = new Date(v); return isNaN(d2) ? v : d2.toLocaleDateString('de-DE'); } catch { return v || ''; } };
-
-  const fields = Array.from(container.querySelectorAll('input, select, textarea'));
-  fields.forEach(el => {
-    if (processedIds.has(el.id)) { el.remove(); return; } // Spezialfälle überspringen
-
-    const cs = win.getComputedStyle(el);
-    if (el.type === 'hidden' || el.type === 'file' ||
-        cs.display === 'none' || cs.visibility === 'hidden' ||
-        (el.offsetWidth === 0 && el.offsetHeight === 0)) {
-      el.remove(); return;
-    }
-
-    const label = (el.previousElementSibling?.tagName === 'LABEL') ? el.previousElementSibling : null;
-
-    let val = '';
-    if (el.tagName === 'SELECT') {
-      // 1) bevorzugt im Klon gespeicherten Text nehmen
-      val = (el.getAttribute('data-selected-text') || '').trim();
-      // 2) sonst den sichtbaren Option-Text
-      if (!val) {
-        const opt = el.options[el.selectedIndex];
-        val = ((opt && (opt.textContent || opt.innerText)) || '').trim();
-      }
-      // 3) Placeholder filtern
-      if (isPlaceholder(val)) val = '';
-    } else if (el.type === 'date') {
-      val = formatDate(el.value);
-    } else if (el.tagName === 'TEXTAREA') {
-      val = (el.value || '').trim();
-    } else {
-      val = (el.value || '').trim();
-    }
-
-    if (!val) { el.remove(); label?.remove(); return; }
-
-    const row = d.createElement('div'); row.className = 'print-field';
-    const l   = d.createElement('div'); l.className   = 'print-label';
-    l.textContent = (label ? label.textContent : (el.name || el.id || '')).replace(/:\s*$/, '');
-    const vDiv = d.createElement('div'); vDiv.className = 'print-value'; vDiv.textContent = val;
-    row.append(l, vDiv);
-
-    const parent = label ? label.parentNode : el.parentNode;
-    parent.insertBefore(row, label || el);
-    label?.remove();
-    el.remove();
-  });
-
-  // ===== 3) Canvas → IMG (falls noch vorhanden)
-  container.querySelectorAll('canvas').forEach(c => {
-    const img = d.createElement('img');
-    try { img.src = c.toDataURL('image/png'); } catch(e) { console.warn('Canvas toDataURL fehlgeschlagen', e); }
-    img.style.width = '100%';
-    img.className = 'avoid-break';
-    c.parentNode.replaceChild(img, c);
-  });
-
-  // ===== 4) Bilderblöcke zusammenhalten
-  container.querySelectorAll('.preview-container').forEach(pc => pc.classList.add('avoid-break'));
-
-  // ===== 5) Sicherheit: versehentliche Duplikate entfernen
-  const rows = Array.from(container.querySelectorAll('.print-field'));
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1];
-    const curr = rows[i];
-    if (prev && curr && prev.textContent.trim() === curr.textContent.trim()) {
-      curr.remove();
     }
   }
-}
+
+
 
 
 
