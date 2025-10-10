@@ -795,17 +795,31 @@ document.addEventListener("DOMContentLoaded", function () {
   startTimeInput?.addEventListener("input", calculateDuration);
   endTimeInput?.addEventListener("input", calculateDuration);
 
-  // 🟢 "Sonstige"-Felder anzeigen
-  const maschineSelect            = document.getElementById("maschine");
-  const sonstigeMaschineInput     = document.getElementById("sonstige_maschine");
-  const labelSonstigeMaschine     = document.getElementById("label-sonstige-maschine");
+  // 🟢 "Sonstige"-Felder & Selects
+  const maschineSelect             = document.getElementById("maschine");
+  const sonstigeMaschineInput      = document.getElementById("sonstige_maschine");
+  const labelSonstigeMaschine      = document.getElementById("label-sonstige-maschine");
 
-  const anlagenteilSelect         = document.getElementById("anlagenteil");
-  const sonstigeAnlagenteilInput  = document.getElementById("sonstige_anlagenteil");
-  const labelSonstigeAnlagenteil  = document.getElementById("label-sonstige-anlagenteil");
+  const anlagenteilSelect          = document.getElementById("anlagenteil");
+  const sonstigeAnlagenteilInput   = document.getElementById("sonstige_anlagenteil");
+  const labelSonstigeAnlagenteil   = document.getElementById("label-sonstige-anlagenteil");
 
-  const reinigungsartSelect       = document.getElementById("reinigungsart_zusatz");
-  const sonstigeReinigungsartInput= document.getElementById("sonstige_reinigungsart_zusatz");
+  const reinigungsartSelect        = document.getElementById("reinigungsart_zusatz");
+  const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart_zusatz");
+
+  // 🔒 Basis-Optionen (so bleiben die HTML-Defaults erhalten)
+  const baseMaschineValues    = maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
+  const baseAnlagenteilValues = anlagenteilSelect ? Array.from(anlagenteilSelect.options).map(o => o.value) : [];
+
+  function pruneToBase(selectEl, baseValues) {
+    if (!selectEl) return;
+    // Alle dynamischen Optionen entfernen (alles, was nicht ursprünglich im HTML war)
+    Array.from(selectEl.options).forEach(o => {
+      if (!baseValues.includes(o.value)) o.remove();
+    });
+    // Auswahl zurücksetzen (außer wenn noch gültig)
+    if (!baseValues.includes(selectEl.value)) selectEl.value = "";
+  }
 
   function updateMaschineField() {
     const show = maschineSelect?.value === "Sonstige";
@@ -833,6 +847,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ───────── Stammdaten laden & Dropdowns befüllen ─────────
   loadMasterData().then(() => {
+    // erst bereinigen, dann frisch befüllen
+    pruneToBase(maschineSelect, baseMaschineValues);
+    pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
+
     if (masterData.maschinen?.length && maschineSelect) {
       masterData.maschinen.forEach(n => addOptionUnique(maschineSelect, n));
     }
@@ -856,7 +874,7 @@ document.addEventListener("DOMContentLoaded", function () {
     addOptionUnique(maschineSelect, val);
 
     const exists = (masterData.maschinen || [])
-      .some(x => x.toLowerCase() === val.toLowerCase());
+      .some(x => (x || "").toLowerCase() === val.toLowerCase());
     if (!exists) {
       (masterData.maschinen ||= []).push(val);
       saveMasterData();
@@ -870,7 +888,7 @@ document.addEventListener("DOMContentLoaded", function () {
     addOptionUnique(anlagenteilSelect, val);
 
     const exists = (masterData.anlagenteile || [])
-      .some(x => x.toLowerCase() === val.toLowerCase());
+      .some(x => (x || "").toLowerCase() === val.toLowerCase());
     if (!exists) {
       (masterData.anlagenteile ||= []).push(val);
       saveMasterData();
@@ -890,6 +908,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 </script>
+
 
 
 
@@ -1143,30 +1162,86 @@ document.addEventListener("DOMContentLoaded", () => {
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
   // --- Stammdaten (Maschinen & Anlagenteile) --- //
-const MASTER_FILE = "Stammdaten-Reparatur.json";
-let masterData = { version: 1, maschinen: [], anlagenteile: [] };
+  const MASTER_FILE = "Stammdaten-Reparatur.json";
+  let masterData = { version: 1, maschinen: [], anlagenteile: [] };
 
-// Laden (OneDrive -> Fallback localStorage -> Defaults)
-async function loadMasterData() {
-  try {
-    if (!accessToken) return loadMasterFromLocal();
-    await resolveShareLinkToFolder();
-    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children?$select=id,name`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
-    const data = await res.json();
-    const item = (data.value||[]).find(x => x.name === MASTER_FILE);
-    if (!item) return loadMasterFromLocal();
-
-    const fileRes = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
-      { headers: { Authorization: `Bearer ${accessToken}` }}
-    );
-    masterData = await fileRes.json();
-    saveMasterToLocal();                     // Cache
-  } catch {
-    loadMasterFromLocal();
+  // Local-Cache laden
+  function loadMasterFromLocal() {
+    try {
+      const s = localStorage.getItem("TE15_MASTER");
+      if (s) masterData = JSON.parse(s);
+    } catch {}
   }
-}
+
+  // Local-Cache speichern
+  function saveMasterToLocal() {
+    try {
+      localStorage.setItem("TE15_MASTER", JSON.stringify(masterData));
+    } catch {}
+  }
+
+  // Stammdaten bewusst leeren + Cache überschreiben
+  function setEmptyMaster() {
+    masterData = { version: 1, maschinen: [], anlagenteile: [] };
+    saveMasterToLocal();
+  }
+
+  // Laden (OneDrive -> bei fehlender Datei: leeren -> sonst Local-Fallback)
+  async function loadMasterData() {
+    try {
+      if (!accessToken) {                // nicht angemeldet -> nur local versuchen
+        loadMasterFromLocal();
+        return;
+      }
+
+      await resolveShareLinkToFolder();
+
+      // Prüfen, ob die Master-Datei existiert
+      const listUrl =
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+        `/children?$select=id,name`;
+      const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!listRes.ok) throw new Error("children list failed");
+      const list = await listRes.json();
+      const item = (list.value || []).find(x => x.name === MASTER_FILE);
+
+      // ❗ Datei existiert nicht -> Stammdaten leeren + Cache überschreiben
+      if (!item) {
+        setEmptyMaster();
+        return;
+      }
+
+      // Datei existiert -> Inhalt laden
+      const fileRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!fileRes.ok) {
+        // z. B. 404/403 -> lieber nicht alte Daten behalten
+        setEmptyMaster();
+        return;
+      }
+
+      // gültige JSON übernehmen + Cache aktualisieren
+      masterData = await fileRes.json();
+      if (!masterData || typeof masterData !== "object") {
+        setEmptyMaster();
+        return;
+      }
+      // Safety: fehlende Felder initialisieren
+      masterData.version ??= 1;
+      masterData.maschinen ??= [];
+      masterData.anlagenteile ??= [];
+
+      saveMasterToLocal();
+    } catch (e) {
+      // Netzwerk/Parsing-Fehler -> Local-Fallback (falls vorhanden)
+      loadMasterFromLocal();
+    }
+  }
+
+
 
 function loadMasterFromLocal() {
   try {
