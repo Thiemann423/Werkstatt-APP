@@ -796,29 +796,27 @@ document.addEventListener("DOMContentLoaded", function () {
   endTimeInput?.addEventListener("input", calculateDuration);
 
   // 🟢 "Sonstige"-Felder anzeigen
-  const maschineSelect               = document.getElementById("maschine");
-  const sonstigeMaschineInput        = document.getElementById("sonstige_maschine");
-  const labelSonstigeMaschine        = document.getElementById("label-sonstige-maschine");
+  const maschineSelect            = document.getElementById("maschine");
+  const sonstigeMaschineInput     = document.getElementById("sonstige_maschine");
+  const labelSonstigeMaschine     = document.getElementById("label-sonstige-maschine");
 
-  const anlagenteilSelect            = document.getElementById("anlagenteil");
-  const sonstigeAnlagenteilInput     = document.getElementById("sonstige_anlagenteil");
-  const labelSonstigeAnlagenteil     = document.getElementById("label-sonstige-anlagenteil");
+  const anlagenteilSelect         = document.getElementById("anlagenteil");
+  const sonstigeAnlagenteilInput  = document.getElementById("sonstige_anlagenteil");
+  const labelSonstigeAnlagenteil  = document.getElementById("label-sonstige-anlagenteil");
 
-  const reinigungsartSelect          = document.getElementById("reinigungsart_zusatz");
-  const sonstigeReinigungsartInput   = document.getElementById("sonstige_reinigungsart_zusatz");
+  const reinigungsartSelect       = document.getElementById("reinigungsart_zusatz");
+  const sonstigeReinigungsartInput= document.getElementById("sonstige_reinigungsart_zusatz");
 
   function updateMaschineField() {
     const show = maschineSelect?.value === "Sonstige";
     if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
     if (labelSonstigeMaschine)  labelSonstigeMaschine.style.display  = show ? "block" : "none";
   }
-
   function updateAnlagenteilField() {
     const show = anlagenteilSelect?.value === "Sonstige";
     if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
     if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
   }
-
   function updateReinigungsartField() {
     const show = reinigungsartSelect?.value === "Sonstiges";
     if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
@@ -832,6 +830,64 @@ document.addEventListener("DOMContentLoaded", function () {
   updateMaschineField();
   updateAnlagenteilField();
   updateReinigungsartField();
+
+  // ───────── Stammdaten laden & Dropdowns befüllen ─────────
+  loadMasterData().then(() => {
+    if (masterData.maschinen?.length && maschineSelect) {
+      masterData.maschinen.forEach(n => addOptionUnique(maschineSelect, n));
+    }
+    if (masterData.anlagenteile?.length && anlagenteilSelect) {
+      masterData.anlagenteile.forEach(n => addOptionUnique(anlagenteilSelect, n));
+    }
+    updateMaschineField?.();
+    updateAnlagenteilField?.();
+  });
+
+  // ───────── Helper & Auto-Übernahme „Sonstige“ ─────────
+  const norm = s => (s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^./, c => c.toUpperCase());
+
+  function tryAddCustomMaschine() {
+    const val = norm(sonstigeMaschineInput?.value);
+    if (!val || !maschineSelect) return;
+
+    addOptionUnique(maschineSelect, val);
+
+    const exists = (masterData.maschinen || [])
+      .some(x => x.toLowerCase() === val.toLowerCase());
+    if (!exists) {
+      (masterData.maschinen ||= []).push(val);
+      saveMasterData();
+    }
+  }
+
+  function tryAddCustomAnlagenteil() {
+    const val = norm(sonstigeAnlagenteilInput?.value);
+    if (!val || !anlagenteilSelect) return;
+
+    addOptionUnique(anlagenteilSelect, val);
+
+    const exists = (masterData.anlagenteile || [])
+      .some(x => x.toLowerCase() === val.toLowerCase());
+    if (!exists) {
+      (masterData.anlagenteile ||= []).push(val);
+      saveMasterData();
+    }
+  }
+
+  // Eingabe übernehmen bei Verlassen der Felder …
+  sonstigeMaschineInput?.addEventListener("blur", tryAddCustomMaschine);
+  sonstigeAnlagenteilInput?.addEventListener("blur", tryAddCustomAnlagenteil);
+
+  // … und wenn von „Sonstige“ weg gewechselt wird
+  maschineSelect?.addEventListener("change", () => {
+    if (maschineSelect.value !== "Sonstige") tryAddCustomMaschine();
+  });
+  anlagenteilSelect?.addEventListener("change", () => {
+    if (anlagenteilSelect.value !== "Sonstige") tryAddCustomAnlagenteil();
+  });
 });
 </script>
 
@@ -1086,6 +1142,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
+  // --- Stammdaten (Maschinen & Anlagenteile) --- //
+const MASTER_FILE = "Stammdaten-Reparatur.json";
+let masterData = { version: 1, maschinen: [], anlagenteile: [] };
+
+// Laden (OneDrive -> Fallback localStorage -> Defaults)
+async function loadMasterData() {
+  try {
+    if (!accessToken) return loadMasterFromLocal();
+    await resolveShareLinkToFolder();
+    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children?$select=id,name`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+    const data = await res.json();
+    const item = (data.value||[]).find(x => x.name === MASTER_FILE);
+    if (!item) return loadMasterFromLocal();
+
+    const fileRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+      { headers: { Authorization: `Bearer ${accessToken}` }}
+    );
+    masterData = await fileRes.json();
+    saveMasterToLocal();                     // Cache
+  } catch {
+    loadMasterFromLocal();
+  }
+}
+
+function loadMasterFromLocal() {
+  try {
+    const s = localStorage.getItem("TE15_MASTER");
+    if (s) masterData = JSON.parse(s);
+  } catch {}
+}
+
+function saveMasterToLocal() {
+  try { localStorage.setItem("TE15_MASTER", JSON.stringify(masterData)); } catch {}
+}
+
+// Speichern (OneDrive, plus Local-Cache)
+async function saveMasterData() {
+  saveMasterToLocal();
+  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
+  const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
+  const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
+  await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` } , body: blob }).catch(()=>{});
+}
+
+// Helfer: Option einfügen (nur wenn noch nicht vorhanden)
+function addOptionUnique(selectEl, label) {
+  const value = (label||"").trim();
+  if (!value) return;
+  const exists = [...selectEl.options].some(o => (o.textContent||o.innerText||o.value).trim().toLowerCase() === value.toLowerCase());
+  if (exists) { selectEl.value = value; return; }
+  const opt = new Option(value, value);
+  // direkt hinter "Bitte auswählen" / "Sonstige" einsortieren
+  const insertIdx = Math.min(2, selectEl.options.length);
+  selectEl.add(opt, insertIdx);
+  selectEl.value = value;
+}
+
 // ====================
 // Draft-Funktionen
 // ====================
