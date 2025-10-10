@@ -1243,16 +1243,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-function loadMasterFromLocal() {
-  try {
-    const s = localStorage.getItem("TE15_MASTER");
-    if (s) masterData = JSON.parse(s);
-  } catch {}
-}
 
-function saveMasterToLocal() {
-  try { localStorage.setItem("TE15_MASTER", JSON.stringify(masterData)); } catch {}
-}
 
 // Speichern (OneDrive, plus Local-Cache)
 async function saveMasterData() {
