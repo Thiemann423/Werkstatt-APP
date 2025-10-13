@@ -1105,12 +1105,17 @@ async function signInAndAcquireToken(interactive = false) {
   try {
     let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
+    // interaktiver Login nur wenn gefordert
     if (!account && interactive) {
       await msalInstance.loginRedirect({ scopes });
       return; // kommt nach Redirect zurück
     }
-    if (!account) { showLoginHint(); return; }
+    if (!account) {
+      showLoginHint();
+      return; // keine stille Anmeldung möglich
+    }
 
+    // Token (silent) holen – Fallback: Redirect
     try {
       const t = await msalInstance.acquireTokenSilent({ scopes, account });
       accessToken = t.accessToken;
@@ -1119,21 +1124,28 @@ async function signInAndAcquireToken(interactive = false) {
       return; // kommt nach Redirect zurück
     }
 
-    await resolveShareLinkToFolder();
+    // OneDrive-Zielordner bestimmen
+    try {
+      await resolveShareLinkToFolder();
+    } catch (e) {
+      console.warn("resolveShareLinkToFolder fehlgeschlagen:", e);
+    }
     hideLoginHint();
 
-    // 🔁 NEU: Nach Login frische Stammdaten holen und Dropdowns neu aufbauen
+    // 🔁 NEU: Nach Login Stammdaten laden & Dropdowns neu/sortiert aufbauen
     try {
-      await loadMasterData();                 // zieht Stammdaten aus OneDrive (oder leert sie, falls Datei gelöscht)
-      window.rebuildDropdownsFromMaster?.();  // baut "Maschine" & "Anlagenteil" sauber neu auf
+      await loadMasterData();                 // lädt OneDrive-Stammdaten oder lokalen Cache
+      window.rebuildDropdownsFromMaster?.();  // baut "Maschine" & "Anlagenteil" neu auf (alphabetisch)
     } catch (e) {
       console.warn("Reload master after sign-in failed:", e);
     }
+
   } catch (e) {
     console.error("signInAndAcquireToken:", e);
     showLoginHint();
   }
 }
+
 
 
 /* === HIER einfügen: signOut() === */
@@ -1154,13 +1166,26 @@ async function signOut(){
   }
 }
 
-
-/* und dann dein DOMContentLoaded wie gehabt */
-document.addEventListener("DOMContentLoaded", () => {
+/* DOMContentLoaded: erst lokal laden & bauen, dann (still) anmelden und ggf. neu bauen */
+document.addEventListener("DOMContentLoaded", async () => {
   const acc = msalInstance.getAllAccounts()[0];
   if (acc) msalInstance.setActiveAccount(acc);
-  signInAndAcquireToken(false);
+
+  // 1) Sofort lokale Stammdaten (Cache) laden und Listen bauen
+  await loadMasterData();
+  window.rebuildDropdownsFromMaster();
+
+  // 2) Versuch: stille Anmeldung (keine Redirects)
+  try {
+    await signInAndAcquireToken(false);
+    // 3) Nach erfolgreichem Login: OneDrive-Stammdaten laden und Listen neu bauen
+    await loadMasterData();
+    window.rebuildDropdownsFromMaster();
+  } catch (e) {
+    console.warn("Silent sign-in skipped:", e);
+  }
 });
+
 </script>
 
 
@@ -1256,50 +1281,100 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Speichern (OneDrive, plus Local-Cache)
-  async function saveMasterData() {
-    saveMasterToLocal();
-    if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
-    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-    const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
-    await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` } , body: blob }).catch(()=>{});
+// Speichern (OneDrive, plus Local-Cache)
+async function saveMasterData() {
+  saveMasterToLocal();
+  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
+
+  const url  = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
+  const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
+
+  try {
+    await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: blob
+    });
+  } catch (e) {
+    console.warn("saveMasterData() – Upload fehlgeschlagen:", e);
+  }
+}
+
+/* === Neu: Sortier-Helfer (deutsche Sortierung, numerisch) === */
+function sortSelectOptions(selectEl, stickyTopValues = ["", "Sonstige"]) {
+  if (!selectEl) return;
+  const collator = new Intl.Collator("de", { numeric: true, sensitivity: "base" });
+
+  const opts    = Array.from(selectEl.options);
+  const current = selectEl.value;
+
+  // Platzhalter / Sonstige oben lassen
+  const sticky = opts.filter(o => stickyTopValues.includes(o.value));
+  const rest   = opts.filter(o => !stickyTopValues.includes(o.value));
+
+  rest.sort((a, b) => collator.compare(
+    (a.textContent || a.innerText || a.value).trim(),
+    (b.textContent || b.innerText || b.value).trim()
+  ));
+
+  // Neu aufbauen
+  selectEl.options.length = 0;
+  sticky.forEach(o => selectEl.add(new Option(o.text, o.value)));
+  rest.forEach(o   => selectEl.add(new Option(o.text, o.value)));
+
+  // Auswahl erhalten
+  selectEl.value = current;
+}
+
+/* === Neu: Einfügen + immer sortieren (ersetzt deine addOptionUnique) === */
+function addOptionUnique(selectEl, label) {
+  const value = (label || "").trim();
+  if (!selectEl || !value) return;
+
+  // Duplikate (case-insensitive) vermeiden
+  const exists = [...selectEl.options].some(o =>
+    ((o.textContent || o.innerText || o.value).trim().toLowerCase() === value.toLowerCase())
+  );
+
+  if (!exists) {
+    selectEl.add(new Option(value, value)); // Position egal – wird gleich sortiert
   }
 
-  // Helfer: Option einfügen (nur wenn noch nicht vorhanden)
-  function addOptionUnique(selectEl, label) {
-    const value = (label||"").trim();
-    if (!value) return;
-    const exists = [...selectEl.options].some(o => (o.textContent||o.innerText||o.value).trim().toLowerCase() === value.toLowerCase());
-    if (exists) { selectEl.value = value; return; }
-    const opt = new Option(value, value);
-    // direkt hinter "Bitte auswählen" / "Sonstige" einsortieren
-    const insertIdx = Math.min(2, selectEl.options.length);
-    selectEl.add(opt, insertIdx);
-    selectEl.value = value;
-  }
+  // Alphabetisch sortieren; "" = „Bitte auswählen“, "Sonstige" bleibt oben
+  sortSelectOptions(selectEl, ["", "Sonstige"]);
 
-  /* ⬇️ NEU: Dropdowns aus Stammdaten vollständig neu aufbauen */
-  window.rebuildDropdownsFromMaster = function () {
-    const maschineSelect    = document.getElementById("maschine");
-    const anlagenteilSelect = document.getElementById("anlagenteil");
-    if (!maschineSelect || !anlagenteilSelect) return;
+  // Direkt auswählen
+  selectEl.value = value;
+}
 
-    // Basisoptionen aus dem aktuellen HTML (für diesen Neuaufbau)
-    const baseMaschine = Array.from(maschineSelect.options).map(o => o.value);
-    const baseTeile    = Array.from(anlagenteilSelect.options).map(o => o.value);
+/* ⬇️ NEU: Dropdowns aus Stammdaten vollständig neu aufbauen */
+window.rebuildDropdownsFromMaster = function () {
+  const maschineSelect    = document.getElementById("maschine");
+  const anlagenteilSelect = document.getElementById("anlagenteil");
+  if (!maschineSelect || !anlagenteilSelect) return;
 
-    // alles zurück auf „nur Basisoptionen“
-    Array.from(maschineSelect.options).forEach(o => { if (!baseMaschine.includes(o.value)) o.remove(); });
-    Array.from(anlagenteilSelect.options).forEach(o => { if (!baseTeile.includes(o.value)) o.remove(); });
+  // Basisoptionen (aus dem aktuellen HTML dieses Builds)
+  const baseMaschine = Array.from(maschineSelect.options).map(o => o.value);
+  const baseTeile    = Array.from(anlagenteilSelect.options).map(o => o.value);
 
-    // neue Stammdaten anhängen
-    (masterData.maschinen || []).forEach(n => addOptionUnique(maschineSelect, n));
-    (masterData.anlagenteile || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
+  // Alles zurück auf „nur Basisoptionen“
+  Array.from(maschineSelect.options).forEach(o => { if (!baseMaschine.includes(o.value)) o.remove(); });
+  Array.from(anlagenteilSelect.options).forEach(o => { if (!baseTeile.includes(o.value))   o.remove(); });
 
-    // „Sonstige“-Felder korrekt ein-/ausblenden
-    maschineSelect.dispatchEvent(new Event('change'));
-    anlagenteilSelect.dispatchEvent(new Event('change'));
-  };
-  /* ⬆️ ENDE neu */
+  // Neue Stammdaten anhängen (fügt ein & sortiert direkt)
+  (masterData.maschinen     || []).forEach(n => addOptionUnique(maschineSelect, n));
+  (masterData.anlagenteile  || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
+
+  // „Sonstige“-Felder korrekt ein-/ausblenden
+  maschineSelect.dispatchEvent(new Event('change'));
+  anlagenteilSelect.dispatchEvent(new Event('change'));
+
+  // Sicherheit: zum Schluss noch einmal sortieren
+  sortSelectOptions(maschineSelect, ["", "Sonstige"]);
+  sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
+};
+/* ⬆️ ENDE neu */
+
 
   // ====================
   // Draft-Funktionen
