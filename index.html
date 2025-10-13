@@ -305,22 +305,20 @@ async function loadHtml2PdfIfNeeded(){
 </div>
 
 
-<div id="pdfExportContainer">
 <div style="margin-bottom: 12px;">
-<label for="auftrag_id" style="display: block; font-weight: bold;">Auftrags-ID:</label>
-<input id="auftrag_id" name="auftrag_id" readonly="" style="padding: 6px; width: 100%;" type="text"/>
-</div><div style="text-align: center; margin-top: 20px;"><h1 style="font-size: 24px; margin-bottom: 5px;">Reparaturauftrag</h1></div><div style="text-align: left; font-size: 14px; margin-left: 20px; margin-top: 5px;">Formblatt-Nr.: TE15 | Version: 04 | Gültig ab: 26.06.2025</div>
-<div style="margin-bottom: 12px;"><label for="bearbeitet_am" style="display: block; font-weight: bold;">Bearbeitet am:</label><input id="bearbeitet_am" name="bearbeitet_am" style="padding: 6px; width: 100%;" type="date"/></div><div style="margin-bottom: 12px;"><label for="techniker1" style="display: block; font-weight: bold;">Techniker 1</label><select id="techniker1" name="techniker1" style="width: 100%; padding: 6px;"><option value="Constantin Müller-Seeling">Constantin Müller-Seeling</option><option value="Pascal Merker">Pascal Merker</option><option value="Tim Eggers">Tim Eggers</option><option value="Udo Mahlmann">Udo Mahlmann</option><option value="Mike Hafermalz">Mike Hafermalz</option><option value="Jörg Kowald">Jörg Kowald</option><option value="Stafan Wulf">Stafan Wulf</option></select></div><div style="margin-bottom: 12px;"><label for="techniker2" style="display: block; font-weight: bold;">Techniker 2 (optional)</label><select id="techniker2" name="techniker2" style="width: 100%; padding: 6px;"><option value="">–</option><option value="Constantin Müller-Seeling">Constantin Müller-Seeling</option><option value="Pascal Merker">Pascal Merker</option><option value="Tim Eggers">Tim Eggers</option><option value="Udo Mahlmann">Udo Mahlmann</option><option value="Mike Hafermalz">Mike Hafermalz</option><option value="Jörg Kowald">Jörg Kowald</option><option value="Stafan Wulf">Stafan Wulf</option></select></div>
-<div class="section">
-<label style="display: block; font-weight: bold; margin-top: 12px;">Maschinenausfall</label><select id="maschinenstillstand" name="maschinenstillstand">
-<option value="Ja">Ja</option>
-<option value="Nein">Nein</option>
-</select>
-<div style="margin-bottom: 10px;">
-<div style="margin-bottom: 10px;">
-<label for="maschinenausfall_dauer">Ausfallzeit:</label>
-<div style="display: flex; gap: 10px;">
-<div>
+  <label for="techniker1" style="display: block; font-weight: bold;">Techniker 1</label>
+  <select id="techniker1" name="techniker1" style="width: 100%; padding: 6px;">
+    <option value="" selected>Bitte auswählen</option>
+    <option value="Constantin Müller-Seeling">Constantin Müller-Seeling</option>
+    <option value="Pascal Merker">Pascal Merker</option>
+    <option value="Tim Eggers">Tim Eggers</option>
+    <option value="Udo Mahlmann">Udo Mahlmann</option>
+    <option value="Mike Hafermalz">Mike Hafermalz</option>
+    <option value="Jörg Kowald">Jörg Kowald</option>
+    <option value="Stafan Wulf">Stafan Wulf</option>
+  </select>
+</div>
+
 <input id="ausfall_stunden" max="999" min="0" name="ausfall_stunden" placeholder="Stunden" style="width: 100px; padding: 6px;" type="number"/>
 <span>Stunden</span>
 </div>
@@ -1222,6 +1220,91 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 
+<script>
+  function _byId(id){ return document.getElementById(id); }
+
+  function _showFieldError(el, msg){
+    if (!el) return;
+    el.classList.add('field-error');
+    if (el.nextElementSibling && el.nextElementSibling.classList?.contains('error-text')) {
+      el.nextElementSibling.remove();
+    }
+    const m = document.createElement('div');
+    m.className = 'error-text';
+    m.textContent = msg;
+    el.parentNode.insertBefore(m, el.nextSibling);
+  }
+
+  function _clearAllFieldErrors(){
+    document.querySelectorAll('.field-error').forEach(e => e.classList.remove('field-error'));
+    document.querySelectorAll('.error-text').forEach(e => e.remove());
+  }
+
+  // beim Tippen/Ändern Fehler am jeweiligen Feld entfernen
+  function _autoClearOnChange(id, evt='input'){
+    const el = _byId(id);
+    if (!el) return;
+    el.addEventListener(evt, () => {
+      el.classList.remove('field-error');
+      if (el.nextElementSibling && el.nextElementSibling.classList?.contains('error-text')) {
+        el.nextElementSibling.remove();
+      }
+    });
+  }
+
+  // einmalig aktivieren
+  document.addEventListener('DOMContentLoaded', () => {
+    _autoClearOnChange('bearbeitet_am', 'change');
+    _autoClearOnChange('techniker1',    'change');
+    _autoClearOnChange('maschine',      'change');
+    _autoClearOnChange('sonstige_maschine');
+    _autoClearOnChange('anlagenteil',   'change');
+    _autoClearOnChange('sonstige_anlagenteil');
+    _autoClearOnChange('fehlerbeschreibung', 'input');
+  });
+
+  // Pflichtfelder prüfen
+  function validateBeforeFinish(){
+    _clearAllFieldErrors();
+    let ok = true;
+
+    // 1) Bearbeitet am
+    const fDatum = _byId('bearbeitet_am');
+    if (!fDatum?.value) { _showFieldError(fDatum, '„Bearbeitet am“ ist ein Pflichtfeld.'); ok = false; }
+
+    // 2) Techniker 1
+    const fTech1 = _byId('techniker1');
+    if (!fTech1?.value) { _showFieldError(fTech1, '„Techniker 1“ ist ein Pflichtfeld.'); ok = false; }
+
+    // 3) Maschine (+ Sonstige-Text)
+    const selM = _byId('maschine');
+    if (!selM?.value) {
+      _showFieldError(selM, '„Maschine“ ist ein Pflichtfeld.'); ok = false;
+    } else if (selM.value === 'Sonstige') {
+      const txtM = _byId('sonstige_maschine');
+      if (!txtM?.value.trim()) { _showFieldError(txtM || selM, 'Bitte „Sonstiges (Maschine)“ angeben.'); ok = false; }
+    }
+
+    // 4) Anlagenteil (+ Sonstige-Text)
+    const selA = _byId('anlagenteil');
+    if (!selA?.value) {
+      _showFieldError(selA, '„Anlagenteil“ ist ein Pflichtfeld.'); ok = false;
+    } else if (selA.value === 'Sonstige') {
+      const txtA = _byId('sonstige_anlagenteil');
+      if (!txtA?.value.trim()) { _showFieldError(txtA || selA, 'Bitte „Sonstiges (Anlagenteil)“ angeben.'); ok = false; }
+    }
+
+    // 5) Fehlerbeschreibung
+    const fDesc = _byId('fehlerbeschreibung');
+    if (!fDesc?.value.trim()) { _showFieldError(fDesc, '„Fehlerbeschreibung“ ist ein Pflichtfeld.'); ok = false; }
+
+    if (!ok) {
+      document.querySelector('.field-error')?.scrollIntoView({ behavior:'smooth', block:'center' });
+      alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
+    }
+    return ok;
+  }
+</script>
 
 
 
