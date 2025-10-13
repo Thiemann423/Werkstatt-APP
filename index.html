@@ -173,6 +173,10 @@
 
 </style>
 
+<style>
+  .field-error { border: 2px solid #d9534f !important; background:#fff6f6; }
+  .error-text  { color:#d9534f; font-size:12px; margin:-6px 0 10px 0; }
+</style>
 
 
 <!-- html2pdf einmalig laden (ohne defer!) -->
@@ -1527,6 +1531,9 @@ async function generatePDFAndFinish() {
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
+  // ✅ Pflichtfelder nur beim Abschluss prüfen
+  if (!validateBeforeFinish()) return;
+
   // A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
   const signatureMap = new Map(
     Array.from(src.querySelectorAll('canvas')).map(c => {
@@ -1724,6 +1731,7 @@ async function generatePDFAndFinish() {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
