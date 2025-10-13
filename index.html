@@ -404,33 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
-<!-- ✅ Maschinenausfall -->
-<div class="section" style="margin-bottom:12px;">
-  <label for="maschinenstillstand" style="display:block;font-weight:bold;margin-top:12px;">Maschinenausfall</label>
-  <select id="maschinenstillstand" name="maschinenstillstand" style="width:100%;padding:6px;margin-bottom:10px;">
-    <option value="" selected>Bitte auswählen</option>
-    <option value="Ja">Ja</option>
-    <option value="Nein">Nein</option>
-  </select>
 
-  <div id="ausfallzeit_wrap" style="margin-bottom:10px; display:none;">
-    <label for="ausfall_stunden">Ausfallzeit:</label>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <div>
-        <input id="ausfall_stunden" name="ausfall_stunden"
-               type="number" inputmode="numeric" step="1" min="0" max="999"
-               placeholder="Stunden" style="width:110px;padding:6px;" disabled>
-        <span>Stunden</span>
-      </div>
-      <div>
-        <input id="ausfall_minuten" name="ausfall_minuten"
-               type="number" inputmode="numeric" step="1" min="0" max="59"
-               placeholder="Minuten" style="width:110px;padding:6px;" disabled>
-        <span>Minuten</span>
-      </div>
-    </div>
-  </div>
-</div>
 
   <!-- ⬆️ Rest deines Formulars folgt hier (Maschine, Anlagenteil, …) und bleibt unverändert -->
 
