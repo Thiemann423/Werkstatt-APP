@@ -302,39 +302,57 @@ async function loadHtml2PdfIfNeeded(){
 
     <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
   </div>
+    </div>
+
+    <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
+      <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead style="position:sticky;top:0;background:#fafafa;">
+          <tr>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
+          </tr>
+        </thead>
+        <tbody id="dashboardBody"></tbody>
+      </table>
+    </div>
+
+    <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
+  </div>
 </div>
 
-
-<div style="margin-bottom: 12px;">
-  <label for="techniker1" style="display: block; font-weight: bold;">Techniker 1</label>
-  <select id="techniker1" name="techniker1" style="width: 100%; padding: 6px;">
+<!-- ✅ Maschinenausfall -->
+<div class="section" style="margin-bottom:12px;">
+  <label style="display:block;font-weight:bold;margin-top:12px;">Maschinenausfall</label>
+  <select id="maschinenstillstand" name="maschinenstillstand" style="width:100%;padding:6px;margin-bottom:10px;">
     <option value="" selected>Bitte auswählen</option>
-    <option value="Constantin Müller-Seeling">Constantin Müller-Seeling</option>
-    <option value="Pascal Merker">Pascal Merker</option>
-    <option value="Tim Eggers">Tim Eggers</option>
-    <option value="Udo Mahlmann">Udo Mahlmann</option>
-    <option value="Mike Hafermalz">Mike Hafermalz</option>
-    <option value="Jörg Kowald">Jörg Kowald</option>
-    <option value="Stafan Wulf">Stafan Wulf</option>
+    <option value="Ja">Ja</option>
+    <option value="Nein">Nein</option>
   </select>
+
+  <div style="margin-bottom:10px;">
+    <label for="maschinenausfall_dauer">Ausfallzeit:</label>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div>
+        <input id="ausfall_stunden" name="ausfall_stunden" type="number" min="0" max="999"
+               placeholder="Stunden" style="width:100px;padding:6px;">
+        <span>Stunden</span>
+      </div>
+      <div>
+        <input id="ausfall_minuten" name="ausfall_minuten" type="number" min="0" max="59"
+               placeholder="Minuten" style="width:100px;padding:6px;">
+        <span>Minuten</span>
+      </div>
+    </div>
+  </div>
 </div>
 
-<input id="ausfall_stunden" max="999" min="0" name="ausfall_stunden" placeholder="Stunden" style="width: 100px; padding: 6px;" type="number"/>
-<span>Stunden</span>
-</div>
-<div>
-<input id="ausfall_minuten" max="59" min="0" name="ausfall_minuten" placeholder="Minuten" style="width: 100px; padding: 6px;" type="number"/>
-<span>Minuten</span>
-</div>  <!-- schließt inneres margin-bottom:10px -->
-<!-- ➕ fehlend: -->
-</div>  <!-- schließt äußeres margin-bottom:10px -->
-</div>  <!-- schließt .section (Maschinenausfall) -->
-<!-- und erst dann: -->
-<div class="section" style="margin-bottom: 12px;">
-  <!-- Maschine ... -->
-
-  <label for="maschine" style="display: block; font-weight: bold;">Maschine</label>
-  <select id="maschine" name="maschine" style="width: 100%; padding: 6px;">
+<!-- ✅ Maschine -->
+<div class="section" style="margin-bottom:12px;">
+  <label for="maschine" style="display:block;font-weight:bold;">Maschine</label>
+  <select id="maschine" name="maschine" style="width:100%;padding:6px;">
     <option value="">Bitte auswählen</option>
     <option value="Sonstige">Sonstige</option>
     <option value="CIP-Raum">CIP-Raum</option>
@@ -391,21 +409,18 @@ async function loadHtml2PdfIfNeeded(){
     <option value="Vorspülmaschine Kübel">Vorspülmaschine Kübel</option>
   </select>
 
-  <!-- Eingabefeld erscheint nur bei Auswahl "Sonstige" -->
-  <label for="sonstige_maschine" id="label-sonstige-maschine" style="display:none; margin-top: 8px;">
+  <label for="sonstige_maschine" id="label-sonstige-maschine" style="display:none;margin-top:8px;">
     Sonstiges (Maschine):
   </label>
-  <input
-    id="sonstige_maschine"
-    name="sonstige_maschine"
-    placeholder="Bitte angeben..."
-    type="text"
-    style="display:none; margin-top: 5px; width: 100%; padding: 6px;"
-  />
+  <input id="sonstige_maschine" name="sonstige_maschine" type="text"
+         placeholder="Bitte angeben..."
+         style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
-<div class="section" style="margin-bottom: 12px;">
-  <label for="anlagenteil" style="display:block; font-weight:bold;">Anlagenteil</label>
-  <select id="anlagenteil" name="anlagenteil" style="width:100%; padding:6px;">
+
+<!-- ✅ Anlagenteil -->
+<div class="section" style="margin-bottom:12px;">
+  <label for="anlagenteil" style="display:block;font-weight:bold;">Anlagenteil</label>
+  <select id="anlagenteil" name="anlagenteil" style="width:100%;padding:6px;">
     <option value="">Bitte auswählen</option>
     <option value="Sonstige">Sonstige</option>
     <option value="Magnetschalter">Magnetschalter</option>
@@ -510,16 +525,12 @@ async function loadHtml2PdfIfNeeded(){
     <option value="Dichtring">Dichtring</option>
   </select>
 
-  <label id="label-sonstige-anlagenteil"
-         for="sonstige_anlagenteil"
-         style="display:none; margin-top:8px;">
+  <label id="label-sonstige-anlagenteil" for="sonstige_anlagenteil" style="display:none;margin-top:8px;">
     Sonstiges (Anlagenteil):
   </label>
-  <input id="sonstige_anlagenteil"
-         name="sonstige_anlagenteil"
-         type="text"
+  <input id="sonstige_anlagenteil" name="sonstige_anlagenteil" type="text"
          placeholder="Bitte angeben..."
-         style="display:none; margin-top:5px; width:100%; padding:6px;">
+         style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
 
 
