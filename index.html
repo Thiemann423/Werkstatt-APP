@@ -843,56 +843,73 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!baseValues.includes(selectEl.value)) selectEl.value = ""; // ungültige Auswahl zurücksetzen
   }
 
-  // ⬅️ Neu: einheitlicher Rebuilder für beide Dropdowns
-  function rebuildDropdownsFromMaster() {
-    if (maschineSelect) {
-      pruneToBase(maschineSelect, baseMaschineValues);
-      (masterData.maschinen || []).forEach(n => addOptionUnique(maschineSelect, n));
-    }
-    if (anlagenteilSelect) {
-      pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
-      (masterData.anlagenteile || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
-    }
-    updateMaschineField?.();
-    updateAnlagenteilField?.();
-  }
-  // global verfügbar machen, damit der Login danach nochmal befüllen kann
-  window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
-
-  // ───────── Initial: Stammdaten laden (offline ggf. localStorage) ─────────
-  loadMasterData().then(() => {
-    rebuildDropdownsFromMaster();
-  });
-
-  // ───────── Helper & Auto-Übernahme „Sonstige“ ─────────
-  const norm = s => (s || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/^./, c => c.toUpperCase());
-
-  function tryAddCustomMaschine() {
-    const val = norm(sonstigeMaschineInput?.value);
-    if (!val || !maschineSelect) return;
-    addOptionUnique(maschineSelect, val);
-    const exists = (masterData.maschinen || [])
-      .some(x => (x || "").toLowerCase() === val.toLowerCase());
-    if (!exists) {
-      (masterData.maschinen ||= []).push(val);
-      saveMasterData();
-    }
+function rebuildDropdownsFromMaster() {
+  if (maschineSelect) {
+    pruneToBase(maschineSelect, baseMaschineValues);
+    // Stammdaten einfügen (ohne automatische Auswahl)
+    (masterData.maschinen || []).forEach(n =>
+      addOptionUnique(maschineSelect, n, { autoselect: false })
+    );
+    // sicherstellen: Platzhalter „Bitte auswählen“ bleibt aktiv
+    maschineSelect.value = "";
+    // zur Sicherheit nochmals sortieren
+    sortSelectOptions(maschineSelect, ["", "Sonstige"]);
   }
 
-  function tryAddCustomAnlagenteil() {
-    const val = norm(sonstigeAnlagenteilInput?.value);
-    if (!val || !anlagenteilSelect) return;
-    addOptionUnique(anlagenteilSelect, val);
-    const exists = (masterData.anlagenteile || [])
-      .some(x => (x || "").toLowerCase() === val.toLowerCase());
-    if (!exists) {
-      (masterData.anlagenteile ||= []).push(val);
-      saveMasterData();
-    }
+  if (anlagenteilSelect) {
+    pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
+    (masterData.anlagenteile || []).forEach(n =>
+      addOptionUnique(anlagenteilSelect, n, { autoselect: false })
+    );
+    anlagenteilSelect.value = "";
+    sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
   }
+
+  updateMaschineField?.();
+  updateAnlagenteilField?.();
+}
+// global verfügbar machen, damit der Login danach nochmal befüllen kann
+window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
+
+// ───────── Initial: Stammdaten laden (offline ggf. localStorage) ─────────
+loadMasterData().then(rebuildDropdownsFromMaster);
+
+// ───────── Helper & Auto-Übernahme „Sonstige“ ─────────
+const norm = s => (s || "")
+  .trim()
+  .replace(/\s+/g, " ")
+  .replace(/^./, c => c.toUpperCase());
+
+function tryAddCustomMaschine() {
+  const val = norm(sonstigeMaschineInput?.value);
+  if (!val || !maschineSelect) return;
+
+  // NEU: autoselect = true -> direkt auf den neu hinzugefügten Eintrag springen
+  addOptionUnique(maschineSelect, val, { autoselect: true });
+
+  const exists = (masterData.maschinen || [])
+    .some(x => (x || "").toLowerCase() === val.toLowerCase());
+  if (!exists) {
+    (masterData.maschinen ||= []).push(val);
+    saveMasterData();
+  }
+}
+
+
+function tryAddCustomAnlagenteil() {
+  const val = norm(sonstigeAnlagenteilInput?.value);
+  if (!val || !anlagenteilSelect) return;
+
+  addOptionUnique(anlagenteilSelect, val, { autoselect: true });
+
+  const exists = (masterData.anlagenteile || [])
+    .some(x => (x || "").toLowerCase() === val.toLowerCase());
+  if (!exists) {
+    (masterData.anlagenteile ||= []).push(val);
+    saveMasterData();
+  }
+}
+
 
   // Eingabe übernehmen bei Verlassen der Felder …
   sonstigeMaschineInput?.addEventListener("blur", tryAddCustomMaschine);
@@ -1326,26 +1343,25 @@ function sortSelectOptions(selectEl, stickyTopValues = ["", "Sonstige"]) {
   selectEl.value = current;
 }
 
-/* === Neu: Einfügen + immer sortieren (ersetzt deine addOptionUnique) === */
-function addOptionUnique(selectEl, label) {
+// === Neu: Einfügen + immer sortieren, optional autoselect ===
+function addOptionUnique(selectEl, label, { autoselect = false } = {}) {
   const value = (label || "").trim();
   if (!selectEl || !value) return;
 
-  // Duplikate (case-insensitive) vermeiden
   const exists = [...selectEl.options].some(o =>
     ((o.textContent || o.innerText || o.value).trim().toLowerCase() === value.toLowerCase())
   );
 
   if (!exists) {
-    selectEl.add(new Option(value, value)); // Position egal – wird gleich sortiert
+    selectEl.add(new Option(value, value)); // Position egal – danach sortieren
   }
 
-  // Alphabetisch sortieren; "" = „Bitte auswählen“, "Sonstige" bleibt oben
+  // "" = „Bitte auswählen“, "Sonstige" bleibt oben
   sortSelectOptions(selectEl, ["", "Sonstige"]);
 
-  // Direkt auswählen
-  selectEl.value = value;
+  if (autoselect) selectEl.value = value; // nur auf Wunsch auswählen
 }
+
 
 /* ⬇️ NEU: Dropdowns aus Stammdaten vollständig neu aufbauen */
 window.rebuildDropdownsFromMaster = function () {
