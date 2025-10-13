@@ -301,6 +301,33 @@ async function loadHtml2PdfIfNeeded(){
   </div>
 </div>
 
+<!-- ===== Stammdaten Kopfbereich ===== -->
+<div class="section" style="margin-bottom:16px;">
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;">
+    <div>
+      <label for="bearbeitet_am" style="font-weight:bold;">Bearbeitet am</label>
+      <input id="bearbeitet_am" name="bearbeitet_am" type="date" style="padding:6px;width:100%;">
+    </div>
+
+    <div>
+      <label for="techniker1" style="font-weight:bold;">Techniker 1</label>
+      <input id="techniker1" name="techniker1" type="text" placeholder="z. B. Merker"
+             style="padding:6px;width:100%;">
+    </div>
+
+    <div>
+      <label for="techniker2" style="font-weight:bold;">Techniker 2 (optional)</label>
+      <input id="techniker2" name="techniker2" type="text" style="padding:6px;width:100%;">
+    </div>
+
+    <div>
+      <label for="auftrag_id" style="font-weight:bold;">Auftrags-ID</label>
+      <input id="auftrag_id" name="auftrag_id" type="text" readonly
+             title="Wird automatisch vergeben"
+             style="padding:6px;width:100%;background:#f7f7f7;">
+    </div>
+  </div>
+</div>
 
 <!-- ✅ Maschinenausfall -->
 <div class="section" style="margin-bottom:12px;">
