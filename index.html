@@ -304,61 +304,128 @@ async function loadHtml2PdfIfNeeded(){
 <!-- ⬇️ WICHTIG: Ab hier ist alles im PDF-Container -->
 <div id="pdfExportContainer">
 
-  <!-- ===== Stammdaten Kopfbereich ===== -->
-  <div class="section" style="margin-bottom:16px;">
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;">
-      <div>
-        <label for="bearbeitet_am" style="font-weight:bold;">Bearbeitet am</label>
-        <input id="bearbeitet_am" name="bearbeitet_am" type="date" style="padding:6px;width:100%;">
-      </div>
+ <!-- ===== Stammdaten Kopfbereich (untereinander + Techniker-Dropdowns) ===== -->
+<div class="section" style="margin-bottom:16px;">
+  <div style="display:grid;grid-template-columns:1fr;gap:12px;">
 
-      <div>
-        <label for="techniker1" style="font-weight:bold;">Techniker 1</label>
-        <input id="techniker1" name="techniker1" type="text" placeholder="z. B. Merker"
-               style="padding:6px;width:100%;">
-      </div>
+    <!-- Auftrags-ID -->
+    <div>
+      <label for="auftrag_id" style="font-weight:bold;">Auftrags-ID</label>
+      <input id="auftrag_id" name="auftrag_id" type="text" readonly
+             title="Wird automatisch vergeben"
+             style="padding:6px;width:100%;background:#f7f7f7;">
+    </div>
 
-      <div>
-        <label for="techniker2" style="font-weight:bold;">Techniker 2 (optional)</label>
-        <input id="techniker2" name="techniker2" type="text" style="padding:6px;width:100%;">
-      </div>
+    <!-- Bearbeitet am -->
+    <div>
+      <label for="bearbeitet_am" style="font-weight:bold;">Bearbeitet am</label>
+      <input id="bearbeitet_am" name="bearbeitet_am" type="date" style="padding:6px;width:100%;">
+    </div>
 
+    <!-- Techniker 1 -->
+    <div>
+      <label for="techniker1" style="font-weight:bold;">Techniker 1</label>
+      <select id="techniker1" name="techniker1" style="padding:6px;width:100%;">
+        <option value="">Bitte auswählen</option>
+        <option value="Sonstige">Sonstige</option>
+      </select>
+      <input id="sonstiger_techniker1" type="text" placeholder="Bitte angeben…"
+             style="display:none;margin-top:6px;padding:6px;width:100%;">
+    </div>
+
+    <!-- Techniker 2 -->
+    <div>
+      <label for="techniker2" style="font-weight:bold;">Techniker 2 (optional)</label>
+      <select id="techniker2" name="techniker2" style="padding:6px;width:100%;">
+        <option value="">Bitte auswählen</option>
+        <option value="Sonstige">Sonstige</option>
+      </select>
+      <input id="sonstiger_techniker2" type="text" placeholder="Bitte angeben…"
+             style="display:none;margin-top:6px;padding:6px;width:100%;">
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* 👇 Basisliste deiner Techniker – einfach erweiterbar */
+const TECHNIKER_BASE = ["Merker","Hafermalz","Pieper","Thiemann"];
+
+/* Dropdown + Sonstige-Funktion aufbauen */
+function setupTechnikerSelect(selId, otherId){
+  const sel   = document.getElementById(selId);
+  const other = document.getElementById(otherId);
+  if (!sel) return;
+
+  // Technikerliste befüllen
+  TECHNIKER_BASE.forEach(n => {
+    const exists = [...sel.options].some(o => (o.value||o.textContent).toLowerCase() === n.toLowerCase());
+    if (!exists){
+      if (typeof addOptionUnique === "function") addOptionUnique(sel, n);
+      else sel.add(new Option(n, n));
+    }
+  });
+
+  const toggleOther = () => {
+    if (other) other.style.display = (sel.value === "Sonstige") ? "block" : "none";
+  };
+
+  sel.addEventListener("change", () => {
+    if (sel.value !== "Sonstige" && other && other.value.trim()){
+      const v = other.value.trim();
+      if (typeof addOptionUnique === "function") addOptionUnique(sel, v, { autoselect:true });
+      else { sel.add(new Option(v, v)); sel.value = v; }
+      other.value = "";
+    }
+    toggleOther();
+  });
+
+  other?.addEventListener("blur", () => {
+    const v = (other.value || "").trim();
+    if (!v) return;
+    if (typeof addOptionUnique === "function") addOptionUnique(sel, v, { autoselect:true });
+    else { sel.add(new Option(v, v)); sel.value = v; }
+    other.value = "";
+    toggleOther();
+  });
+
+  toggleOther();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupTechnikerSelect("techniker1","sonstiger_techniker1");
+  setupTechnikerSelect("techniker2","sonstiger_techniker2");
+});
+</script>
+
+<!-- ✅ Maschinenausfall -->
+<div class="section" style="margin-bottom:12px;">
+  <label for="maschinenstillstand" style="display:block;font-weight:bold;margin-top:12px;">Maschinenausfall</label>
+  <select id="maschinenstillstand" name="maschinenstillstand" style="width:100%;padding:6px;margin-bottom:10px;">
+    <option value="" selected>Bitte auswählen</option>
+    <option value="Ja">Ja</option>
+    <option value="Nein">Nein</option>
+  </select>
+
+  <div id="ausfallzeit_wrap" style="margin-bottom:10px; display:none;">
+    <label for="ausfall_stunden">Ausfallzeit:</label>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <div>
-        <label for="auftrag_id" style="font-weight:bold;">Auftrags-ID</label>
-        <input id="auftrag_id" name="auftrag_id" type="text" readonly
-               title="Wird automatisch vergeben"
-               style="padding:6px;width:100%;background:#f7f7f7;">
+        <input id="ausfall_stunden" name="ausfall_stunden"
+               type="number" inputmode="numeric" step="1" min="0" max="999"
+               placeholder="Stunden" style="width:110px;padding:6px;" disabled>
+        <span>Stunden</span>
+      </div>
+      <div>
+        <input id="ausfall_minuten" name="ausfall_minuten"
+               type="number" inputmode="numeric" step="1" min="0" max="59"
+               placeholder="Minuten" style="width:110px;padding:6px;" disabled>
+        <span>Minuten</span>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- ✅ Maschinenausfall -->
-  <div class="section" style="margin-bottom:12px;">
-    <label for="maschinenstillstand" style="display:block;font-weight:bold;margin-top:12px;">Maschinenausfall</label>
-    <select id="maschinenstillstand" name="maschinenstillstand" style="width:100%;padding:6px;margin-bottom:10px;">
-      <option value="" selected>Bitte auswählen</option>
-      <option value="Ja">Ja</option>
-      <option value="Nein">Nein</option>
-    </select>
-
-    <div id="ausfallzeit_wrap" style="margin-bottom:10px; display:none;">
-      <label for="ausfall_stunden">Ausfallzeit:</label>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <div>
-          <input id="ausfall_stunden" name="ausfall_stunden"
-                 type="number" inputmode="numeric" step="1" min="0" max="999"
-                 placeholder="Stunden" style="width:110px;padding:6px;" disabled>
-          <span>Stunden</span>
-        </div>
-        <div>
-          <input id="ausfall_minuten" name="ausfall_minuten"
-                 type="number" inputmode="numeric" step="1" min="0" max="59"
-                 placeholder="Minuten" style="width:110px;padding:6px;" disabled>
-          <span>Minuten</span>
-        </div>
-      </div>
-    </div>
-  </div>
   <!-- ⬆️ Rest deines Formulars folgt hier (Maschine, Anlagenteil, …) und bleibt unverändert -->
 
 
