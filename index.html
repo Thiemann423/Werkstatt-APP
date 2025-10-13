@@ -245,7 +245,8 @@ async function loadHtml2PdfIfNeeded(){
     📊 Dashboard anzeigen
   </button>
 
-  <div id="dashPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;">
+  <!-- z-index-Kapselung fürs Sticky-Header -->
+  <div id="dashPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
     <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
       <div>
         <label for="f_bearbeitet_am">Bearbeitet am</label>
@@ -270,43 +271,20 @@ async function loadHtml2PdfIfNeeded(){
               style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
         🔄 Neu laden
       </button>
-  <button type="button" id="dashClear"
-        style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
-  ❌ Filter löschen
-</button>
-
-<button type="button" id="dashRangeBtn" data-mode="30"
-        style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
-  🗓️ Letzte 30 Tage
-</button>
-
-
-
+      <button type="button" id="dashClear"
+              style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
+        ❌ Filter löschen
+      </button>
+      <button type="button" id="dashRangeBtn" data-mode="30"
+              style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+        🗓️ Letzte 30 Tage
+      </button>
     </div>
 
     <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
-  <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-    <thead style="position:sticky;top:0;background:#fafafa;">
-      <tr>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
-      </tr>
-    </thead>
-    <tbody id="dashboardBody"></tbody>
-  </table>
-</div>
-
-
-    <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
-  </div>
-    
-
-    <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
       <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-        <thead style="position:sticky;top:0;background:#fafafa;">
+        <!-- Sticky-Header bleibt innerhalb des Panels -->
+        <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
           <tr>
             <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
             <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
@@ -322,6 +300,7 @@ async function loadHtml2PdfIfNeeded(){
     <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
   </div>
 </div>
+
 
 <!-- ✅ Maschinenausfall -->
 <div class="section" style="margin-bottom:12px;">
