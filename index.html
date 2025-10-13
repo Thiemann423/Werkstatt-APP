@@ -948,23 +948,51 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     if (!baseValues.includes(selectEl.value)) selectEl.value = ""; // ungültige Auswahl zurücksetzen
   }
+
 function rebuildDropdownsFromMaster() {
+  const maschineSelect    = document.getElementById("maschine");
+  const anlagenteilSelect = document.getElementById("anlagenteil");
+
+  // aktuelle Auswahl sichern (Value + sichtbarer Text)
+  const keep = (sel) => sel ? {
+    value: sel.value,
+    text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
+  } : null;
+
+  const keepMaschine    = keep(maschineSelect);
+  const keepAnlagenteil = keep(anlagenteilSelect);
+
+  // Helper: Auswahl nach dem Neuaufbau wiederherstellen
+  const restore = (sel, kept) => {
+    if (!sel || !kept) return;
+    if ([...sel.options].some(o => o.value === kept.value)) {
+      sel.value = kept.value;
+      return;
+    }
+    const byText = [...sel.options].find(o =>
+      (o.textContent || o.innerText).trim() === kept.text
+    );
+    if (byText) sel.value = byText.value;
+  };
+
+  // Maschine
   if (maschineSelect) {
     // Basisoptionen (aus HTML) behalten, dynamische entfernen
     pruneToBase(maschineSelect, baseMaschineValues);
 
-    // Stammdaten anhängen OHNE automatische Auswahl
+    // Stammdaten anhängen (ohne Autoselect)
     (masterData.maschinen || []).forEach(n =>
       addOptionUnique(maschineSelect, n, { autoselect: false })
     );
 
-    // Platzhalter „Bitte auswählen“ aktiv halten
-    maschineSelect.value = "";
-
-    // Sicherheit: alphabetisch sortieren, "" und "Sonstige" oben lassen
+    // Sortieren, "" und "Sonstige" oben lassen
     sortSelectOptions(maschineSelect, ["", "Sonstige"]);
+
+    // Auswahl wiederherstellen
+    restore(maschineSelect, keepMaschine);
   }
 
+  // Anlagenteil
   if (anlagenteilSelect) {
     pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
 
@@ -972,8 +1000,9 @@ function rebuildDropdownsFromMaster() {
       addOptionUnique(anlagenteilSelect, n, { autoselect: false })
     );
 
-    anlagenteilSelect.value = "";
     sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
+
+    restore(anlagenteilSelect, keepAnlagenteil);
   }
 
   // Abhängige "Sonstige"-Eingabefelder korrekt ein-/ausblenden
@@ -981,17 +1010,11 @@ function rebuildDropdownsFromMaster() {
   updateAnlagenteilField?.();
 }
 
-// global verfügbar machen, damit Login/Reload danach erneut befüllen kann
+// global verfügbar lassen
 window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
 
-// ───────── Initial: Stammdaten laden (offline ggf. localStorage) ─────────
+// Initial: Stammdaten laden und erst dann neu aufbauen
 loadMasterData().then(rebuildDropdownsFromMaster);
-
-// ───────── Helper & Auto-Übernahme „Sonstige“ ─────────
-const norm = s => (s || "")
-  .trim()
-  .replace(/\s+/g, " ")
-  .replace(/^./, c => c.toUpperCase());
 
 
 function tryAddCustomMaschine() {
