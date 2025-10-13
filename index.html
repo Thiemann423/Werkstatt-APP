@@ -349,13 +349,16 @@ async function loadHtml2PdfIfNeeded(){
 
 <script>
 /* 👇 Basisliste deiner Techniker – einfach erweiterbar */
-const TECHNIKER_BASE = ["  "Constantin Müller-Seeling",
+const TECHNIKER_BASE = [
+  "Constantin Müller-Seeling",
   "Pascal Merker",
   "Tim Eggers",
   "Udo Mahlmann",
   "Mike Hafermalz",
   "Jörg Kowald",
-  "Stefan Wulf"];
+  "Stefan Wulf"
+];
+
 
 /* Dropdown + Sonstige-Funktion aufbauen */
 function setupTechnikerSelect(selId, otherId){
@@ -398,10 +401,11 @@ function setupTechnikerSelect(selId, otherId){
   toggleOther();
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  setupTechnikerSelect("techniker1","sonstiger_techniker1");
-  setupTechnikerSelect("techniker2","sonstiger_techniker2");
+window.addEventListener("load", () => {
+  setupTechnikerSelect("techniker1", "sonstiger_techniker1");
+  setupTechnikerSelect("techniker2", "sonstiger_techniker2");
 });
+
 </script>
 
 
@@ -1978,6 +1982,7 @@ async function saveDraftToOneDrive() {
 
 
 // 📥 ENTWURF LADEN
+// 📥 ENTWURF LADEN
 async function loadDraftFromOneDrive(fileName) {
   if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
   await resolveShareLinkToFolder();
@@ -1988,15 +1993,66 @@ async function loadDraftFromOneDrive(fileName) {
     `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
     `/items/${parentId}:/${encodeURIComponent(fileName)}:/content`;
 
+  // Helper: fehlende Option in einem <select> hinzufügen und auswählen
+  function ensureSelectValue(selId, value, autoselect = true) {
+    const sel = document.getElementById(selId);
+    if (!sel || value == null || value === "") return;
+    const exists = [...sel.options].some(o =>
+      (o.value || o.textContent).trim().toLowerCase() === String(value).trim().toLowerCase()
+    );
+    if (!exists) {
+      if (typeof addOptionUnique === "function") addOptionUnique(sel, String(value), { autoselect });
+      else {
+        sel.add(new Option(String(value), String(value)));
+        if (autoselect) sel.value = String(value);
+      }
+    } else if (autoselect) {
+      sel.value = String(value);
+    }
+  }
+
   try {
     const res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) { alert("⚠️ Fehler beim Laden des Entwurfs."); return; }
 
     const draftData = await res.json();
+
+    // 1) Standard-Felder direkt setzen
     fieldIds.forEach(id => {
       const el = document.getElementById(id);
       if (el && draftData[id] !== undefined) el.value = draftData[id];
     });
+
+    // 2) Techniker-Dropdowns sicherstellen (Option ggf. nachtragen)
+    if (draftData.techniker1) ensureSelectValue("techniker1", draftData.techniker1);
+    if (draftData.techniker2) ensureSelectValue("techniker2", draftData.techniker2);
+
+    // 3) Maschine / Anlagenteil + „Sonstige“-Felder korrekt setzen
+    // Maschine
+    if (draftData.sonstige_maschine && draftData.sonstige_maschine.trim()) {
+      const sel = document.getElementById("maschine");
+      const txt = document.getElementById("sonstige_maschine");
+      if (sel) sel.value = "Sonstige";
+      if (txt) txt.value = draftData.sonstige_maschine.trim();
+    } else if (draftData.maschine) {
+      ensureSelectValue("maschine", draftData.maschine, true);
+    }
+
+    // Anlagenteil
+    if (draftData.sonstige_anlagenteil && draftData.sonstige_anlagenteil.trim()) {
+      const sel = document.getElementById("anlagenteil");
+      const txt = document.getElementById("sonstige_anlagenteil");
+      if (sel) sel.value = "Sonstige";
+      if (txt) txt.value = draftData.sonstige_anlagenteil.trim();
+    } else if (draftData.anlagenteil) {
+      ensureSelectValue("anlagenteil", draftData.anlagenteil, true);
+    }
+
+    // 4) UI-abhängigkeiten aktualisieren (Sonstige-Felder ein-/ausblenden etc.)
+    document.getElementById("maschine")?.dispatchEvent(new Event("change"));
+    document.getElementById("anlagenteil")?.dispatchEvent(new Event("change"));
+    document.getElementById("techniker1")?.dispatchEvent(new Event("change"));
+    document.getElementById("techniker2")?.dispatchEvent(new Event("change"));
 
     alert("✅ Entwurf erfolgreich geladen!");
   } catch (err) {
@@ -2004,6 +2060,7 @@ async function loadDraftFromOneDrive(fileName) {
     alert("❌ Fehler beim Laden des Entwurfs.");
   }
 }
+
 
 
 // 📂 ENTWURFSLISTE ANZEIGEN
