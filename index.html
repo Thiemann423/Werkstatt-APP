@@ -1232,43 +1232,38 @@ async function resolveShareLinkToFolder(){
 //<!-- ... alles davor: msalConfig, scopes, msalInstance, handleRedirectPromise, resolveShareLinkToFolder, signInAndAcquireToken ... -->
 
 // 3) Login/Token nur per Redirect (Popup auf GitHub Pages meiden)
-async function signInAndAcquireToken(interactive = false) {
+async function signInAndAcquireToken(interactive = false, { rebuild = true } = {}) {
   try {
     let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
-    // interaktiver Login nur wenn gefordert
     if (!account && interactive) {
       await msalInstance.loginRedirect({ scopes });
       return; // kommt nach Redirect zurück
     }
     if (!account) {
       showLoginHint();
-      return; // keine stille Anmeldung möglich
+      return;
     }
 
-    // Token (silent) holen – Fallback: Redirect
     try {
       const t = await msalInstance.acquireTokenSilent({ scopes, account });
       accessToken = t.accessToken;
     } catch (e) {
       await msalInstance.acquireTokenRedirect({ scopes });
-      return; // kommt nach Redirect zurück
+      return;
     }
 
-    // OneDrive-Zielordner bestimmen
-    try {
-      await resolveShareLinkToFolder();
-    } catch (e) {
-      console.warn("resolveShareLinkToFolder fehlgeschlagen:", e);
-    }
+    try { await resolveShareLinkToFolder(); } catch (e) { console.warn("resolveShareLinkToFolder:", e); }
     hideLoginHint();
 
-    // 🔁 NEU: Nach Login Stammdaten laden & Dropdowns neu/sortiert aufbauen
-    try {
-      await loadMasterData();                 // lädt OneDrive-Stammdaten oder lokalen Cache
-      window.rebuildDropdownsFromMaster?.();  // baut "Maschine" & "Anlagenteil" neu auf (alphabetisch)
-    } catch (e) {
-      console.warn("Reload master after sign-in failed:", e);
+    // ⬇️ WICHTIG: Nur bei Bedarf Stammdaten neu laden + Dropdowns rebuilden
+    if (rebuild) {
+      try {
+        await loadMasterData();
+        window.rebuildDropdownsFromMaster?.();
+      } catch (e) {
+        console.warn("Reload master after sign-in failed:", e);
+      }
     }
 
   } catch (e) {
@@ -1276,6 +1271,7 @@ async function signInAndAcquireToken(interactive = false) {
     showLoginHint();
   }
 }
+
 
 
 
@@ -1707,6 +1703,7 @@ window.rebuildDropdownsFromMaster = function () {
 // ====================
 
 
+// ✅ Auftrag abschließen → PDF erzeugen & hochladen
 async function generatePDFAndFinish() {
   // 0) Lib + Login
   await loadHtml2PdfIfNeeded();
@@ -1718,7 +1715,7 @@ async function generatePDFAndFinish() {
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
-  // ✅ Pflichtfelder nur beim Abschluss prüfen
+  // ✅ Pflichtfelder NUR beim Abschluss prüfen
   if (!validateBeforeFinish()) return;
 
   // A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
@@ -1772,6 +1769,29 @@ async function generatePDFAndFinish() {
     });
   }
 
+  // 🔎 Helper: sichtbaren Text für Select ermitteln (inkl. „Sonstige“-Felder)
+  const selectedText = (selId) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return "";
+    // normaler Option-Text
+    let text = (sel.options?.[sel.selectedIndex]?.text || sel.value || "").trim();
+    // Sonderfälle
+    if (selId === "reinigung_erforderlich") {
+      const v = (sel.value || "").toLowerCase();
+      if (v === "ja") return "Ja";
+      if (v === "nein") return "Nein";
+    }
+    if (selId === "maschine" && sel.value === "Sonstige") {
+      const t = document.getElementById("sonstige_maschine")?.value?.trim();
+      if (t) text = t;
+    }
+    if (selId === "anlagenteil" && sel.value === "Sonstige") {
+      const t = document.getElementById("sonstige_anlagenteil")?.value?.trim();
+      if (t) text = t;
+    }
+    return text;
+  };
+
   // D) Inhalt klonen
   const clone = src.cloneNode(true);
   clone.id = 'pdfExportContainerClone';
@@ -1782,19 +1802,13 @@ async function generatePDFAndFinish() {
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
 
-  // Select-Werte übernehmen
+  // Select-Werte + sichtbare Texte übernehmen (für die PDF-Umwandlung)
   clone.querySelectorAll('select').forEach(sel => {
-    const orig = src.querySelector('#' + sel.id);
+    const orig = document.getElementById(sel.id);
     if (!orig) return;
     sel.value = orig.value;
     Array.from(sel.options).forEach(o => o.selected = (o.value === orig.value));
-    const checked = sel.querySelector('option:checked');
-    let displayText = (checked?.textContent || checked?.innerText || sel.value || '').trim();
-    if (sel.id === 'reinigung_erforderlich') {
-      const v = (sel.value || displayText || '').trim().toLowerCase();
-      displayText = v === 'ja' ? 'Ja' : v === 'nein' ? 'Nein' : displayText;
-    }
-    sel.setAttribute('data-selected-text', displayText);
+    sel.setAttribute('data-selected-text', selectedText(sel.id));
   });
 
   // Canvas -> IMG
@@ -1866,23 +1880,16 @@ async function generatePDFAndFinish() {
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       // ---- META-Datei für das Dashboard mitschreiben ----
-      const selText = (id) => {
-        const el = document.getElementById(id);
-        if (!el) return "";
-        const opt = el.options?.[el.selectedIndex];
-        return (opt?.text || el.value || "").trim();
-      };
-
       const meta = {
         auftrags_id:        auftragId,
         pdfName:            filename,
         bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
-        techniker1:         selText("techniker1"),
-        techniker2:         (selText("techniker2") || "").replace(/^–$/, ""),
+        techniker1:         selectedText("techniker1"),
+        techniker2:         (selectedText("techniker2") || "").replace(/^–$/, ""),
         maschine_value:     document.getElementById("maschine")?.value || "",
-        maschine_text:      document.getElementById("sonstige_maschine")?.value?.trim() || selText("maschine"),
+        maschine_text:      selectedText("maschine"),
         anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
-        anlagenteil_text:   document.getElementById("sonstige_anlagenteil")?.value?.trim() || selText("anlagenteil"),
+        anlagenteil_text:   selectedText("anlagenteil"),
       };
 
       // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
@@ -1901,7 +1908,6 @@ async function generatePDFAndFinish() {
         TARGET_META_ITEM_ID || TARGET.parentItemId
       );
       if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
-      // ---- /META ----
 
       alert("✅ PDF erfolgreich in OneDrive gespeichert!");
       await deleteDraftFile?.();
@@ -1920,29 +1926,31 @@ async function generatePDFAndFinish() {
 }
 
 
-
-
-
-
-
-
-
-
 // ====================
 // Sonstiges
 // ====================
 function forceUpdate() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-      for (let registration of registrations) registration.unregister();
-    }).then(function() {
-      caches.keys().then(function(names) { for (let name of names) caches.delete(name); });
-    }).then(function() {
+  (async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if (window.caches?.keys) {
+        const names = await caches.keys();
+        await Promise.all(names.map(n => caches.delete(n)));
+      }
       alert("✅ Cache & Service Worker gelöscht. Seite wird neu geladen.");
-      location.reload(true);
-    });
-  }
+      const url = new URL(location.href);
+      url.searchParams.set('_', Date.now());
+      location.replace(url.toString());
+    } catch (e) {
+      console.warn("forceUpdate() Fehler:", e);
+      location.reload();
+    }
+  })();
 }
+
 
 // 💾 ENTWURF SPEICHERN
 async function saveDraftToOneDrive() {
