@@ -1070,11 +1070,13 @@ window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
 loadMasterData().then(rebuildDropdownsFromMaster);
 
 
+// ⬇️ Einmal VOR den beiden Funktionen einfügen
+const norm = (s) => String(s ?? '').trim();
+
 function tryAddCustomMaschine() {
   const val = norm(sonstigeMaschineInput?.value);
   if (!val || !maschineSelect) return;
 
-  // NEU: autoselect = true -> direkt auf den neu hinzugefügten Eintrag springen
   addOptionUnique(maschineSelect, val, { autoselect: true });
 
   const exists = (masterData.maschinen || [])
@@ -1084,7 +1086,6 @@ function tryAddCustomMaschine() {
     saveMasterData();
   }
 }
-
 
 function tryAddCustomAnlagenteil() {
   const val = norm(sonstigeAnlagenteilInput?.value);
@@ -1099,6 +1100,7 @@ function tryAddCustomAnlagenteil() {
     saveMasterData();
   }
 }
+
 
 
   // Eingabe übernehmen bei Verlassen der Felder …
