@@ -290,6 +290,22 @@ async function loadHtml2PdfIfNeeded(){
   ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
 </div>
 
+  <!-- 🔴 Globale Wartungswarnung (sichtbar auch bei zuem Panel) -->
+<div id="wpGlobalOverdueBanner" class="no-print"
+     style="display:none;margin:10px 0;padding:10px 12px;border-left:6px solid #dc3545;
+            background:#f8d7da;color:#842029;border-radius:6px;align-items:center;
+            gap:10px;justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;line-height:1;">⚠️</span>
+    <span data-msg>Es gibt überfällige Wartungen.</span>
+  </div>
+  <button id="wpOpenFromBanner"
+          style="border:0;border-radius:6px;background:#dc3545;color:#fff;
+                 padding:6px 10px;cursor:pointer;">
+    Wartung öffnen
+  </button>
+</div>
+
 
 <!-- === 📊 Dashboard (auf/zu klappbar) === -->
 <div id="ordersDashboard" class="no-print" style="margin:16px 0;">
@@ -2826,21 +2842,92 @@ function wpStatusUpdateForTask(task){
   }
 }
 
+
+// ===== Helpers =====
+function toInt(v, fallback = 0){
+  const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+function isIsoDate(s){
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+}
+
+// Überfällige Aufgaben für eine Maschine ermitteln (Array zurück)
+function wpOverdueTasks(machineName){
+  if (!machineName) return [];
+  const tasks = wartungsplaene[machineName] || [];
+  return tasks.filter(t => {
+    const inter = toInt(t.intervalDays || 0, 0);
+    const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
+    const next  = wpComputeNext(last, inter);
+    return wpStatus(next).level === "overdue";
+  });
+}
+
+// 🔴 Globalen Banner aktualisieren (sichtbar auch bei zuem Panel)
+function wpUpdateGlobalBanner(){
+  const banner = document.getElementById('wpGlobalOverdueBanner');
+  if (!banner) return;
+
+  const selMaschine = wpEls().selMaschine;
+  const m = selMaschine?.value || "";
+
+  // Nur für die aktuell gewählte Maschine anzeigen
+  const overdue = wpOverdueTasks(m);
+  if (!m || overdue.length === 0){
+    banner.style.display = "none";
+    return;
+  }
+
+  // Nachricht setzen
+  const msgEl = banner.querySelector('[data-msg]');
+  if (msgEl){
+    const names = overdue.map(t => t.name).slice(0,3).join(', ');
+    const more  = overdue.length > 3 ? ` (+${overdue.length - 3} weitere)` : '';
+    msgEl.textContent = `Maschine „${m}“: ${overdue.length} Wartung(en) überfällig – ${names}${more}`;
+  }
+
+  banner.style.display = "flex";
+}
+
+// ==== Status / Warnung / Auswahl ====
+function wpStatusUpdateForTask(task){
+  const { interval, last, next, pill } = wpEls();
+
+  if (!task){
+    interval.value = "";
+    last.value     = "";
+    next.value     = "";
+    pill.textContent = "–";
+    pill.style.background = "#e9ecef";
+    pill.style.color = "#000";
+    return;
+  }
+
+  interval.value = task.intervalDays || "";
+  last.value     = task.lastDateISO  || "";
+  next.value     = wpComputeNext(task.lastDateISO, task.intervalDays) || "";
+
+  const st = wpStatus(next.value);
+  pill.textContent      = st.label;
+  pill.style.background = st.bg;
+  pill.style.color      = st.fg;
+}
+
 function wpEvalWarning(){
   const { selMaschine, warn } = wpEls();
   const m = selMaschine?.value;
-  if (!m){ if (warn) warn.style.display = "none"; return; }
+  let anyOverdue = false;
 
-  const anyOverdue = (wartungsplaene[m]||[])
-    .some(t => {
-      const inter = toInt(t.intervalDays || 0, 0);
-      const next  = wpComputeNext(isIsoDate(t.lastDateISO) ? t.lastDateISO : "", inter);
-      return wpStatus(next).level === "overdue";
-    });
-
+  if (m){
+    anyOverdue = wpOverdueTasks(m).length > 0;
+  }
   if (warn) warn.style.display = anyOverdue ? "block" : "none";
 
-  // ⬇️ zusätzlich: globales Offline-Banner aktualisieren
+  // 🔁 Banner + (offline) Info aktualisieren
+  wpUpdateGlobalBanner();
+
+  // ✉️ Zusätzlich (falls konfiguriert): E-Mail-Check, aber hier ohne Versand
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 }
 
@@ -2853,7 +2940,7 @@ function wpCurrentTask(){
 
 function wpRecalcNext(){
   const { interval, last, next, pill } = wpEls();
-  const inter = toInt(interval?.value || 0, 0);
+  const inter   = toInt(interval?.value || 0, 0);
   const lastIso = isIsoDate(last?.value) ? last.value : "";
   if (next) next.value = inter > 0 && lastIso ? wpComputeNext(lastIso, inter) : "";
 
@@ -2870,12 +2957,24 @@ function setupWartungsplanUI(){
   const E = wpEls();
   if (!E.section) return;
 
-  // Maschine ändert -> Liste, Status, Warnung & Banner
-  E.selMaschine?.addEventListener("change", () => {
-    wpRefreshTaskList();
-    wpStatusUpdateForTask(null);
-    wpEvalWarning();
+  // Banner-Button: Wartungspanel öffnen & scrollen
+  document.getElementById('wpOpenFromBanner')?.addEventListener('click', () => {
+    const panel   = document.getElementById('wartungsplanPanel');
+    const section = document.getElementById('wartungsplanSection');
+    if (panel){ panel.style.display = 'block'; }
+    // Button-Label im Kopf (falls vorhanden) umschalten
+    const headBtn = document.getElementById('wartungToggleHead');
+    if (headBtn) headBtn.textContent = '🛠️ Wartung (zu)';
+    section?.scrollIntoView({ behavior:'smooth', block:'start' });
   });
+
+E.selMaschine?.addEventListener("change", () => {
+  wpRefreshTaskList();
+  wpStatusUpdateForTask(null);
+  wpEvalWarning();
+  wpUpdateGlobalBanner(); // ⬅️ hier
+});
+
 
   // Auswahl Aufgabe -> Felder & Status füllen
   E.selTask?.addEventListener("change", () => wpStatusUpdateForTask(wpCurrentTask()));
@@ -2913,9 +3012,12 @@ function setupWartungsplanUI(){
     // Datum validieren
     t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
 
-    await wpSave();
-    wpRecalcNext();
-    wpEvalWarning();
+await wpSave();
+wpRecalcNext?.();
+wpEvalWarning?.();
+wpUpdateGlobalBanner(); // ⬅️ hier
+
+
   });
 
   // Löschen
@@ -2947,10 +3049,12 @@ function setupWartungsplanUI(){
 document.addEventListener("DOMContentLoaded", async () => {
   await wpLoad();
   setupWartungsplanUI();
-  // Maschine könnte schon gesetzt sein:
+
+  // Maschine könnte schon gesetzt sein
   wpRefreshTaskList();
   wpStatusUpdateForTask(wpCurrentTask());
   wpEvalWarning();
+
   // Offline-Banner beim Start
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 });
@@ -2983,6 +3087,7 @@ window.wpMarkCurrentTaskDone = async function(){
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 };
 </script>
+
 
 
 
