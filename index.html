@@ -684,6 +684,64 @@ window.addEventListener("load", () => {
          style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
 
+<!-- … Ende Anlagenteil-Section … -->
+</div>
+
+<!-- ⬇️ HIER EINSETZEN: Wartungsplan-Panel -->
+<div class="section" id="wartungsplanSection" style="margin:16px 0;">
+  <div id="wpWarning" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #dc3545;color:#842029;background:#f8d7da;border-radius:6px;">
+    ⚠️ Diese Anlage hat <strong>überfällige Wartungen</strong>. Bitte durchführen!
+  </div>
+
+  <div id="wartungsplanPanel" style="display:none;border:1px solid #ddd;border-radius:8px;padding:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label style="font-weight:bold;">Anlage (Maschine)</label>
+        <div style="font-size:13px;color:#666;">Verknüpft mit Feld „Maschine“</div>
+      </div>
+      <div>
+        <label style="font-weight:bold;">Status</label><br>
+        <span id="wpStatusPill" style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:13px;background:#e9ecef;">–</span>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label for="wpTaskSelect" style="font-weight:bold;">Schmierstelle / Aufgabe</label>
+      <select id="wpTaskSelect" style="width:100%;padding:6px;">
+        <option value="">Bitte auswählen</option>
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:12px;margin-top:10px;">
+      <div>
+        <label style="font-weight:bold;">Intervall (Tage)</label>
+        <input id="wpIntervalDays" type="number" min="1" step="1" placeholder="z. B. 30" style="width:100%;padding:6px;">
+      </div>
+      <div>
+        <label style="font-weight:bold;">Zuletzt durchgeführt</label>
+        <input id="wpLastDate" type="date" style="width:100%;padding:6px;">
+      </div>
+      <div>
+        <label style="font-weight:bold;">Nächstes Fälligkeitsdatum</label>
+        <input id="wpNextDue" type="date" readonly style="width:100%;padding:6px;background:#f7f7f7;">
+      </div>
+    </div>
+
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" id="wpAddTask"    style="padding:8px 12px;border:0;border-radius:6px;background:#6c757d;color:#fff;cursor:pointer;">➕ Neue Aufgabe</button>
+      <button type="button" id="wpSaveTask"   style="padding:8px 12px;border:0;border-radius:6px;background:#0d6efd;color:#fff;cursor:pointer;">💾 Speichern</button>
+      <button type="button" id="wpDeleteTask" style="padding:8px 12px;border:0;border-radius:6px;background:#dc3545;color:#fff;cursor:pointer;">🗑️ Löschen</button>
+      <button type="button" id="wpMarkDoneToday" style="padding:8px 12px;border:0;border-radius:6px;background:#198754;color:#fff;cursor:pointer;">✅ Heute durchgeführt</button>
+    </div>
+
+    <div id="wpHint" style="margin-top:8px;color:#666;font-size:13px;">
+      Aufgaben sind pro Maschine hinterlegt. Beim Abschluss kannst du die passende Aufgabe mit „Heute durchgeführt“ markieren.
+    </div>
+  </div>
+</div>
+<!-- ⬆️ Ende Wartungsplan-Panel -->
+
+
 
 
 
@@ -1830,16 +1888,24 @@ async function generatePDFAndFinish() {
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
-  // ✅ Pflichtfelder NUR beim Abschluss prüfen
-  if (!validateBeforeFinish()) return;
+// ✅ Pflichtfelder NUR beim Abschluss prüfen
+if (!validateBeforeFinish()) return;
 
-  // A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
-  const signatureMap = new Map(
-    Array.from(src.querySelectorAll('canvas')).map(c => {
-      try { return [c.id, c.toDataURL('image/png')]; }
-      catch (e) { console.warn('toDataURL fehlgeschlagen', e); return [c.id, null]; }
-    })
-  );
+// ✅ Wartung (optional): aktuelle Wartungsaufgabe als "heute durchgeführt" markieren
+try {
+  await window.wpMarkCurrentTaskDone?.();
+} catch (e) {
+  console.warn('wpMarkCurrentTaskDone:', e);
+}
+
+// A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
+const signatureMap = new Map(
+  Array.from(src.querySelectorAll('canvas')).map(c => {
+    try { return [c.id, c.toDataURL('image/png')]; }
+    catch (e) { console.warn('toDataURL fehlgeschlagen', e); return [c.id, null]; }
+  })
+);
+
 
   // B) Offscreen-Iframe
   const frame = document.getElementById('pdfSandbox');
@@ -2565,6 +2631,199 @@ function applyFiltersToDashboard(){
 }
 // ===== /Dashboard =====
 
+</script>
+<script>
+/* ===== Wartungsplan – Daten & OneDrive-Speicher ===== */
+const WP_FILE = "Wartungsplaene.json";
+/** Struktur: { [maschinenName]: [ { id, name, intervalDays, lastDateISO } ] } */
+let wartungsplaene = {};
+
+function wpTodayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function wpAddDays(iso, days){
+  if (!iso) return "";
+  const d = new Date(iso); d.setDate(d.getDate()+Number(days||0));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function wpComputeNext(lastDate, intervalDays){
+  if (!lastDate || !intervalDays) return "";
+  return wpAddDays(lastDate, intervalDays);
+}
+function wpStatus(nextIso){
+  if (!nextIso) return {label:"–",level:"none",bg:"#e9ecef",fg:"#000"};
+  const t = wpTodayISO();
+  if (nextIso < t) return {label:"Überfällig",level:"overdue",bg:"#f8d7da",fg:"#842029"};
+  const daysLeft = Math.floor((new Date(nextIso) - new Date(t))/86400000);
+  if (daysLeft <= 3) return {label:"Bald fällig",level:"soon",bg:"#fff3cd",fg:"#664d03"};
+  return {label:"OK",level:"ok",bg:"#d1e7dd",fg:"#0f5132"};
+}
+
+async function wpLoad(){
+  try{
+    // offline/local fallback
+    const raw = localStorage.getItem("TE15_WARTUNGSPLAENE");
+    wartungsplaene = raw ? JSON.parse(raw) : {};
+  }catch{ wartungsplaene = {}; }
+
+  // Wenn eingeloggt + Meta-Ordner aufgelöst -> aus OneDrive laden
+  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
+  try{
+    const listUrl = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}/children?$select=id,name`;
+    const lr = await fetch(listUrl, { headers:{Authorization:`Bearer ${accessToken}`}});
+    if (!lr.ok) return;
+    const ls = await lr.json();
+    const item = (ls.value||[]).find(x => x.name === WP_FILE);
+    if (!item) return;
+    const fr = await fetch(`https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+                           { headers:{Authorization:`Bearer ${accessToken}`}});
+    if (!fr.ok) return;
+    wartungsplaene = await fr.json();
+    localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene));
+  }catch(e){ console.warn("wpLoad()", e); }
+}
+
+async function wpSave(){
+  try{ localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); }catch{}
+  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
+  const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_FILE)}:/content`;
+  const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
+  try{
+    await fetch(url, { method:"PUT", headers:{Authorization:`Bearer ${accessToken}`}, body:blob });
+  }catch(e){ console.warn("wpSave()", e); }
+}
+
+/* ===== Wartungsplan – UI ===== */
+function wpEls(){
+  return {
+    panel: document.getElementById("wartungsplanPanel"),
+    section: document.getElementById("wartungsplanSection"),
+    warn: document.getElementById("wpWarning"),
+    pill: document.getElementById("wpStatusPill"),
+    selTask: document.getElementById("wpTaskSelect"),
+    interval: document.getElementById("wpIntervalDays"),
+    last: document.getElementById("wpLastDate"),
+    next: document.getElementById("wpNextDue"),
+    btnAdd: document.getElementById("wpAddTask"),
+    btnSave: document.getElementById("wpSaveTask"),
+    btnDel: document.getElementById("wpDeleteTask"),
+    btnDone: document.getElementById("wpMarkDoneToday"),
+    selMaschine: document.getElementById("maschine")
+  };
+}
+function wpEnsureMachineKey(name){ if (!name) return null; wartungsplaene[name] ||= []; return name; }
+
+function wpRefreshTaskList(){
+  const { selTask, selMaschine } = wpEls();
+  const m = selMaschine?.value; selTask.innerHTML = `<option value="">Bitte auswählen</option>`;
+  if (!m) return;
+  (wartungsplaene[m]||[]).forEach(t=>{
+    const o = document.createElement("option"); o.value = t.id; o.textContent = t.name; selTask.appendChild(o);
+  });
+}
+function wpStatusUpdateForTask(task){
+  const { interval, last, next, pill } = wpEls();
+  if (!task){ interval.value = ""; last.value=""; next.value=""; pill.textContent="–"; pill.style.background="#e9ecef"; pill.style.color="#000"; return; }
+  interval.value = task.intervalDays || "";
+  last.value = task.lastDateISO || "";
+  next.value = wpComputeNext(task.lastDateISO, task.intervalDays);
+  const st = wpStatus(next.value); pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg;
+}
+function wpEvalWarning(){
+  const { selMaschine, warn } = wpEls();
+  const m = selMaschine?.value; if (!m){ warn.style.display="none"; return; }
+  const anyOverdue = (wartungsplaene[m]||[]).some(t => wpStatus(wpComputeNext(t.lastDateISO, t.intervalDays)).level === "overdue");
+  warn.style.display = anyOverdue ? "block" : "none";
+}
+function wpCurrentTask(){
+  const { selMaschine, selTask } = wpEls();
+  const m = selMaschine?.value, id = selTask?.value;
+  if (!m || !id) return null;
+  return (wartungsplaene[m]||[]).find(t => t.id === id) || null;
+}
+function wpRecalcNext(){
+  const { interval, last, next, pill } = wpEls();
+  next.value = wpComputeNext(last.value, Number(interval.value||0)) || "";
+  const st = wpStatus(next.value); pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg;
+}
+
+function setupWartungsplanUI(){
+  const E = wpEls();
+  if (!E.section) return;
+
+  // Maschine ändert -> Liste & Warnung
+  E.selMaschine?.addEventListener("change", () => { wpRefreshTaskList(); wpStatusUpdateForTask(null); wpEvalWarning(); });
+
+  // Auswahl Aufgabe
+  E.selTask?.addEventListener("change", () => wpStatusUpdateForTask(wpCurrentTask()));
+
+  // Eingaben -> NextDue live
+  E.interval?.addEventListener("input", wpRecalcNext);
+  E.last?.addEventListener("change", wpRecalcNext);
+
+  // Neue Aufgabe
+  E.btnAdd?.addEventListener("click", async () => {
+    const m = wpEnsureMachineKey(E.selMaschine?.value);
+    if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+    const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
+    if (!name) return;
+    const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
+    wartungsplaene[m].push(t);
+    await wpSave(); wpRefreshTaskList(); E.selTask.value = t.id; wpStatusUpdateForTask(t); wpEvalWarning();
+  });
+
+  // Speichern
+  E.btnSave?.addEventListener("click", async () => {
+    const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+    t.intervalDays = Number(E.interval.value||0) || "";
+    t.lastDateISO  = E.last.value || "";
+    await wpSave(); wpRecalcNext(); wpEvalWarning();
+  });
+
+  // Löschen
+  E.btnDel?.addEventListener("click", async () => {
+    const m = E.selMaschine?.value, id = E.selTask?.value;
+    if (!m || !id) return;
+    if (!confirm("Diese Wartungsaufgabe wirklich löschen?")) return;
+    wartungsplaene[m] = (wartungsplaene[m]||[]).filter(x => x.id !== id);
+    await wpSave(); wpRefreshTaskList(); wpStatusUpdateForTask(null); wpEvalWarning();
+  });
+
+  // Heute durchgeführt
+  E.btnDone?.addEventListener("click", async () => {
+    const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+    t.lastDateISO = wpTodayISO();
+    await wpSave(); wpRecalcNext(); wpEvalWarning();
+  });
+}
+
+/* Init: beim Laden + nach Login nachziehen */
+document.addEventListener("DOMContentLoaded", async () => {
+  await wpLoad();
+  setupWartungsplanUI();
+  // Maschine könnte schon gesetzt sein:
+  wpRefreshTaskList(); wpEvalWarning();
+});
+
+// Wenn ihr euch anmeldet, danach erneut laden (hook in eure Funktion)
+(function hookLogin(){
+  const orig = window.signInAndAcquireToken;
+  if (typeof orig === "function"){
+    window.signInAndAcquireToken = async function(...args){
+      const r = await orig.apply(this, args);
+      try { await wpLoad(); wpRefreshTaskList(); wpEvalWarning(); } catch(e){}
+      return r;
+    };
+  }
+})();
+
+// Optional: beim Auftragsabschluss automatisch die aktuell gewählte Aufgabe auf „heute“ setzen
+window.wpMarkCurrentTaskDone = async function(){
+  const t = wpCurrentTask(); if (!t) return;
+  t.lastDateISO = wpTodayISO();
+  await wpSave();
+};
 </script>
 
 
