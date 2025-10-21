@@ -290,7 +290,10 @@ async function loadHtml2PdfIfNeeded(){
   ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
 </div>
 
-  <!-- 🔴 Globale Wartungswarnung (sichtbar auch bei zuem Panel) -->
+<!-- … Buttons & Login-Hinweis … -->
+<div id="loginHint" class="no-print" …>…</div>
+
+<!-- 🔴 Globale Wartungswarnung (sichtbar auch bei zuem Panel) -->
 <div id="wpGlobalOverdueBanner" class="no-print"
      style="display:none;margin:10px 0;padding:10px 12px;border-left:6px solid #dc3545;
             background:#f8d7da;color:#842029;border-radius:6px;align-items:center;
@@ -305,6 +308,7 @@ async function loadHtml2PdfIfNeeded(){
     Wartung öffnen
   </button>
 </div>
+
 
 
 <!-- === 📊 Dashboard (auf/zu klappbar) === -->
@@ -2843,6 +2847,7 @@ function wpStatusUpdateForTask(task){
 }
 
 
+
 // ===== Helpers =====
 function toInt(v, fallback = 0){
   const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10);
@@ -2968,13 +2973,12 @@ function setupWartungsplanUI(){
     section?.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-E.selMaschine?.addEventListener("change", () => {
-  wpRefreshTaskList();
-  wpStatusUpdateForTask(null);
-  wpEvalWarning();
-  wpUpdateGlobalBanner(); // ⬅️ hier
-});
-
+  // Maschine ändert -> Liste, Status, Warnung & Banner
+  E.selMaschine?.addEventListener("change", () => {
+    wpRefreshTaskList();
+    wpStatusUpdateForTask(null);
+    wpEvalWarning();
+  });
 
   // Auswahl Aufgabe -> Felder & Status füllen
   E.selTask?.addEventListener("change", () => wpStatusUpdateForTask(wpCurrentTask()));
@@ -3012,12 +3016,9 @@ E.selMaschine?.addEventListener("change", () => {
     // Datum validieren
     t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
 
-await wpSave();
-wpRecalcNext?.();
-wpEvalWarning?.();
-wpUpdateGlobalBanner(); // ⬅️ hier
-
-
+    await wpSave();
+    wpRecalcNext();
+    wpEvalWarning();
   });
 
   // Löschen
@@ -3087,6 +3088,7 @@ window.wpMarkCurrentTaskDone = async function(){
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 };
 </script>
+
 
 
 
