@@ -1876,7 +1876,6 @@ container.querySelectorAll('input').forEach(inp => {
 // ====================
 
 
-// ✅ Auftrag abschließen → PDF erzeugen & hochladen
 async function generatePDFAndFinish() {
   // 0) Lib + Login
   await loadHtml2PdfIfNeeded();
@@ -1888,24 +1887,20 @@ async function generatePDFAndFinish() {
   const src = document.getElementById("pdfExportContainer");
   if (!src) { alert("Container nicht gefunden."); return; }
 
-// ✅ Pflichtfelder NUR beim Abschluss prüfen
-if (!validateBeforeFinish()) return;
+  // ✅ Pflichtfelder NUR beim Abschluss prüfen
+  if (!validateBeforeFinish()) return;
 
-// ✅ Wartung (optional): aktuelle Wartungsaufgabe als "heute durchgeführt" markieren
-try {
-  await window.wpMarkCurrentTaskDone?.();
-} catch (e) {
-  console.warn('wpMarkCurrentTaskDone:', e);
-}
+  // ✅ Wartung (optional): aktuelle Wartungsaufgabe als "heute durchgeführt" markieren
+  try { await window.wpMarkCurrentTaskDone?.(); }
+  catch (e) { console.warn('wpMarkCurrentTaskDone:', e); }
 
-// A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
-const signatureMap = new Map(
-  Array.from(src.querySelectorAll('canvas')).map(c => {
-    try { return [c.id, c.toDataURL('image/png')]; }
-    catch (e) { console.warn('toDataURL fehlgeschlagen', e); return [c.id, null]; }
-  })
-);
-
+  // A) Canvas aus dem ORIGINAL sichern (id -> DataURL)
+  const signatureMap = new Map(
+    Array.from(src.querySelectorAll('canvas')).map(c => {
+      try { return [c.id, c.toDataURL('image/png')]; }
+      catch (e) { console.warn('toDataURL fehlgeschlagen', e); return [c.id, null]; }
+    })
+  );
 
   // B) Offscreen-Iframe
   const frame = document.getElementById('pdfSandbox');
@@ -1954,9 +1949,7 @@ const signatureMap = new Map(
   const selectedText = (selId) => {
     const sel = document.getElementById(selId);
     if (!sel) return "";
-    // normaler Option-Text
     let text = (sel.options?.[sel.selectedIndex]?.text || sel.value || "").trim();
-    // Sonderfälle
     if (selId === "reinigung_erforderlich") {
       const v = (sel.value || "").toLowerCase();
       if (v === "ja") return "Ja";
@@ -1982,6 +1975,55 @@ const signatureMap = new Map(
   clone.style.margin = '0';
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
+
+  // --- 🆕 Wartungsblock nur ins PDF, wenn ausgefüllt ---
+  function wartungHasUserInput() {
+    const selTask  = document.getElementById('wpTaskSelect')?.value?.trim();
+    const interval = document.getElementById('wpIntervalDays')?.value?.trim();
+    const lastDate = document.getElementById('wpLastDate')?.value?.trim();
+    const nextDue  = document.getElementById('wpNextDue')?.value?.trim();
+    return !!(selTask || interval || lastDate || nextDue);
+  }
+
+  const wartungSectionInClone = clone.querySelector('#wartungsplanSection');
+  if (!wartungHasUserInput()) {
+    // kompletten Bereich im PDF ausblenden
+    wartungSectionInClone?.remove();
+  } else {
+    // Buttons/Hinweise im PDF entfernen (nur Darstellung)
+    clone.querySelector('#wpHint')?.remove();
+    clone.querySelectorAll('#wartungsplanPanel button').forEach(b => b.remove());
+    clone.querySelector('#wpWarning')?.remove();
+
+    // --- 🆕 Werte der Wartungsfelder explizit vom Original übernehmen ---
+    (function copyWartungValuesIntoClone(){
+      const copyInput = (id) => {
+        const o = document.getElementById(id);
+        const c = clone.querySelector('#' + id);
+        if (o && c) c.value = o.value;
+      };
+      const copySelect = (id) => {
+        const o = document.getElementById(id);
+        const c = clone.querySelector('#' + id);
+        if (!o || !c) return;
+        c.value = o.value;
+        Array.from(c.options).forEach(opt => opt.selected = (opt.value === o.value));
+        const text = o.options?.[o.selectedIndex]?.text?.trim() || o.value || '';
+        c.setAttribute('data-selected-text', text);
+      };
+
+      copySelect('wpTaskSelect');
+      copyInput('wpIntervalDays');
+      copyInput('wpLastDate');
+      copyInput('wpNextDue');
+
+      // Status-Pill Text sichern (rein kosmetisch)
+      const pillOrig  = document.getElementById('wpStatusPill');
+      const pillClone = clone.querySelector('#wpStatusPill');
+      if (pillOrig && pillClone) pillClone.textContent = pillOrig.textContent;
+    })();
+  }
+  // --- 🆕 Ende Wartungsblock-Logik ---
 
   // Select-Werte + sichtbare Texte übernehmen (für die PDF-Umwandlung)
   clone.querySelectorAll('select').forEach(sel => {
@@ -2105,6 +2147,8 @@ const signatureMap = new Map(
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
+
 
 
 // ====================
