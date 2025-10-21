@@ -258,6 +258,7 @@ async function loadHtml2PdfIfNeeded(){
     Neuen Auftrag starten
   </button>
 </div>
+
 <!-- 🔐 Login/Logout Bereich -->
 <div style="margin-bottom: 20px;">
   <button onclick="signInAndAcquireToken(true)" class="no-print"
@@ -269,17 +270,26 @@ async function loadHtml2PdfIfNeeded(){
     Abmelden / Konto wechseln
   </button>
   <!-- Wartung: Toggle-Button im Kopf -->
-<button id="wartungToggleHead" class="no-print"
-        style="padding:8px 12px; margin-left:10px; background:#198754; color:white; border:none; border-radius:6px; cursor:pointer;">
-  🛠️ Wartung
-</button>
-
+  <button id="wartungToggleHead" class="no-print"
+          style="padding:8px 12px; margin-left:10px; background:#198754; color:white; border:none; border-radius:6px; cursor:pointer;">
+    🛠️ Wartung
+  </button>
 </div>
+
+<!-- 🔔 Globale Wartungswarnung (nur App, nicht im PDF) -->
+<div id="wpGlobalAlert" class="no-print"
+     style="display:none; margin:-8px 0 20px 0; padding:10px 12px;
+            border:1px solid #dc3545; background:#f8d7da; color:#842029;
+            border-radius:6px; font-size:14px;">
+  <!-- Inhalt wird per JS gesetzt -->
+</div>
+
 <div id="loginHint" class="no-print" 
      style="margin-bottom: 20px; padding: 10px; background: #fffbe6; border: 1px solid #e6c200; 
             border-radius: 6px; color: #7a6600; font-size: 14px;">
   ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
 </div>
+
 
 <!-- === 📊 Dashboard (auf/zu klappbar) === -->
 <div id="ordersDashboard" class="no-print" style="margin:16px 0;">
@@ -1235,7 +1245,15 @@ window.addEventListener('load', function() {
     system: { allowRedirectInIframe: true }
   };
 
-  const scopes = ["User.Read","openid","profile","offline_access","Files.ReadWrite.All"];
+  const scopes = [
+  "User.Read",
+  "openid",
+  "profile",
+  "offline_access",
+  "Files.ReadWrite.All",
+  "Mail.Send"          // ⬅️ neu für E-Mail-Versand
+];
+
   const msalInstance = new msal.PublicClientApplication(msalConfig);
   let accessToken = "";
 
@@ -2766,43 +2784,103 @@ function wpRefreshTaskList(){
     const o = document.createElement("option"); o.value = t.id; o.textContent = t.name; selTask.appendChild(o);
   });
 }
+<script>
+// ==== kleine Helfer ====
+const isIsoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s||""));
+const toInt = (v, def=0) => {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : def;
+};
+
+// ==== Status / Warnung / Auswahl ====
 function wpStatusUpdateForTask(task){
   const { interval, last, next, pill } = wpEls();
-  if (!task){ interval.value = ""; last.value=""; next.value=""; pill.textContent="–"; pill.style.background="#e9ecef"; pill.style.color="#000"; return; }
-  interval.value = task.intervalDays || "";
-  last.value = task.lastDateISO || "";
-  next.value = wpComputeNext(task.lastDateISO, task.intervalDays);
-  const st = wpStatus(next.value); pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg;
+
+  if (!task){
+    if (interval) interval.value = "";
+    if (last)     last.value     = "";
+    if (next)     next.value     = "";
+    if (pill){
+      pill.textContent = "–";
+      pill.style.background = "#e9ecef";
+      pill.style.color      = "#000";
+    }
+    return;
+  }
+
+  // Werte vorsichtig aus dem Task übernehmen
+  const inter = toInt(task.intervalDays || "", "");
+  const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
+
+  if (interval) interval.value = inter === "" ? "" : String(inter);
+  if (last)     last.value     = lastIso;
+  if (next){
+    next.value = wpComputeNext(lastIso, inter) || "";
+  }
+
+  const st = wpStatus(next?.value || "");
+  if (pill){
+    pill.textContent      = st.label;
+    pill.style.background = st.bg;
+    pill.style.color      = st.fg;
+  }
 }
+
 function wpEvalWarning(){
   const { selMaschine, warn } = wpEls();
-  const m = selMaschine?.value; if (!m){ warn.style.display="none"; return; }
-  const anyOverdue = (wartungsplaene[m]||[]).some(t => wpStatus(wpComputeNext(t.lastDateISO, t.intervalDays)).level === "overdue");
-  warn.style.display = anyOverdue ? "block" : "none";
+  const m = selMaschine?.value;
+  if (!m){ if (warn) warn.style.display = "none"; return; }
+
+  const anyOverdue = (wartungsplaene[m]||[])
+    .some(t => {
+      const inter = toInt(t.intervalDays || 0, 0);
+      const next  = wpComputeNext(isIsoDate(t.lastDateISO) ? t.lastDateISO : "", inter);
+      return wpStatus(next).level === "overdue";
+    });
+
+  if (warn) warn.style.display = anyOverdue ? "block" : "none";
+
+  // ⬇️ zusätzlich: globales Offline-Banner aktualisieren
+  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 }
+
 function wpCurrentTask(){
   const { selMaschine, selTask } = wpEls();
   const m = selMaschine?.value, id = selTask?.value;
   if (!m || !id) return null;
   return (wartungsplaene[m]||[]).find(t => t.id === id) || null;
 }
+
 function wpRecalcNext(){
   const { interval, last, next, pill } = wpEls();
-  next.value = wpComputeNext(last.value, Number(interval.value||0)) || "";
-  const st = wpStatus(next.value); pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg;
+  const inter = toInt(interval?.value || 0, 0);
+  const lastIso = isIsoDate(last?.value) ? last.value : "";
+  if (next) next.value = inter > 0 && lastIso ? wpComputeNext(lastIso, inter) : "";
+
+  const st = wpStatus(next?.value || "");
+  if (pill){
+    pill.textContent      = st.label;
+    pill.style.background = st.bg;
+    pill.style.color      = st.fg;
+  }
 }
 
+// ==== UI verdrahten ====
 function setupWartungsplanUI(){
   const E = wpEls();
   if (!E.section) return;
 
-  // Maschine ändert -> Liste & Warnung
-  E.selMaschine?.addEventListener("change", () => { wpRefreshTaskList(); wpStatusUpdateForTask(null); wpEvalWarning(); });
+  // Maschine ändert -> Liste, Status, Warnung & Banner
+  E.selMaschine?.addEventListener("change", () => {
+    wpRefreshTaskList();
+    wpStatusUpdateForTask(null);
+    wpEvalWarning();
+  });
 
-  // Auswahl Aufgabe
+  // Auswahl Aufgabe -> Felder & Status füllen
   E.selTask?.addEventListener("change", () => wpStatusUpdateForTask(wpCurrentTask()));
 
-  // Eingaben -> NextDue live
+  // Eingaben -> NextDue live rechnen
   E.interval?.addEventListener("input", wpRecalcNext);
   E.last?.addEventListener("change", wpRecalcNext);
 
@@ -2812,33 +2890,56 @@ function setupWartungsplanUI(){
     if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
     const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
     if (!name) return;
+
     const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
     wartungsplaene[m].push(t);
-    await wpSave(); wpRefreshTaskList(); E.selTask.value = t.id; wpStatusUpdateForTask(t); wpEvalWarning();
+    await wpSave();
+
+    wpRefreshTaskList();
+    if (E.selTask) E.selTask.value = t.id;
+    wpStatusUpdateForTask(t);
+    wpEvalWarning();
   });
 
   // Speichern
   E.btnSave?.addEventListener("click", async () => {
     const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
-    t.intervalDays = Number(E.interval.value||0) || "";
-    t.lastDateISO  = E.last.value || "";
-    await wpSave(); wpRecalcNext(); wpEvalWarning();
+
+    // Intervall absichern (>=1) oder leer
+    let inter = toInt(E.interval?.value || "", NaN);
+    if (!Number.isFinite(inter) || inter < 1) inter = "";
+    t.intervalDays = inter;
+
+    // Datum validieren
+    t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
+
+    await wpSave();
+    wpRecalcNext();
+    wpEvalWarning();
   });
 
   // Löschen
   E.btnDel?.addEventListener("click", async () => {
-    const m = E.selMaschine?.value, id = E.selTask?.value;
+    const m  = E.selMaschine?.value, id = E.selTask?.value;
     if (!m || !id) return;
     if (!confirm("Diese Wartungsaufgabe wirklich löschen?")) return;
+
     wartungsplaene[m] = (wartungsplaene[m]||[]).filter(x => x.id !== id);
-    await wpSave(); wpRefreshTaskList(); wpStatusUpdateForTask(null); wpEvalWarning();
+    await wpSave();
+
+    wpRefreshTaskList();
+    wpStatusUpdateForTask(null);
+    wpEvalWarning();
   });
 
   // Heute durchgeführt
   E.btnDone?.addEventListener("click", async () => {
     const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
     t.lastDateISO = wpTodayISO();
-    await wpSave(); wpRecalcNext(); wpEvalWarning();
+    await wpSave();
+
+    wpRecalcNext();
+    wpEvalWarning();
   });
 }
 
@@ -2847,16 +2948,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   await wpLoad();
   setupWartungsplanUI();
   // Maschine könnte schon gesetzt sein:
-  wpRefreshTaskList(); wpEvalWarning();
+  wpRefreshTaskList();
+  wpStatusUpdateForTask(wpCurrentTask());
+  wpEvalWarning();
+  // Offline-Banner beim Start
+  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 });
 
-// Wenn ihr euch anmeldet, danach erneut laden (hook in eure Funktion)
+// Beim Login: nachladen + Banner + ggf. Mail (1×/Tag)
 (function hookLogin(){
   const orig = window.signInAndAcquireToken;
   if (typeof orig === "function"){
     window.signInAndAcquireToken = async function(...args){
       const r = await orig.apply(this, args);
-      try { await wpLoad(); wpRefreshTaskList(); wpEvalWarning(); } catch(e){}
+      try {
+        await wpLoad();
+        wpRefreshTaskList();
+        wpStatusUpdateForTask(wpCurrentTask());
+        wpEvalWarning();
+        // beim Login zusätzlich Mail erlauben
+        wpCheckOverdueAndNotify?.({ sendMail:true });
+      } catch(e){}
       return r;
     };
   }
@@ -2867,6 +2979,8 @@ window.wpMarkCurrentTaskDone = async function(){
   const t = wpCurrentTask(); if (!t) return;
   t.lastDateISO = wpTodayISO();
   await wpSave();
+  // nach Abschluss neu bewerten
+  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 };
 </script>
 
