@@ -276,24 +276,7 @@ async function loadHtml2PdfIfNeeded(){
   </button>
 </div>
 
-<!-- 🔔 Globale Wartungswarnung (nur App, nicht im PDF) -->
-<div id="wpGlobalAlert" class="no-print"
-     style="display:none; margin:-8px 0 20px 0; padding:10px 12px;
-            border:1px solid #dc3545; background:#f8d7da; color:#842029;
-            border-radius:6px; font-size:14px;">
-  <!-- Inhalt wird per JS gesetzt -->
-</div>
-
-<div id="loginHint" class="no-print" 
-     style="margin-bottom: 20px; padding: 10px; background: #fffbe6; border: 1px solid #e6c200; 
-            border-radius: 6px; color: #7a6600; font-size: 14px;">
-  ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
-</div>
-
-<!-- … Buttons & Login-Hinweis … -->
-<div id="loginHint" class="no-print" …>…</div>
-
-<!-- 🔴 Globale Wartungswarnung (sichtbar auch bei zuem Panel) -->
+<!-- 🔴 Globale Wartungswarnung (sichtbar auch bei zuem Panel; nur App, nicht im PDF) -->
 <div id="wpGlobalOverdueBanner" class="no-print"
      style="display:none;margin:10px 0;padding:10px 12px;border-left:6px solid #dc3545;
             background:#f8d7da;color:#842029;border-radius:6px;align-items:center;
@@ -308,6 +291,22 @@ async function loadHtml2PdfIfNeeded(){
     Wartung öffnen
   </button>
 </div>
+
+<!-- 🔔 Globaler Hinweis (generisch; nur App, nicht im PDF) -->
+<div id="wpGlobalAlert" class="no-print"
+     style="display:none; margin:10px 0 20px 0; padding:10px 12px;
+            border:1px solid #dc3545; background:#f8d7da; color:#842029;
+            border-radius:6px; font-size:14px;">
+  <!-- Inhalt wird per JS gesetzt -->
+</div>
+
+<!-- 🔐 Login-Hinweis (einmalig; keine doppelte id) -->
+<div id="loginHint" class="no-print"
+     style="margin-bottom: 20px; padding: 10px; background: #fffbe6; border: 1px solid #e6c200;
+            border-radius: 6px; color: #7a6600; font-size: 14px;">
+  ⚠️ Bitte zuerst mit Microsoft anmelden – sonst können keine Daten in OneDrive gespeichert oder geladen werden.
+</div>
+
 
 
 
