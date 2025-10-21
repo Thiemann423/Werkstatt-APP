@@ -268,6 +268,12 @@ async function loadHtml2PdfIfNeeded(){
           style="padding:8px 15px; margin-left:10px; background:#d9534f; color:white; border:none; border-radius:5px; cursor:pointer;">
     Abmelden / Konto wechseln
   </button>
+  <!-- Wartung: Toggle-Button im Kopf -->
+<button id="wartungToggleHead" class="no-print"
+        style="padding:8px 12px; margin-left:10px; background:#198754; color:white; border:none; border-radius:6px; cursor:pointer;">
+  🛠️ Wartung
+</button>
+
 </div>
 <div id="loginHint" class="no-print" 
      style="margin-bottom: 20px; padding: 10px; background: #fffbe6; border: 1px solid #e6c200; 
@@ -2219,6 +2225,7 @@ async function showDraftList() {
 }
 
 
+
 // 🗑️ ENTWURF LÖSCHEN
 async function deleteDraftFile() {
   if (!accessToken) return;
@@ -2241,7 +2248,7 @@ async function deleteDraftFile() {
     return;
   }
 
-  // Fallback: Wenn wir nur den Namen haben, versuche die ID aus dem Ordner zu ermitteln
+  // Fallback: Wenn nur der Name bekannt ist
   if (window.currentDraftFileName) {
     try {
       const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
@@ -2325,7 +2332,30 @@ document.addEventListener('DOMContentLoaded', () => {
   ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
   });
+
+  // 🛠️ Wartung-Button im Kopf (öffnet/schließt den Wartungsbereich)
+  const wartungHeadBtn = document.getElementById('wartungToggleHead');
+  if (wartungHeadBtn) {
+    wartungHeadBtn.addEventListener('click', () => {
+      const panel   = document.getElementById('wartungsplanPanel');    // Panel aus dem Wartungsplan-HTML
+      const section = document.getElementById('wartungsplanSection');  // Umrahmende Section
+
+      if (!panel || !section) {
+        alert('Wartungsbereich ist noch nicht eingebaut.');
+        return;
+      }
+      const willShow = panel.style.display === 'none' || !panel.style.display;
+      panel.style.display = willShow ? 'block' : 'none';
+      wartungHeadBtn.textContent = willShow ? '🛠️ Wartung (zu)' : '🛠️ Wartung';
+
+      if (willShow) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
 });
+
+
 
 async function loadDashboard(){
   await signInAndAcquireToken(true);
