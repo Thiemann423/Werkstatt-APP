@@ -2885,6 +2885,7 @@ function wpEls(){
     interval: document.getElementById("wpIntervalDays"),
     last: document.getElementById("wpLastDate"),
     next: document.getElementById("wpNextDue"),
+    nip: document.getElementById("wpNipCount"),        // ⬅️ NEU
     btnAdd: document.getElementById("wpAddTask"),
     btnSave: document.getElementById("wpSaveTask"),
     btnDel: document.getElementById("wpDeleteTask"),
@@ -2892,6 +2893,7 @@ function wpEls(){
     selMaschine: document.getElementById("maschine")
   };
 }
+
 function wpEnsureMachineKey(name){ if (!name) return null; wartungsplaene[name] ||= []; return name; }
 
 function wpRefreshTaskList(){
@@ -2912,12 +2914,14 @@ const toInt = (v, def=0) => {
 
 // ==== Status / Warnung / Auswahl ====
 function wpStatusUpdateForTask(task){
-  const { interval, last, next, pill } = wpEls();
+  const E = wpEls();
+  const { interval, last, next, pill, nip } = E;
 
   if (!task){
     if (interval) interval.value = "";
     if (last)     last.value     = "";
     if (next)     next.value     = "";
+    if (nip)      nip.value      = "";        // ⬅️ NEU
     if (pill){
       pill.textContent = "–";
       pill.style.background = "#e9ecef";
@@ -2926,23 +2930,18 @@ function wpStatusUpdateForTask(task){
     return;
   }
 
-  // Werte vorsichtig aus dem Task übernehmen
-  const inter = toInt(task.intervalDays || "", "");
+  const inter   = toInt(task.intervalDays || "", "");
   const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
 
   if (interval) interval.value = inter === "" ? "" : String(inter);
   if (last)     last.value     = lastIso;
-  if (next){
-    next.value = wpComputeNext(lastIso, inter) || "";
-  }
+  if (next)     next.value     = wpComputeNext(lastIso, inter) || "";
+  if (nip)      nip.value      = toInt(task.nipples ?? "", "");   // ⬅️ NEU
 
   const st = wpStatus(next?.value || "");
-  if (pill){
-    pill.textContent      = st.label;
-    pill.style.background = st.bg;
-    pill.style.color      = st.fg;
-  }
+  if (pill){ pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
 }
+
 
 async function importSchmierplanFromExcel(){
   const inp = document.getElementById('xlsxInput');
@@ -3208,46 +3207,66 @@ function setupWartungsplanUI(){
     wpEvalWarning();
   });
 
-  // Auswahl Aufgabe -> Felder & Status füllen
-  E.selTask?.addEventListener("change", () => wpStatusUpdateForTask(wpCurrentTask()));
+// Auswahl Aufgabe -> Felder & Status füllen + Mail-Regeln anwenden
+E.selTask?.addEventListener("change", () => {
+  const t = wpCurrentTask();
+  wpStatusUpdateForTask(t);        // Felder/Pill füllen
+  try { wpApplyMailRules(); }      // Intervalle laut Mail-Regeln setzen
+  catch (e) { console.warn('wpApplyMailRules:', e); }
+});
+
 
   // Eingaben -> NextDue live rechnen
   E.interval?.addEventListener("input", wpRecalcNext);
   E.last?.addEventListener("change", wpRecalcNext);
 
   // Neue Aufgabe
-  E.btnAdd?.addEventListener("click", async () => {
-    const m = wpEnsureMachineKey(E.selMaschine?.value);
-    if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
-    const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
-    if (!name) return;
+E.btnAdd?.addEventListener("click", async () => {
+  const E = wpEls();
+  const m = wpEnsureMachineKey(E.selMaschine?.value);
+  if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+  const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
+  if (!name) return;
 
-    const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
-    wartungsplaene[m].push(t);
-    await wpSave();
+  const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
 
-    wpRefreshTaskList();
-    if (E.selTask) E.selTask.value = t.id;
-    wpStatusUpdateForTask(t);
-    wpEvalWarning();
-  });
+  // ⬇️ NEU: ggf. Nippel aus Eingabefeld als Startwert
+  const nipVal = toInt(E.nip?.value || "", NaN);
+  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
+
+  wartungsplaene[m].push(t);
+  await wpSave();
+
+  wpRefreshTaskList();
+  if (E.selTask) E.selTask.value = t.id;
+
+  // ⬇️ NEU: Regeln aus der Mail sofort anwenden (erzwingen)
+  try { wpApplyMailRules({ force:true }); } catch {}
+
+  wpStatusUpdateForTask(t);
+  wpEvalWarning();
+});
+
 
   // Speichern
-  E.btnSave?.addEventListener("click", async () => {
-    const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+E.btnSave?.addEventListener("click", async () => {
+  const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
 
-    // Intervall absichern (>=1) oder leer
-    let inter = toInt(E.interval?.value || "", NaN);
-    if (!Number.isFinite(inter) || inter < 1) inter = "";
-    t.intervalDays = inter;
+  let inter = toInt(E.interval?.value || "", NaN);
+  if (!Number.isFinite(inter) || inter < 1) inter = "";
+  t.intervalDays = inter;
 
-    // Datum validieren
-    t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
+  t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
 
-    await wpSave();
-    wpRecalcNext();
-    wpEvalWarning();
-  });
+  // ⬇️ NEU: Schmiernippel speichern (leer -> entfernen)
+  const nipVal = toInt(E.nip?.value || "", NaN);
+  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
+
+  await wpSave();
+  wpRecalcNext();
+  wpEvalWarning();
+});
+
 
   // Löschen
   E.btnDel?.addEventListener("click", async () => {
