@@ -1942,8 +1942,7 @@ async function generatePDFAndFinish() {
   const doc = frame.contentDocument || frame.contentWindow?.document;
   if (!doc) { alert("PDF-Dokumentkontext nicht verfügbar."); return; }
 
-  doc.open();
-  doc.write(`<!doctype html>
+doc.write(`<!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -1955,9 +1954,38 @@ async function generatePDFAndFinish() {
   html,body,#root{-webkit-text-size-adjust:none;text-size-adjust:none;}
   #root, #root *{ font-family:"Inter", Arial, sans-serif !important; line-height:1.35; box-sizing:border-box; }
   #pdfExportContainerClone{ width:794px; padding:20px; margin:0 auto; background:#fff; }
-  .print-field{ display:grid !important; grid-template-columns:38% 62%; column-gap:12px; align-items:start; padding:6px 0; border-bottom:1px solid #e9e9e9; }
-  .print-label{ font-weight:700; white-space:normal; overflow-wrap:anywhere; word-break:break-word; min-width:0; }
-  .print-value{ white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; hyphens:auto; line-height:1.4; min-width:0; }
+
+  /* ✅ Flex statt Grid, verhindert Überlappungen bei langen Texten */
+  .print-field{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:flex-start !important;
+    gap:12px !important;
+    padding:6px 0 !important;
+    border-bottom:1px solid #e9e9e9 !important;
+  }
+  .print-label{
+    font-weight:700;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+    min-width:0 !important;
+    flex:0 0 38% !important;
+    max-width:38% !important;
+    padding-right:12px !important;
+  }
+  .print-value{
+    white-space:pre-wrap !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+    hyphens:auto !important;
+    line-height:1.4 !important;
+    margin-bottom:6px !important;
+    min-width:0 !important;
+    flex:1 1 62% !important;
+    max-width:62% !important;
+  }
+
   .print-field > * { min-width:0; }
   .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
   img{ max-width:100% !important; height:auto !important; border:0 !important; display:block; }
@@ -1966,7 +1994,8 @@ async function generatePDFAndFinish() {
   @page { size: A4; margin: 0; }
 </style>
 </head><body><div id="root"></div></body></html>`);
-  doc.close();
+doc.close();
+
 
   // C) html2pdf INS IFRAME laden (falls nötig)
   if (!frame.contentWindow.html2pdf) {
