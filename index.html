@@ -713,7 +713,6 @@ window.addEventListener("load", () => {
          style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
 
-<!-- … Ende Anlagenteil-Section … -->
 <!-- ⬇️ HIER EINSETZEN: Wartungsplan-Panel -->
 <div class="section" id="wartungsplanSection" style="margin:16px 0;">
   <div id="wpWarning" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #dc3545;color:#842029;background:#f8d7da;border-radius:6px;">
@@ -737,6 +736,15 @@ window.addEventListener("load", () => {
       <select id="wpTaskSelect" style="width:100%;padding:6px;">
         <option value="">Bitte auswählen</option>
       </select>
+    </div>
+
+    <!-- ➕ NEU: Anzahl Schmiernippel -->
+    <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label for="wpNipCount" style="font-weight:bold;">Anzahl Schmiernippel</label>
+        <input id="wpNipCount" type="number" min="0" step="1" placeholder="z. B. 6" style="width:100%;padding:6px;">
+      </div>
+      <div></div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:12px;margin-top:10px;">
@@ -767,6 +775,7 @@ window.addEventListener("load", () => {
   </div>
 </div>
 <!-- ⬆️ Ende Wartungsplan-Panel -->
+
 
 
 
@@ -920,10 +929,22 @@ Freigegeben: F. Pieper     Datum: 24.06.2025
 <!-- ====================== -->
 <!-- Buttons außerhalb Container -->
 <!-- ====================== -->
-<button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
-<button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
-<button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
-<button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
+<div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
+  <button type="button" onclick="saveDraftToOneDrive()">💾 Entwurf in OneDrive speichern</button>
+  <button type="button" onclick="showDraftList()">📂 Entwurf aus OneDrive laden</button>
+  <button type="button" onclick="generatePDFAndFinish()">✅ Auftrag abschließen & in OneDrive speichern</button>
+  <button type="button" onclick="forceUpdate()">♻️ App aktualisieren (Cache löschen)</button>
+</div>
+
+<!-- 📥 Schmierplan (Excel) importieren) -->
+<div class="no-print" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0 16px;">
+  <input id="xlsxInput" type="file" accept=".xlsx,.xls">
+  <button type="button" onclick="importSchmierplanFromExcel()">📥 Excel (Schmierplan) einlesen</button>
+</div>
+
+<!-- SheetJS (XLSX) für den Excel-Import -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 
 <style>
 canvas.signature-pad {
@@ -2766,6 +2787,58 @@ function wpStatus(nextIso){
   if (daysLeft <= 3) return {label:"Bald fällig",level:"soon",bg:"#fff3cd",fg:"#664d03"};
   return {label:"OK",level:"ok",bg:"#d1e7dd",fg:"#0f5132"};
 }
+// ===============================
+// MAIL-REGELN (Default-Intervalle)
+// ===============================
+
+// Regeln aus der Mail:
+// - Alle Vakuumfüller: täglich
+// - Antriebseinheit Multivac 4 / Petrella SB: wöchentlich
+// - Alles andere: alle 4 Wochen
+const WP_RULES = {
+  daily:  [/vakuumfüller/i],
+  weekly: [/\bmultivac\s*4\b/i, /\bpetrella\s*sb\b/i],
+  // Fallback = 4 Wochen
+};
+
+// Maschine + (optional) Aufgabenname => Default-Intervall in Tagen
+function wpMailRuleInterval(machineName = "", taskName = "") {
+  const m = String(machineName || "").trim();
+  const t = String(taskName   || "").trim();
+
+  if (WP_RULES.daily .some(rx => rx.test(m))) return 1;   // täglich
+  if (WP_RULES.weekly.some(rx => rx.test(m))) return 7;   // wöchentlich
+  if (/antrieb/i.test(t))                    return 7;   // Aufgabe deutet Antrieb → weekly
+  return 28;                                              // sonst 4 Wochen
+}
+
+// Intervallfeld (und NextDue/Status) gemäß Regel vorschlagen
+function wpApplyMailRules({ force = false } = {}) {
+  const { selMaschine, selTask, interval, last, next, pill } = wpEls();
+  if (!interval) return;
+
+  const machineName =
+    selMaschine?.value || selMaschine?.options?.[selMaschine.selectedIndex]?.text || "";
+  const taskText =
+    selTask?.options?.[selTask.selectedIndex]?.text?.trim() || selTask?.value || "";
+
+  // nur setzen, wenn leer – außer force=true (z. B. bei „Neue Aufgabe“)
+  if (!force && interval.value) return;
+
+  const days = wpMailRuleInterval(machineName, taskText);
+  interval.value = String(days);
+
+  if (last && /^\d{4}-\d{2}-\d{2}$/.test(last.value)) {
+    if (next) next.value = wpComputeNext(last.value, days);
+  }
+
+  const st = wpStatus(next?.value || "");
+  if (pill) {
+    pill.textContent      = st.label;
+    pill.style.background = st.bg;
+    pill.style.color      = st.fg;
+  }
+}
 
 async function wpLoad(){
   try{
@@ -2871,6 +2944,136 @@ function wpStatusUpdateForTask(task){
   }
 }
 
+async function importSchmierplanFromExcel(){
+  const inp = document.getElementById('xlsxInput');
+  if (!inp?.files?.[0]) { alert("Bitte die Excel-Datei auswählen."); return; }
+
+  const file = inp.files[0];
+  const buf  = await file.arrayBuffer();
+  const wb   = XLSX.read(buf, { type: 'array' });
+
+  // Wir lesen:
+  // - "Alle Maschinen" (Liste – optional)
+  // - Alle anderen Blätter als Maschinen-Blätter, aus denen wir "Maschine/Anlage",
+  //   "Anzahl der Schmiernippel" und die Zeilen (Anlagenteile) rausziehen.
+  const allSheetNames = wb.SheetNames || [];
+  const skipSheets = new Set(["Alle Maschinen","Häufigkeit"]);
+
+  let imported = 0;
+
+  // Hilfsfunktion: Tabelle als 2D-Array
+  function sheetToAOA(name){
+    const sh = wb.Sheets[name]; if(!sh) return [];
+    return XLSX.utils.sheet_to_json(sh, { header:1, blankrows:false, defval:"" });
+  }
+
+  // Robust: in jeder Tabelle die Kopfzeilen dynamisch finden
+  function parseMachineSheet(name){
+    const aoa = sheetToAOA(name);
+    if (!aoa.length) return [];
+
+    // Spalten-Indizes suchen
+    let headerRowIdx = -1, colMachine = -1, colPart = -1, colNip = -1;
+    for (let r=0; r<Math.min(aoa.length, 30); r++){
+      const row = aoa[r].map(v => String(v||"").trim());
+      // Kandidaten – wir brauchen mind. "Maschine / Anlage"
+      const hasMachineLabel = row.some(v => /Maschine\s*\/\s*Anlage/i.test(v));
+      const hasNipHint      = row.some(v => /Anzahl.*Schmiernippel/i.test(v));
+
+      if (hasMachineLabel){
+        headerRowIdx = r;
+        // Spalten suchen
+        for (let c=0; c<row.length; c++){
+          const v = row[c];
+          if (/Maschine\s*\/\s*Anlage/i.test(v)) colPart = c; // hier stehen i. d. R. die Positionen/Teile
+          if (/Anzahl.*Schmiernippel/i.test(v)) colNip  = c;
+        }
+        break;
+      }
+      // Fallback: Blattname als Maschine, erste echte Daten-Spalte als Teil
+    }
+
+    if (headerRowIdx < 0){
+      // Keine klaren Header gefunden – wir interpretieren den Blattnamen als Maschine
+      // und versuchen, die erste Spalte ab Zeile 5 als Teileliste zu verwenden.
+      const parts = [];
+      for (let r=5; r<aoa.length; r++){
+        const label = String(aoa[r][0]||"").trim();
+        if (!label) continue;
+        parts.push({ machine:name, part:label, nipples:null });
+      }
+      return parts;
+    }
+
+    // Datenzeilen ab headerRowIdx+1
+    const parts = [];
+    for (let r=headerRowIdx+1; r<aoa.length; r++){
+      const row = aoa[r];
+      // Teil/Bezeichnung (häufig unter "Maschine / Anlage")
+      const raw = String(row[colPart] ?? "").trim();
+      if (!raw) continue;
+
+      // Machine-Name: oft steht die Maschine im Blattnamen; manchmal auch in separater Spalte/Zeile
+      // Wir nehmen Blattnamen als Maschine (robust und für dich eindeutig).
+      const machine = name;
+
+      const nipples = (colNip>=0) ? (String(row[colNip]||"").replace(/[^\d]/g,'') || "") : "";
+      const n = nipples ? parseInt(nipples,10) : null;
+
+      parts.push({ machine, part: raw, nipples: Number.isFinite(n)? n : null });
+    }
+    return parts;
+  }
+
+  // Alles einsammeln
+  const collected = [];
+  for (const sn of allSheetNames){
+    if (skipSheets.has(sn)) continue;
+    const items = parseMachineSheet(sn);
+    if (items.length) collected.push(...items);
+  }
+
+  if (!collected.length){
+    alert("In der Excel konnten keine Wartungs-/Schmierpunkte erkannt werden.");
+    return;
+  }
+
+  // In deine Struktur mappen: wartungsplaene[machine] = [ {id, name, intervalDays, lastDateISO, nipples} ]
+  let changed = 0;
+  for (const it of collected){
+    const m = wpEnsureMachineKey(it.machine);
+    if (!m) continue;
+
+    const interval = wpInferIntervalDays(it.machine, it.part);
+    const exists = (wartungsplaene[m]||[]).some(t => (t.name||"").toLowerCase() === it.part.toLowerCase());
+
+    if (!exists){
+      wartungsplaene[m].push({
+        id: crypto.randomUUID(),
+        name: it.part,
+        intervalDays: interval,
+        lastDateISO: "",
+        nipples: it.nipples ?? null
+      });
+      changed++; imported++;
+    }else{
+      // Optional: vorhandene Aufgabe updaten (z. B. Nippelzahl ergänzen)
+      const t = (wartungsplaene[m]||[]).find(t => (t.name||"").toLowerCase() === it.part.toLowerCase());
+      if (t){
+        if (t.nipples == null && it.nipples != null) { t.nipples = it.nipples; changed++; }
+        if (!t.intervalDays) { t.intervalDays = interval; changed++; }
+      }
+    }
+  }
+
+  if (changed){
+    await wpSave();
+    wpRefreshTaskList();
+    wpStatusUpdateForTask(wpCurrentTask());
+    wpEvalWarning();
+  }
+  alert(`✅ Excel importiert: ${imported} neue Wartungspunkte übernommen.`);
+}
 
 
 // ===== Helpers =====
