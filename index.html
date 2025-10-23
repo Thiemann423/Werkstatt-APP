@@ -3177,11 +3177,8 @@ function toInt(v, fallback = 0){
 function isIsoDate(s){
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 }
-
 function wpOverdueTasks(machineName){
-  if (!machineName) return [];
-  const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(machineName));
-  const tasks = key ? (wartungsplaene[key] || []) : [];
+  const tasks = (wartungsplaene[machineName] || wpIndex[wpNorm(machineName)] || []);
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
     const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
@@ -3242,22 +3239,50 @@ function wpStatusUpdateForTask(task){
   pill.style.color      = st.fg;
 }
 
-function wpEvalWarning(){
+function wpEvalWarning() {
   const { selMaschine, warn } = wpEls();
-  const m = selMaschine?.value;
-  let anyOverdue = false;
+  const m = (selMaschine?.value || "").trim();
 
-  if (m){
-    anyOverdue = wpOverdueTasks(m).length > 0;
+  let overdue = [];
+  let soon = [];
+
+  if (m) {
+    const tasks = wartungsplaene[m] || [];
+    for (const t of tasks) {
+      const inter = toInt(t.intervalDays || 0, 0);
+      const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
+      const next  = wpComputeNext(last, inter);
+      const st    = wpStatus(next);
+
+      if (st.level === "overdue") overdue.push(t);
+      else if (st.level === "soon") soon.push(t);
+    }
   }
-  if (warn) warn.style.display = anyOverdue ? "block" : "none";
 
-  // 🔁 Banner + (offline) Info aktualisieren
-  wpUpdateGlobalBanner();
+  // Panel-Hinweistext je nach Zustand
+  if (warn) {
+    if (overdue.length || soon.length) {
+      const parts = [];
+      if (overdue.length)
+        parts.push(`⚠️ <strong>${overdue.length}</strong> überfällige Wartung${overdue.length > 1 ? "en" : ""}`);
+      if (soon.length)
+        parts.push(`⏳ <strong>${soon.length}</strong> bald fällige Wartung${soon.length > 1 ? "en" : ""}`);
 
-  // ✉️ Zusätzlich (falls konfiguriert): E-Mail-Check, aber hier ohne Versand
-  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
+      warn.style.display = "block";
+      warn.innerHTML = parts.join(" • ");
+    } else {
+      warn.style.display = "none";
+      warn.textContent = "";
+    }
+  }
+
+  // Globalen Banner aktualisieren (alle Maschinen)
+  try { wpUpdateGlobalBanner?.(); } catch {}
+
+  // Chef-Mail-Logik (hier nur Check, kein Versand)
+  try { wpCheckOverdueAndNotify?.({ sendMail: false, machine: m, overdue }); } catch {}
 }
+
 
 function wpCurrentTask(){
   const { selMaschine, selTask } = wpEls();
