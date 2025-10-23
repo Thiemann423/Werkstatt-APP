@@ -3474,10 +3474,11 @@ window.wpMarkCurrentTaskDone = async function(){
 async function wpLoadWartungsplaeneFlexible() {
   if (!window.accessToken) return null;
 
-  const candidatePaths = [
-    "/me/drive/root:/Reparatur-Aufträge/Reparatur-Meta/Wartungsplaene.json:/content",
-    "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content"
-  ];
+// Statt zwei Kandidaten NUR noch p1:
+const candidatePaths = [
+  "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content"
+];
+
 
   async function graphText(url) {
     const r = await fetch("https://graph.microsoft.com/v1.0" + url, {
