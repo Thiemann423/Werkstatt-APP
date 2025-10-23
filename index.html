@@ -1306,8 +1306,12 @@ window.addEventListener('load', function() {
 // 1) Redirect-Antwort verarbeiten (muss direkt nach msalInstance stehen)
 (async () => {
   try {
-    const resp = await msalInstance.handleRedirectPromise();
-    if (resp?.account) msalInstance.setActiveAccount(resp.account);
+  const resp = await msalInstance.handleRedirectPromise();
+if (resp?.accessToken) {
+  accessToken = resp.accessToken;
+  window.accessToken = accessToken;        // ← NEU
+}
+if (resp?.account) msalInstance.setActiveAccount(resp.account);
   } catch (e) {
     console.warn("handleRedirectPromise:", e);
   }
@@ -1440,6 +1444,7 @@ async function signInAndAcquireToken(interactive = false, { rebuild = true } = {
     try {
       const t = await msalInstance.acquireTokenSilent({ scopes, account });
       accessToken = t.accessToken;
+      window.accessToken = accessToken;     
     } catch (e) {
       await msalInstance.acquireTokenRedirect({ scopes });
       return;
