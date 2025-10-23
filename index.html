@@ -2953,52 +2953,45 @@ function wpNorm(s){
 
 
 function wpStatusUpdateForTask(task) {
-  const E = wpEls();
-  const { interval, last, next, pill, nip } = E;
+  const { selMaschine, interval, last, next, pill, nip } = wpEls();
 
-  // ── Kein Task gewählt → Felder leeren ───────────────────────────────
+  // kein Task -> Felder leeren
   if (!task) {
     if (interval) interval.value = "";
     if (last)     last.value     = "";
     if (next)     next.value     = "";
     if (nip)      nip.value      = "";
     if (pill) {
-      pill.textContent      = "–";
+      pill.textContent = "–";
       pill.style.background = "#e9ecef";
-      pill.style.color      = "#000";
+      pill.style.color = "#000";
     }
     return;
   }
 
-  // ── Werte aus dem Task übernehmen ───────────────────────────────────
-  // Intervall aus JSON (als Zahl oder "")
-  let inter = toInt(task.intervalDays, "");
-  
+  // Werte aus Task
+  let inter   = toInt(task.intervalDays, "");
+  const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
 
-  // Falls JSON kein Intervall hat → Mail-Regel als Default
+  // Falls kein Intervall im JSON -> Default per Mail-Regel
   if (inter === "" || inter === 0) {
     try {
-      const mName = E.selMaschine?.value || "";
+      const mName = selMaschine?.value || "";
       const tName = task.name || "";
-      inter = wpMailRuleInterval(mName, tName) || 28; // Fallback 4 Wochen
-    } catch (e) {
-      console.warn("wpMailRuleInterval() Fehler:", e);
-      inter = 28;
-    }
+      inter = wpMailRuleInterval(mName, tName) || 28;
+    } catch { inter = 28; }
   }
 
-  // ── Felder aktualisieren ────────────────────────────────────────────
+  // Felder setzen
   if (interval) interval.value = inter === "" ? "" : String(inter);
   if (last)     last.value     = lastIso;
 
-  // NextDue nur berechnen, wenn *beides* vorhanden ist:
   const nextVal = (lastIso && inter !== "") ? wpComputeNext(lastIso, inter) : "";
   if (next) next.value = nextVal;
 
-  // Schmiernippel (optional)
   if (nip) nip.value = toInt(task.nipples, "");
 
-  // ── Status-Badge ────────────────────────────────────────────────────
+  // Status-Badge
   const st = wpStatus(nextVal || "");
   if (pill) {
     pill.textContent      = st.label;
@@ -3006,6 +2999,7 @@ function wpStatusUpdateForTask(task) {
     pill.style.color      = st.fg;
   }
 }
+
 
 
 
@@ -3151,14 +3145,15 @@ function toInt(v, fallback = "") {
   return Number.isFinite(n) ? n : fallback;
 }
 function wpOverdueTasks(machineName){
-  const tasks = (wartungsplaene[machineName] || wpIndex[wpNorm(machineName)] || []);
+  const tasks = (wartungsplaene[machineName] || _wpIdx[wpNorm(machineName)] || []);
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
- const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
+    const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
     const next  = wpComputeNext(last, inter);
     return wpStatus(next).level === "overdue";
   });
 }
+
 
 
 
@@ -3505,10 +3500,12 @@ window.wpLoad = async function () {
     window.wartungsplaene = cached ? JSON.parse(cached) : {};
   }
 
-  // UI aktualisieren + Warnungen berechnen
-  if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
-  if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask();
-  if (typeof wpCheckOverdueAndNotify === "function") wpCheckOverdueAndNotify({ sendMail:false });
+// UI aktualisieren + Warnungen berechnen
+wpBuildIndex();   // <— hinzufügen!
+if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask();
+if (typeof wpCheckOverdueAndNotify === "function") wpCheckOverdueAndNotify({ sendMail:false });
+
 };
 </script>
 
