@@ -2925,23 +2925,24 @@ function wpEls(){
   };
 }
 
-function wpEnsureMachineKey(name){ if (!name) return null; wartungsplaene[name] ||= []; return name; }
+function wpEnsureMachineKey(name){
+  if (!name) return null;
+  const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(name)) || name;
+  wartungsplaene[key] ||= [];
+  return key;
+}
 
+// Dropdown der Aufgaben füllen (robust – findet den passenden Key)
 function wpRefreshTaskList(){
   const { selTask, selMaschine } = wpEls();
   selTask.innerHTML = `<option value="">Bitte auswählen</option>`;
+  const m = selMaschine?.value || "";
+  if (!m) return;
 
-  const mName = selMaschine?.value || "";
-  if (!mName) return;
+  const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(m));
+  const list = key ? (wartungsplaene[key] || []) : [];
 
-  // 1) Index (normalisiert) versuchen
-  const mKey = wpNorm(mName);
-  let list = _wpByKey.byMachine[mKey];
-
-  // 2) Fallback: exakter Schlüssel im Originalobjekt
-  if (!list) list = wartungsplaene[mName];
-
-  (list || []).forEach(t => {
+  list.forEach(t => {
     const o = document.createElement("option");
     o.value = t.id;
     o.textContent = t.name;
@@ -2958,12 +2959,13 @@ const toInt = (v, def=0) => {
 };
 
 // Normalisiert Namen für robuste Zuordnung (Groß/Klein, Umlaute, Mehrfach-Spaces)
+// Einheitliche Normalisierung für Vergleiche
 function wpNorm(s){
   return String(s || "")
     .toLowerCase()
     .replace(/ß/g, "ss")
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, é→e …
-    .replace(/\s+/g, " ")                             // Mehrfach-Spaces zusammenfassen
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, …
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -3140,10 +3142,10 @@ function isIsoDate(s){
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 }
 
-// Überfällige Aufgaben für eine Maschine ermitteln (Array zurück)
 function wpOverdueTasks(machineName){
   if (!machineName) return [];
-  const tasks = wartungsplaene[machineName] || [];
+  const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(machineName));
+  const tasks = key ? (wartungsplaene[key] || []) : [];
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
     const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
@@ -3151,6 +3153,7 @@ function wpOverdueTasks(machineName){
     return wpStatus(next).level === "overdue";
   });
 }
+
 
 // 🔴 Globalen Banner aktualisieren (sichtbar auch bei zuem Panel)
 function wpUpdateGlobalBanner(){
@@ -3261,19 +3264,17 @@ function setupWartungsplanUI(){
     section?.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-  // Maschine ändert -> Liste, Status, Warnung & Banner
-  E.selMaschine?.addEventListener("change", () => {
-    wpRefreshTaskList();
-    wpStatusUpdateForTask(null);
-    wpEvalWarning();
-  });
+// Maschine wechselt -> Liste neu, Status/Banner neu
+E.selMaschine?.addEventListener("change", () => {
+  wpRefreshTaskList();
+  wpStatusUpdateForTask(null);
+  wpEvalWarning();
+});
 
-// Auswahl Aufgabe -> Felder & Status füllen + Mail-Regeln anwenden
+// Auswahl Aufgabe -> Felder & Status füllen + Regeln anwenden
 E.selTask?.addEventListener("change", () => {
-  const t = wpCurrentTask();
-  wpStatusUpdateForTask(t);        // Felder/Pill füllen
-  try { wpApplyMailRules(); }      // Intervalle laut Mail-Regeln setzen
-  catch (e) { console.warn('wpApplyMailRules:', e); }
+  wpStatusUpdateForTask(wpCurrentTask());
+  try { wpApplyMailRules(); } catch {}
 });
 
 
