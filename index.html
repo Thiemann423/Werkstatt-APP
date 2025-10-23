@@ -2972,10 +2972,7 @@ function wpRefreshTaskList(){
 
 // ==== kleine Helfer ====
 
-const toInt = (v, def=0) => {
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) ? n : def;
-};
+
 
 // Normalisiert Namen für robuste Zuordnung (Groß/Klein, Umlaute, Mehrfach-Spaces)
 // Einheitliche Normalisierung für Vergleiche
@@ -3191,7 +3188,7 @@ function wpOverdueTasks(machineName){
   const tasks = (wartungsplaene[machineName] || wpIndex[wpNorm(machineName)] || []);
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
- 
+ const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
     const next  = wpComputeNext(last, inter);
     return wpStatus(next).level === "overdue";
   });
@@ -3307,7 +3304,8 @@ function wpCurrentTask(){
 function wpRecalcNext(){
   const { interval, last, next, pill } = wpEls();
   const inter   = toInt(interval?.value || 0, 0);
- 
+ const lastIso = isIsoDate(last?.value) ? last.value : "";
+
   if (next) next.value = inter > 0 && lastIso ? wpComputeNext(lastIso, inter) : "";
 
   const st = wpStatus(next?.value || "");
