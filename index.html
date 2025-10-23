@@ -2936,44 +2936,23 @@ function wpRefreshTaskList(){
 
 
 
-// ==== kleine Helfer ====
-
-
-
-// Normalisiert Namen für robuste Zuordnung (Groß/Klein, Umlaute, Mehrfach-Spaces)
-// Einheitliche Normalisierung für Vergleiche
-function wpNorm(s){
-  return String(s || "")
-    .toLowerCase()
-    .replace(/ß/g, "ss")
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, …
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 
 function wpStatusUpdateForTask(task) {
   const { selMaschine, interval, last, next, pill, nip } = wpEls();
 
-  // kein Task -> Felder leeren
   if (!task) {
     if (interval) interval.value = "";
     if (last)     last.value     = "";
     if (next)     next.value     = "";
     if (nip)      nip.value      = "";
-    if (pill) {
-      pill.textContent = "–";
-      pill.style.background = "#e9ecef";
-      pill.style.color = "#000";
-    }
+    if (pill) { pill.textContent="–"; pill.style.background="#e9ecef"; pill.style.color="#000"; }
     return;
   }
 
-  // Werte aus Task
   let inter   = toInt(task.intervalDays, "");
   const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
 
-  // Falls kein Intervall im JSON -> Default per Mail-Regel
   if (inter === "" || inter === 0) {
     try {
       const mName = selMaschine?.value || "";
@@ -2982,7 +2961,6 @@ function wpStatusUpdateForTask(task) {
     } catch { inter = 28; }
   }
 
-  // Felder setzen
   if (interval) interval.value = inter === "" ? "" : String(inter);
   if (last)     last.value     = lastIso;
 
@@ -2991,13 +2969,10 @@ function wpStatusUpdateForTask(task) {
 
   if (nip) nip.value = toInt(task.nipples, "");
 
-  // Status-Badge
   const st = wpStatus(nextVal || "");
-  if (pill) {
-    pill.textContent      = st.label;
-    pill.style.background = st.bg;
-    pill.style.color      = st.fg;
-  }
+  if (pill) { pill.textContent=st.label; pill.style.background=st.bg; pill.style.color=st.fg; }
+}
+
 }
 
 
@@ -3153,6 +3128,7 @@ function wpOverdueTasks(machineName){
     return wpStatus(next).level === "overdue";
   });
 }
+
 
 
 
@@ -3501,10 +3477,12 @@ window.wpLoad = async function () {
   }
 
 // UI aktualisieren + Warnungen berechnen
-wpBuildIndex();   // <— hinzufügen!
+// UI aktualisieren + Warnungen berechnen
+wpBuildIndex();                                     // <- NEU
 if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
 if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask();
 if (typeof wpCheckOverdueAndNotify === "function") wpCheckOverdueAndNotify({ sendMail:false });
+
 
 };
 </script>
