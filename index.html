@@ -2763,8 +2763,36 @@ function applyFiltersToDashboard(){
 <script>
 /* ===== Wartungsplan – Daten & OneDrive-Speicher ===== */
 const WP_FILE = "Wartungsplaene.json";
-/** Struktur: { [maschinenName]: [ { id, name, intervalDays, lastDateISO } ] } */
+/** Struktur: { [maschinenName]: [ { id, name, intervalDays, lastDateISO, nipples } ] } */
 let wartungsplaene = {};
+
+// ------- Index & Normalisierung (für robuste, schnelle Zuordnung) -------
+let _wpByKey = { byMachine:{}, byPair:{} };
+
+function wpNorm(s){
+  return String(s || "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu,"")  // ä→a, ö→o, ü→u, é→e …
+    .replace(/ß/g,"ss")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function wpBuildIndex(){
+  _wpByKey = { byMachine:{}, byPair:{} };
+  const W = wartungsplaene || {};
+  Object.keys(W).forEach(machine => {
+    const mKey = wpNorm(machine);
+    const arr  = Array.isArray(W[machine]) ? W[machine] : [];
+    _wpByKey.byMachine[mKey] = arr;
+    arr.forEach(t => {
+      const tKey = wpNorm(t?.name);
+      _wpByKey.byPair[`${mKey}::${tKey}`] = t; // exakte Maschine+Aufgabe
+    });
+  });
+}
+
 
 function wpTodayISO(){
   const d = new Date();
@@ -2845,6 +2873,7 @@ async function wpLoad(){
     // offline/local fallback
     const raw = localStorage.getItem("TE15_WARTUNGSPLAENE");
     wartungsplaene = raw ? JSON.parse(raw) : {};
+    wpBuildIndex();                                // ⬅️ NEU
   }catch{ wartungsplaene = {}; }
 
   // Wenn eingeloggt + Meta-Ordner aufgelöst -> aus OneDrive laden
@@ -2861,8 +2890,10 @@ async function wpLoad(){
     if (!fr.ok) return;
     wartungsplaene = await fr.json();
     localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene));
+    wpBuildIndex();                                // ⬅️ NEU
   }catch(e){ console.warn("wpLoad()", e); }
 }
+
 
 async function wpSave(){
   try{ localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); }catch{}
@@ -2898,12 +2929,26 @@ function wpEnsureMachineKey(name){ if (!name) return null; wartungsplaene[name] 
 
 function wpRefreshTaskList(){
   const { selTask, selMaschine } = wpEls();
-  const m = selMaschine?.value; selTask.innerHTML = `<option value="">Bitte auswählen</option>`;
-  if (!m) return;
-  (wartungsplaene[m]||[]).forEach(t=>{
-    const o = document.createElement("option"); o.value = t.id; o.textContent = t.name; selTask.appendChild(o);
+  selTask.innerHTML = `<option value="">Bitte auswählen</option>`;
+
+  const mName = selMaschine?.value || "";
+  if (!mName) return;
+
+  // 1) Index (normalisiert) versuchen
+  const mKey = wpNorm(mName);
+  let list = _wpByKey.byMachine[mKey];
+
+  // 2) Fallback: exakter Schlüssel im Originalobjekt
+  if (!list) list = wartungsplaene[mName];
+
+  (list || []).forEach(t => {
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.name;
+    selTask.appendChild(o);
   });
 }
+
 
 // ==== kleine Helfer ====
 const isIsoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s||""));
@@ -2911,6 +2956,17 @@ const toInt = (v, def=0) => {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : def;
 };
+
+// Normalisiert Namen für robuste Zuordnung (Groß/Klein, Umlaute, Mehrfach-Spaces)
+function wpNorm(s){
+  return String(s || "")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, é→e …
+    .replace(/\s+/g, " ")                             // Mehrfach-Spaces zusammenfassen
+    .trim();
+}
+
 
 // ==== Status / Warnung / Auswahl ====
 function wpStatusUpdateForTask(task){
@@ -3165,10 +3221,15 @@ function wpEvalWarning(){
 
 function wpCurrentTask(){
   const { selMaschine, selTask } = wpEls();
-  const m = selMaschine?.value, id = selTask?.value;
-  if (!m || !id) return null;
-  return (wartungsplaene[m]||[]).find(t => t.id === id) || null;
+  const mName = selMaschine?.value || "";
+  const tid   = selTask?.value || "";
+  if (!mName || !tid) return null;
+
+  const mKey = wpNorm(mName);
+  const arr  = _wpByKey.byMachine[mKey] || wartungsplaene[mName] || [];
+  return arr.find(t => t.id === tid) || null;
 }
+
 
 function wpRecalcNext(){
   const { interval, last, next, pill } = wpEls();
