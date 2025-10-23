@@ -3474,6 +3474,88 @@ window.wpMarkCurrentTaskDone = async function(){
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 };
 </script>
+<script>
+// --- Wartungspläne flexibel aus OneDrive laden -----------------------------
+// Lädt "Wartungsplaene.json" entweder aus "Reparatur-Meta" ODER aus dem Ordner
+// "Reparatur-Aufträge" (gleiche Ebene wie eure PDFs). Fallback: globale Suche.
+async function wpLoadWartungsplaeneFlexible() {
+  if (!window.accessToken) return null;
+
+  const candidatePaths = [
+    "/me/drive/root:/Reparatur-Aufträge/Reparatur-Meta/Wartungsplaene.json:/content",
+    "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content"
+  ];
+
+  async function graphText(url) {
+    const r = await fetch("https://graph.microsoft.com/v1.0" + url, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!r.ok) return null;
+    return await r.text();
+  }
+
+  // 1) Direkte Kandidaten testen
+  for (const url of candidatePaths) {
+    const txt = await graphText(url);
+    if (txt) { try { return JSON.parse(txt); } catch {} }
+  }
+
+  // 2) Im Ordner "Reparatur-Aufträge" nach exakt der Datei suchen
+  async function searchInFolder(folderPath) {
+    const listUrl = `/me/drive/root:${folderPath}:/children?$select=id,name`;
+    const r = await fetch("https://graph.microsoft.com/v1.0" + listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const hit = (data.value||[]).find(it => it.name === "Wartungsplaene.json");
+    if (!hit) return null;
+    const txt = await graphText(`/me/drive/items/${hit.id}/content`);
+    if (!txt) return null;
+    try { return JSON.parse(txt); } catch { return null; }
+  }
+
+  const fromRoot = await searchInFolder("/Reparatur-Aufträge");
+  if (fromRoot) return fromRoot;
+
+  // 3) Letzter Fallback: globale Suche
+  const sr = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='Wartungsplaene.json')?$select=id,name,parentReference", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (sr.ok) {
+    const data = await sr.json();
+    const hit = (data.value||[]).find(it => it.name === "Wartungsplaene.json");
+    if (hit) {
+      const txt = await graphText(`/me/drive/items/${hit.id}/content`);
+      if (txt) { try { return JSON.parse(txt); } catch {} }
+    }
+  }
+  return null;
+}
+
+// --- Override: wpLoad nutzt jetzt die flexible Lade-Logik ------------------
+window.wpLoad = async function () {
+  try {
+    const od = await wpLoadWartungsplaeneFlexible();   // OneDrive bevorzugt
+    if (od) {
+      window.wartungsplaene = od;
+      localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(od));
+    } else {
+      const cached = localStorage.getItem("TE15_WARTUNGSPLAENE"); // Fallback
+      window.wartungsplaene = cached ? JSON.parse(cached) : {};
+    }
+  } catch (e) {
+    console.warn("wpLoad (flex) error:", e);
+    const cached = localStorage.getItem("TE15_WARTUNGSPLAENE");
+    window.wartungsplaene = cached ? JSON.parse(cached) : {};
+  }
+
+  // UI aktualisieren + Warnungen berechnen
+  if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+  if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask();
+  if (typeof wpCheckOverdueAndNotify === "function") wpCheckOverdueAndNotify({ sendMail:false });
+};
+</script>
 
 
 
