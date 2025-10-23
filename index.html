@@ -2765,18 +2765,31 @@ function applyFiltersToDashboard(){
 const WP_FILE = "Wartungsplaene.json";
 /** Struktur: { [maschinenName]: [ { id, name, intervalDays, lastDateISO, nipples } ] } */
 let wartungsplaene = {};
-
-// ------- Index & Normalisierung (für robuste, schnelle Zuordnung) -------
-let _wpByKey = { byMachine:{}, byPair:{} };
+let wpIndex = {};  // normalisierte Namen -> Taskliste
 
 function wpNorm(s){
   return String(s || "")
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu,"")  // ä→a, ö→o, ü→u, é→e …
-    .replace(/ß/g,"ss")
     .toLowerCase()
-    .trim()
-    .replace(/\s+/g," ");
+    .replace(/ß/g, "ss")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä->a, ö->o, ü->u, é->e …
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function wpRebuildIndex(){
+  wpIndex = {};
+  for (const [name, tasks] of Object.entries(wartungsplaene || {})){
+    wpIndex[wpNorm(name)] = tasks || [];
+  }
+}
+
+
+function wpNorm(s){
+  return String(s || "")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function wpBuildIndex(){
@@ -2871,9 +2884,10 @@ function wpApplyMailRules({ force = false } = {}) {
 async function wpLoad(){
   try{
     // offline/local fallback
-    const raw = localStorage.getItem("TE15_WARTUNGSPLAENE");
-    wartungsplaene = raw ? JSON.parse(raw) : {};
-    wpBuildIndex();                                // ⬅️ NEU
+ const raw = localStorage.getItem("TE15_WARTUNGSPLAENE");
+wartungsplaene = raw ? JSON.parse(raw) : {};
+wpRebuildIndex();               // <— NEU
+                           
   }catch{ wartungsplaene = {}; }
 
   // Wenn eingeloggt + Meta-Ordner aufgelöst -> aus OneDrive laden
@@ -2888,15 +2902,18 @@ async function wpLoad(){
     const fr = await fetch(`https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
                            { headers:{Authorization:`Bearer ${accessToken}`}});
     if (!fr.ok) return;
-    wartungsplaene = await fr.json();
-    localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene));
-    wpBuildIndex();                                // ⬅️ NEU
+wartungsplaene = await fr.json();
+localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene));
+wpRebuildIndex();               // <— NEU
+
   }catch(e){ console.warn("wpLoad()", e); }
 }
 
 
 async function wpSave(){
-  try{ localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); }catch{}
+try{ localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); }catch{}
+wpRebuildIndex();               // <— NEU
+
   if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
   const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_FILE)}:/content`;
   const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
@@ -2932,23 +2949,22 @@ function wpEnsureMachineKey(name){
   return key;
 }
 
-// Dropdown der Aufgaben füllen (robust – findet den passenden Key)
 function wpRefreshTaskList(){
   const { selTask, selMaschine } = wpEls();
   selTask.innerHTML = `<option value="">Bitte auswählen</option>`;
-  const m = selMaschine?.value || "";
-  if (!m) return;
 
-  const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(m));
-  const list = key ? (wartungsplaene[key] || []) : [];
+  const mRaw = selMaschine?.value || "";
+  const tasks = (wartungsplaene[mRaw] || wpIndex[wpNorm(mRaw)] || []);
 
-  list.forEach(t => {
+  tasks.forEach(t => {
     const o = document.createElement("option");
     o.value = t.id;
     o.textContent = t.name;
     selTask.appendChild(o);
   });
 }
+
+
 
 
 // ==== kleine Helfer ====
@@ -2970,35 +2986,55 @@ function wpNorm(s){
 }
 
 
-// ==== Status / Warnung / Auswahl ====
-function wpStatusUpdateForTask(task){
+function wpStatusUpdateForTask(task) {
   const E = wpEls();
   const { interval, last, next, pill, nip } = E;
 
-  if (!task){
+  // Wenn keine Aufgabe ausgewählt → Felder leeren
+  if (!task) {
     if (interval) interval.value = "";
     if (last)     last.value     = "";
     if (next)     next.value     = "";
-    if (nip)      nip.value      = "";        // ⬅️ NEU
-    if (pill){
-      pill.textContent = "–";
+    if (nip)      nip.value      = "";
+    if (pill) {
+      pill.textContent      = "–";
       pill.style.background = "#e9ecef";
       pill.style.color      = "#000";
     }
     return;
   }
 
-  const inter   = toInt(task.intervalDays || "", "");
+  // ---- Werte aus dem Task übernehmen ----
+  let inter   = toInt(task.intervalDays || 0, 0);
   const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
 
-  if (interval) interval.value = inter === "" ? "" : String(inter);
+  // Falls kein Intervall in JSON hinterlegt → Mail-Regel anwenden
+  if (!inter || inter === 0) {
+    try {
+      const mName = E.selMaschine?.value || "";
+      const tName = task.name || "";
+      inter = wpMailRuleInterval(mName, tName);
+    } catch (e) {
+      console.warn("wpMailRuleInterval() Fehler:", e);
+      inter = 28; // Fallback
+    }
+  }
+
+  // ---- Felder aktualisieren ----
+  if (interval) interval.value = inter ? String(inter) : "";
   if (last)     last.value     = lastIso;
   if (next)     next.value     = wpComputeNext(lastIso, inter) || "";
-  if (nip)      nip.value      = toInt(task.nipples ?? "", "");   // ⬅️ NEU
+  if (nip)      nip.value      = toInt(task.nipples ?? "", "");
 
+  // ---- Status-Badge aktualisieren ----
   const st = wpStatus(next?.value || "");
-  if (pill){ pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
+  if (pill) {
+    pill.textContent      = st.label;
+    pill.style.background = st.bg;
+    pill.style.color      = st.fg;
+  }
 }
+
 
 
 async function importSchmierplanFromExcel(){
@@ -3155,6 +3191,7 @@ function wpOverdueTasks(machineName){
 }
 
 
+
 // 🔴 Globalen Banner aktualisieren (sichtbar auch bei zuem Panel)
 function wpUpdateGlobalBanner(){
   const banner = document.getElementById('wpGlobalOverdueBanner');
@@ -3264,17 +3301,19 @@ function setupWartungsplanUI(){
     section?.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-// Maschine wechselt -> Liste neu, Status/Banner neu
 E.selMaschine?.addEventListener("change", () => {
   wpRefreshTaskList();
   wpStatusUpdateForTask(null);
   wpEvalWarning();
 });
 
-// Auswahl Aufgabe -> Felder & Status füllen + Regeln anwenden
+// Aufgabe ändert -> Felder füllen + ggf. Mail-Regel vorschlagen
 E.selTask?.addEventListener("change", () => {
-  wpStatusUpdateForTask(wpCurrentTask());
-  try { wpApplyMailRules(); } catch {}
+  const t = wpCurrentTask();
+  wpStatusUpdateForTask(t);
+  // wenn Intervall leer oder 0 -> Regel anwenden
+  const hasInter = !!toInt(E.interval?.value || 0, 0);
+  if (!hasInter) { try { wpApplyMailRules({ force:true }); } catch {} }
 });
 
 
