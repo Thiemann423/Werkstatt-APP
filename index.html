@@ -2995,27 +2995,29 @@ function wpStatusUpdateForTask(task) {
   if (pill) { pill.textContent=st.label; pill.style.background=st.bg; pill.style.color=st.fg; }
 }
 
-/* ---------- UI-Setup: Events verdrahten ---------- */
 function setupWartungsplanUI(){
-  const { selMaschine, selTask } = wpEls();
+  const { selMaschine } = wpEls();
+  const tSel = (typeof findTaskSelect === 'function') ? findTaskSelect() : wpEls().selTask;
 
-  // Maschine ändert -> Liste neu
+  // 1) Nur bei Maschinenwechsel neu befüllen
   if (selMaschine){
     selMaschine.addEventListener('change', () => {
-      wpRefreshTaskList();
+      wpRefreshTaskList();                 // Liste neu befüllen
     }, { passive: true });
   }
 
-  // Task ändert -> Statusfelder aktualisieren
-  if (selTask){
-    selTask.addEventListener('change', () => {
-      wpStatusUpdateForTask(wpCurrentTask());
+  // 2) Beim Taskwechsel nur Felder setzen, NICHT neu befüllen
+  if (tSel){
+    tSel.addEventListener('change', () => {
+      const task = wpCurrentTask();
+      wpStatusUpdateForTask(task);         // Intervall, Datum, Nippel, Status aktualisieren
     }, { passive: true });
   }
 
-  // Initial füllen
+  // initiale Befüllung
   wpRefreshTaskList();
 }
+
 
 /* ===============================
    Excel-Import (unverändert)
