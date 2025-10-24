@@ -2770,83 +2770,14 @@ let wartungsplaene = {};
 let _wpIdx = {}; // { normMaschinenName: tasks[] }
 
 // Namen robust vergleichen (Umlaute/ß/Mehrfach-Spaces egal)
-
-/* ---------- UTIL ---------- */
 function wpNorm(s){
-  return String(s||"")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")   // Umlaute/Accents
-    .replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss")
-    .replace(/\s+/g," ").trim().toLowerCase();
+  return String(s || "")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, é→e …
+    .replace(/\s+/g, " ")
+    .trim();
 }
-
-/* ---------- LADEN ---------- */
-async function loadWartungsplaene(){
-  // 1) aus Cache
-  const CKEY = "TE15_WARTUNGSPLAENE";
-  try {
-    const cached = localStorage.getItem(CKEY);
-    if (cached) { window.wartungsplaene = JSON.parse(cached); }
-  } catch {}
-
-  // 2) aus OneDrive (nur wenn eingeloggt und Fetch gelingt)
-  try {
-    // Falls ihr schon irgendwo ein Access-Token habt, hier holen:
-    const token = (window.auth && window.auth.accessToken) || (window.msToken);
-    if (!token) return; // nicht schlimm: UI zeigt dann Cache
-    const url = "https://graph.microsoft.com/v1.0/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content";
-    const res = await fetch(encodeURI(url), { headers:{ Authorization:`Bearer ${token}` }});
-    if (!res.ok) return;
-    const data = await res.json();
-    window.wartungsplaene = data;
-    localStorage.setItem(CKEY, JSON.stringify(data));
-  } catch {}
-}
-
-/* ---------- INDEX ---------- */
-let _wpIdx = {};
-function buildWpIndex(){
-  _wpIdx = {};
-  const wp = window.wartungsplaene || {};
-  Object.keys(wp).forEach(k => { _wpIdx[wpNorm(k)] = wp[k]; });
-}
-function tasksForMachine(name){
-  const wp = window.wartungsplaene || {};
-  return wp[name] || _wpIdx[wpNorm(name)] || [];
-}
-
-/* ---------- UI-BINDING ---------- */
-function findTaskSelect(){
-  // suche Label „Schmierstelle / Aufgabe“ und das dazugehörige <select>
-  const lbl = Array.from(document.querySelectorAll('label'))
-    .find(l => /Schmierstelle\s*\/\s*Aufgabe/i.test(l.textContent||""));
-  if (lbl?.htmlFor) return document.getElementById(lbl.htmlFor);
-  let p = lbl?.parentElement;
-  while (p && !p.querySelector('select')) p = p.parentElement;
-  return p?.querySelector('select') || null;
-}
-
-function fillWpTaskList(){
-  const mSel = document.getElementById('maschine');
-  const tSel = findTaskSelect();
-  if (!mSel || !tSel) return;
-
-  const items = tasksForMachine(mSel.value);
-  tSel.innerHTML = '<option value="">Bitte auswählen</option>' +
-    items.map(t => `<option data-id="${t.id||''}" data-interval="${t.intervalDays||''}" data-nipples="${t.nipples||''}">${t.name||''}</option>`).join('');
-  // (Optional: weitere Felder wie Intervall/Datum setzen, wenn Option gewählt wird)
-}
-
-async function initWartungUI(){
-  await loadWartungsplaene();   // Cache sofort, OneDrive wenn möglich
-  buildWpIndex();
-  fillWpTaskList();
-  document.getElementById('maschine')?.addEventListener('change', fillWpTaskList, {passive:true});
-}
-
-// Starte nach DOM-Laden
-document.addEventListener('DOMContentLoaded', initWartungUI);
-</script>
-
 
 // Index EINMAL bauen (nutzt wpNorm)
 function wpBuildIndex(){
