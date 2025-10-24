@@ -3018,6 +3018,114 @@ function setupWartungsplanUI(){
   wpRefreshTaskList();
 }
 
+<script>
+// ====== Robust verdrahten: keine Rekursionen/Flackern mehr ======
+(function fixWpWiring(){
+  // Robust den Task-Select finden (über Label "Schmierstelle / Aufgabe")
+  function findTaskSelect(){
+    const lbl = Array.from(document.querySelectorAll('label'))
+      .find(l => /Schmierstelle\s*\/\s*Aufgabe/i.test(l.textContent||""));
+    if (lbl?.htmlFor) return document.getElementById(lbl.htmlFor);
+    let p = lbl?.parentElement;
+    while (p && !p.querySelector('select')) p = p.parentElement;
+    return p?.querySelector('select') || null;
+  }
+
+  // Guard vermeidet, dass das programmatiche Befüllen selbst wieder 'change' triggert
+  let _wpFilling = false;
+
+  // Hilfszugriff auf Controls
+  function els(){
+    const e = (typeof wpEls === 'function') ? wpEls() : {};
+    return {
+      selMaschine: e.selMaschine || document.getElementById('maschine'),
+      selTask: e.selTask || findTaskSelect()
+    };
+  }
+
+  // SICHERES Befüllen: nur auf Maschinenwechsel benutzen
+  window.wpRefreshTaskList = function(){
+    const { selMaschine, selTask } = els();
+    if (!selTask) return;
+
+    const m = selMaschine?.value || '';
+    const list = (typeof tasksForMachine === 'function')
+      ? tasksForMachine(m)
+      : ( (window.wartungsplaene?.[m]) || [] );
+
+    _wpFilling = true;               // >>> Guard an
+    // Auswahl merken (falls neu befüllen nach gleicher Maschine)
+    const prev = selTask.value;
+
+    // Optionen neu aufbauen
+    selTask.innerHTML = '';
+    selTask.add(new Option('Bitte auswählen',''));
+    for(const t of list){
+      selTask.add(new Option(t.name ?? '', String(t.id ?? '')));
+    }
+
+    // Falls die gleiche ID existiert, wieder anwählen (optional)
+    if (prev && list.some(t => String(t.id) === String(prev))) {
+      selTask.value = prev;
+    }
+    _wpFilling = false;              // <<< Guard aus
+  };
+
+  // Aktuelles Task-Objekt ermitteln
+  window.wpCurrentTask = function(){
+    const { selMaschine, selTask } = els();
+    const id = selTask?.value;
+    if (!id) return null;
+    const m = selMaschine?.value || '';
+    const list = (typeof tasksForMachine === 'function')
+      ? tasksForMachine(m)
+      : ( (window.wartungsplaene?.[m]) || [] );
+    return list.find(t => String(t.id) === String(id)) || null;
+  };
+
+  // Bestehende Event-Listener sicher entfernen (durch Klonen)
+  function stripAllListeners(selectEl){
+    if (!selectEl || !selectEl.parentNode) return selectEl;
+    const clone = selectEl.cloneNode(true);
+    selectEl.parentNode.replaceChild(clone, selectEl);
+    return clone;
+  }
+
+  // Einmal sauber verdrahten
+  function wire(){
+    let { selMaschine, selTask } = els();
+    if (!selMaschine && !selTask) return;
+
+    // Alte Listener loswerden
+    selMaschine = stripAllListeners(selMaschine);
+    selTask     = stripAllListeners(selTask);
+
+    // 1) Nur Maschine füllt neu
+    selMaschine?.addEventListener('change', () => {
+      wpRefreshTaskList();
+      // UI zurücksetzen bis eine Aufgabe gewählt ist
+      if (typeof wpStatusUpdateForTask === 'function') wpStatusUpdateForTask(null);
+    }, { passive:true });
+
+    // 2) Beim Taskwechsel NUR Felder setzen – NICHT neu befüllen!
+    selTask?.addEventListener('change', () => {
+      if (_wpFilling) return; // ignorieren, falls durch Befüllen ausgelöst
+      const task = (typeof wpCurrentTask === 'function') ? wpCurrentTask() : null;
+      if (typeof wpStatusUpdateForTask === 'function') wpStatusUpdateForTask(task);
+    }, { passive:true });
+
+    // initial: Liste passend zur aktuellen Maschine füllen
+    wpRefreshTaskList();
+  }
+
+  // Beim ersten Start verdrahten
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire, { once:true });
+  } else {
+    wire();
+  }
+})();
+</script>
 
 /* ===============================
    Excel-Import (unverändert)
