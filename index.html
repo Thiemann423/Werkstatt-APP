@@ -3018,7 +3018,7 @@ function setupWartungsplanUI(){
   wpRefreshTaskList();
 }
 
-<script>
+
 // ====== Robust verdrahten: keine Rekursionen/Flackern mehr ======
 (function fixWpWiring(){
   // Robust den Task-Select finden (über Label "Schmierstelle / Aufgabe")
@@ -3125,7 +3125,7 @@ function setupWartungsplanUI(){
     wire();
   }
 })();
-</script>
+
 
 /* ===============================
    Excel-Import (unverändert)
@@ -3527,7 +3527,7 @@ window.wpMarkCurrentTaskDone = async function(){
   // nach Abschluss neu bewerten
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 };
-</script>
+  </script>  
 <script>
 // --- Wartungspläne flexibel aus OneDrive laden -----------------------------
 // Lädt "Wartungsplaene.json" bevorzugt aus "/Reparatur-Aufträge", hat dann
