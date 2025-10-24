@@ -2764,6 +2764,8 @@ function applyFiltersToDashboard(){
 /* ===== Wartungsplan – Daten & OneDrive-Speicher ===== */
 const WP_FILE = "Wartungsplaene.json";
 /** Struktur: { [maschinenName]: [ { id, name, intervalDays, lastDateISO, nipples } ] } */
+
+// ===============================
 // Wartungspläne – Kern-Helfer
 // ===============================
 let wartungsplaene = {};
@@ -2788,7 +2790,9 @@ function wpBuildIndex(){
 }
 function wpRebuildIndex(){ wpBuildIndex(); } // <- KEIN wpIndex!
 
+// ===============================
 // Datums-/Status-Helfer
+// ===============================
 function wpTodayISO(){
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -2849,7 +2853,7 @@ function wpApplyMailRules({ force = false } = {}) {
 }
 
 // ===============================
-// Laden aus OneDrive (p1 ist richtig)
+// Laden aus OneDrive
 // ===============================
 const WP_FILE_PATH = "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content";
 const WP_CACHE_KEY = "TE15_WARTUNGSPLAENE";
@@ -2880,11 +2884,10 @@ async function wpLoad(){
   try { wpRefreshTaskList?.(); wpStatusUpdateForTask?.(); } catch {}
 }
 
-
-
+// Speichern (Cache + OneDrive)
 async function wpSave(){
-try{ localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); }catch{}
-wpRebuildIndex();               // <— NEU
+  try { localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); } catch {}
+  wpRebuildIndex();
 
   if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
   const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_FILE)}:/content`;
@@ -2905,7 +2908,7 @@ function wpEls(){
     interval: document.getElementById("wpIntervalDays"),
     last: document.getElementById("wpLastDate"),
     next: document.getElementById("wpNextDue"),
-    nip: document.getElementById("wpNipCount"),        // ⬅️ NEU
+    nip: document.getElementById("wpNipCount"),
     btnAdd: document.getElementById("wpAddTask"),
     btnSave: document.getElementById("wpSaveTask"),
     btnDel: document.getElementById("wpDeleteTask"),
@@ -2921,28 +2924,42 @@ function wpEnsureMachineKey(name){
   return key;
 }
 
+/* ---------- Task-Liste füllen (robust) ---------- */
 function wpRefreshTaskList(){
   const { selTask, selMaschine } = wpEls();
   if (!selTask) return;
 
-  const m = selMaschine?.value || "";
-  const tasks = (wartungsplaene[m] || _wpIdx[wpNorm(m)] || []);
+  // Maschinenwert robust lesen & normalisieren
+  const mRaw  = (selMaschine?.value || '').trim();
+  const mNorm = wpNorm(mRaw);
 
-  selTask.innerHTML = '<option value="">Bitte auswählen</option>';
-  for (const t of tasks){
-    const o = document.createElement("option");
-    o.value = t.id;
-    o.textContent = t.name;
-    selTask.appendChild(o);
-  }
+  // aus Daten holen (direkter Key oder Index mit Normalisierung)
+  const direct = (wartungsplaene[mRaw] || []);
+  const idx    = _wpIdx[mNorm] || [];
+  const tasks  = direct.length ? direct : idx;
+
+  // Dropdown aufbauen
+  selTask.innerHTML = '<option value="">Bitte auswählen</option>' +
+    tasks.map(t =>
+      `<option value="${t.id||''}" data-interval="${t.intervalDays||''}" data-nipples="${t.nipples||''}">${t.name||''}</option>`
+    ).join('');
+
+  // Felder zurücksetzen, wenn (noch) nichts gewählt ist
+  wpStatusUpdateForTask(null);
 }
 
+/* ---------- Aktuell gewählten Task-Record ermitteln ---------- */
+function wpCurrentTask(){
+  const { selMaschine, selTask } = wpEls();
+  const mRaw  = (selMaschine?.value || '').trim();
+  const mNorm = wpNorm(mRaw);
+  const list  = (wartungsplaene[mRaw] || _wpIdx[mNorm] || []);
+  const id    = selTask?.value || '';
+  if (!id) return null;
+  return list.find(t => String(t.id||'') === id) || null;
+}
 
-
-
-
-
-
+/* ---------- Statusfelder aktualisieren ---------- */
 function wpStatusUpdateForTask(task) {
   const { selMaschine, interval, last, next, pill, nip } = wpEls();
 
@@ -2978,11 +2995,31 @@ function wpStatusUpdateForTask(task) {
   if (pill) { pill.textContent=st.label; pill.style.background=st.bg; pill.style.color=st.fg; }
 }
 
+/* ---------- UI-Setup: Events verdrahten ---------- */
+function setupWartungsplanUI(){
+  const { selMaschine, selTask } = wpEls();
 
+  // Maschine ändert -> Liste neu
+  if (selMaschine){
+    selMaschine.addEventListener('change', () => {
+      wpRefreshTaskList();
+    }, { passive: true });
+  }
 
+  // Task ändert -> Statusfelder aktualisieren
+  if (selTask){
+    selTask.addEventListener('change', () => {
+      wpStatusUpdateForTask(wpCurrentTask());
+    }, { passive: true });
+  }
 
+  // Initial füllen
+  wpRefreshTaskList();
+}
 
-
+/* ===============================
+   Excel-Import (unverändert)
+   =============================== */
 async function importSchmierplanFromExcel(){
   const inp = document.getElementById('xlsxInput');
   if (!inp?.files?.[0]) { alert("Bitte die Excel-Datei auswählen."); return; }
@@ -2991,80 +3028,60 @@ async function importSchmierplanFromExcel(){
   const buf  = await file.arrayBuffer();
   const wb   = XLSX.read(buf, { type: 'array' });
 
-  // Wir lesen:
-  // - "Alle Maschinen" (Liste – optional)
-  // - Alle anderen Blätter als Maschinen-Blätter, aus denen wir "Maschine/Anlage",
-  //   "Anzahl der Schmiernippel" und die Zeilen (Anlagenteile) rausziehen.
   const allSheetNames = wb.SheetNames || [];
   const skipSheets = new Set(["Alle Maschinen","Häufigkeit"]);
 
   let imported = 0;
 
-  // Hilfsfunktion: Tabelle als 2D-Array
   function sheetToAOA(name){
     const sh = wb.Sheets[name]; if(!sh) return [];
     return XLSX.utils.sheet_to_json(sh, { header:1, blankrows:false, defval:"" });
   }
 
-  // Robust: in jeder Tabelle die Kopfzeilen dynamisch finden
   function parseMachineSheet(name){
     const aoa = sheetToAOA(name);
     if (!aoa.length) return [];
 
-    // Spalten-Indizes suchen
-    let headerRowIdx = -1, colMachine = -1, colPart = -1, colNip = -1;
+    let headerRowIdx = -1, colPart = -1, colNip = -1;
     for (let r=0; r<Math.min(aoa.length, 30); r++){
       const row = aoa[r].map(v => String(v||"").trim());
-      // Kandidaten – wir brauchen mind. "Maschine / Anlage"
       const hasMachineLabel = row.some(v => /Maschine\s*\/\s*Anlage/i.test(v));
-      const hasNipHint      = row.some(v => /Anzahl.*Schmiernippel/i.test(v));
-
       if (hasMachineLabel){
         headerRowIdx = r;
-        // Spalten suchen
         for (let c=0; c<row.length; c++){
           const v = row[c];
-          if (/Maschine\s*\/\s*Anlage/i.test(v)) colPart = c; // hier stehen i. d. R. die Positionen/Teile
+          if (/Maschine\s*\/\s*Anlage/i.test(v)) colPart = c;
           if (/Anzahl.*Schmiernippel/i.test(v)) colNip  = c;
         }
         break;
       }
-      // Fallback: Blattname als Maschine, erste echte Daten-Spalte als Teil
     }
 
     if (headerRowIdx < 0){
-      // Keine klaren Header gefunden – wir interpretieren den Blattnamen als Maschine
-      // und versuchen, die erste Spalte ab Zeile 5 als Teileliste zu verwenden.
       const parts = [];
-      for (let r=5; r<aoa.length; r++){
-        const label = String(aoa[r][0]||"").trim();
+      const aoa2 = sheetToAOA(name);
+      for (let r=5; r<aoa2.length; r++){
+        const label = String(aoa2[r][0]||"").trim();
         if (!label) continue;
         parts.push({ machine:name, part:label, nipples:null });
       }
       return parts;
     }
 
-    // Datenzeilen ab headerRowIdx+1
     const parts = [];
-    for (let r=headerRowIdx+1; r<aoa.length; r++){
-      const row = aoa[r];
-      // Teil/Bezeichnung (häufig unter "Maschine / Anlage")
+    const aoa3 = sheetToAOA(name);
+    for (let r=headerRowIdx+1; r<aoa3.length; r++){
+      const row = aoa3[r];
       const raw = String(row[colPart] ?? "").trim();
       if (!raw) continue;
-
-      // Machine-Name: oft steht die Maschine im Blattnamen; manchmal auch in separater Spalte/Zeile
-      // Wir nehmen Blattnamen als Maschine (robust und für dich eindeutig).
       const machine = name;
-
       const nipples = (colNip>=0) ? (String(row[colNip]||"").replace(/[^\d]/g,'') || "") : "";
       const n = nipples ? parseInt(nipples,10) : null;
-
       parts.push({ machine, part: raw, nipples: Number.isFinite(n)? n : null });
     }
     return parts;
   }
 
-  // Alles einsammeln
   const collected = [];
   for (const sn of allSheetNames){
     if (skipSheets.has(sn)) continue;
@@ -3077,13 +3094,12 @@ async function importSchmierplanFromExcel(){
     return;
   }
 
-  // In deine Struktur mappen: wartungsplaene[machine] = [ {id, name, intervalDays, lastDateISO, nipples} ]
   let changed = 0;
   for (const it of collected){
     const m = wpEnsureMachineKey(it.machine);
     if (!m) continue;
 
-    const interval = wpInferIntervalDays(it.machine, it.part);
+    const interval = wpInferIntervalDays(it.machine, it.part); // (deine bestehende Funktion)
     const exists = (wartungsplaene[m]||[]).some(t => (t.name||"").toLowerCase() === it.part.toLowerCase());
 
     if (!exists){
@@ -3096,7 +3112,6 @@ async function importSchmierplanFromExcel(){
       });
       changed++; imported++;
     }else{
-      // Optional: vorhandene Aufgabe updaten (z. B. Nippelzahl ergänzen)
       const t = (wartungsplaene[m]||[]).find(t => (t.name||"").toLowerCase() === it.part.toLowerCase());
       if (t){
         if (t.nipples == null && it.nipples != null) { t.nipples = it.nipples; changed++; }
@@ -3109,11 +3124,10 @@ async function importSchmierplanFromExcel(){
     await wpSave();
     wpRefreshTaskList();
     wpStatusUpdateForTask(wpCurrentTask());
-    wpEvalWarning();
+    wpEvalWarning?.();
   }
   alert(`✅ Excel importiert: ${imported} neue Wartungspunkte übernommen.`);
 }
-
 
 // ===== Helpers =====
 function isIsoDate(s) {
@@ -3432,6 +3446,8 @@ const candidatePaths = [
   }
 
   // 2) Im Ordner "Reparatur-Aufträge" nach exakt der Datei suchen
+<script>
+  // ---------- Flexible Loader: findet "Wartungsplaene.json" zuverlässig ----------
   async function searchInFolder(folderPath) {
     const listUrl = `/me/drive/root:${folderPath}:/children?$select=id,name`;
     const r = await fetch("https://graph.microsoft.com/v1.0" + listUrl, {
@@ -3439,62 +3455,77 @@ const candidatePaths = [
     });
     if (!r.ok) return null;
     const data = await r.json();
-    const hit = (data.value||[]).find(it => it.name === "Wartungsplaene.json");
+    const hit = (data.value || []).find(it => it.name === "Wartungsplaene.json");
     if (!hit) return null;
     const txt = await graphText(`/me/drive/items/${hit.id}/content`);
     if (!txt) return null;
     try { return JSON.parse(txt); } catch { return null; }
   }
 
-  const fromRoot = await searchInFolder("/Reparatur-Aufträge");
-  if (fromRoot) return fromRoot;
+  async function wpLoadWartungsplaeneFlexible() {
+    // 1) Ordner "Reparatur-Aufträge"
+    const fromRoot = await searchInFolder("/Reparatur-Aufträge");
+    if (fromRoot) return fromRoot;
 
-  // 3) Letzter Fallback: globale Suche
-  const sr = await fetch("https://graph.microsoft.com/v1.0/me/drive/root/search(q='Wartungsplaene.json')?$select=id,name,parentReference", {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (sr.ok) {
-    const data = await sr.json();
-    const hit = (data.value||[]).find(it => it.name === "Wartungsplaene.json");
-    if (hit) {
-      const txt = await graphText(`/me/drive/items/${hit.id}/content`);
-      if (txt) { try { return JSON.parse(txt); } catch {} }
+    // 2) Fallback: globale Suche im Drive
+    const sr = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/root/search(q='Wartungsplaene.json')?$select=id,name,parentReference",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (sr.ok) {
+      const data = await sr.json();
+      const hit = (data.value || []).find(it => it.name === "Wartungsplaene.json");
+      if (hit) {
+        const txt = await graphText(`/me/drive/items/${hit.id}/content`);
+        if (txt) { try { return JSON.parse(txt); } catch {} }
+      }
     }
+    return null;
   }
-  return null;
-}
 
-// --- Override: wpLoad nutzt jetzt die flexible Lade-Logik ------------------
-window.wpLoad = async function () {
-  try {
-    const od = await wpLoadWartungsplaeneFlexible();   // OneDrive bevorzugt
-    if (od) {
-      window.wartungsplaene = od;
-      localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(od));
-    } else {
-      const cached = localStorage.getItem("TE15_WARTUNGSPLAENE"); // Fallback
+  // --- Override: wpLoad nutzt jetzt die flexible Lade-Logik ------------------
+  window.wpLoad = async function () {
+    try {
+      const od = await wpLoadWartungsplaeneFlexible();   // OneDrive bevorzugt
+      if (od) {
+        window.wartungsplaene = od;
+        localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(od));
+      } else {
+        const cached = localStorage.getItem("TE15_WARTUNGSPLAENE"); // Fallback
+        window.wartungsplaene = cached ? JSON.parse(cached) : {};
+      }
+    } catch (e) {
+      console.warn("wpLoad (flex) error:", e);
+      const cached = localStorage.getItem("TE15_WARTUNGSPLAENE");
       window.wartungsplaene = cached ? JSON.parse(cached) : {};
     }
-  } catch (e) {
-    console.warn("wpLoad (flex) error:", e);
-    const cached = localStorage.getItem("TE15_WARTUNGSPLAENE");
-    window.wartungsplaene = cached ? JSON.parse(cached) : {};
-  }
 
-// UI aktualisieren + Warnungen berechnen
-// UI aktualisieren + Warnungen berechnen
-wpBuildIndex();                                     // <- NEU
-if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
-if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask();
-if (typeof wpCheckOverdueAndNotify === "function") wpCheckOverdueAndNotify({ sendMail:false });
+    // Index neu + UI verdrahten/füllen
+    wpBuildIndex();
+    if (typeof setupWartungsplanUI === "function") {
+      setupWartungsplanUI();
+    } else if (typeof wpRefreshTaskList === "function") {
+      // Fallback, falls setupWartungsplanUI noch nicht existiert
+      wpRefreshTaskList();
+      if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
+    }
 
+    // optional: Warnungen/Overdue prüfen, aber ohne Mail
+    if (typeof wpCheckOverdueAndNotify === "function") {
+      wpCheckOverdueAndNotify({ sendMail:false });
+    }
+  };
 
-};
+  // ===== Initialisierung (Wartungsplan beim Laden aktivieren) =====
+  (function initWartungsplan() {
+    const start = () => window.wpLoad().catch(err => console.error("[WP] Init-Fehler:", err));
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start, { once:true });
+    } else {
+      start();
+    }
+  })();
 </script>
-
-
-
-
 
 </body>
 </html>
