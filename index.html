@@ -2951,49 +2951,57 @@ function wpRefreshTaskList(){
 /* ---------- Aktuell gewählten Task-Record ermitteln ---------- */
 function wpCurrentTask(){
   const { selMaschine, selTask } = wpEls();
-  const mRaw  = (selMaschine?.value || '').trim();
-  const mNorm = wpNorm(mRaw);
-  const list  = (wartungsplaene[mRaw] || _wpIdx[mNorm] || []);
-  const id    = selTask?.value || '';
-  if (!id) return null;
-  return list.find(t => String(t.id||'') === id) || null;
+  const m  = selMaschine?.value || "";
+  const id = selTask?.value || "";
+  const list = (wartungsplaene[m] || _wpIdx[wpNorm(m)] || []);
+  return list.find(t => String(t.id) === String(id)) || null;
 }
 
+
+/* ---------- Statusfelder aktualisieren ---------- */
 /* ---------- Statusfelder aktualisieren ---------- */
 function wpStatusUpdateForTask(task) {
-  const { selMaschine, interval, last, next, pill, nip } = wpEls();
+  const { interval, last, next, pill, nip, selMaschine } = wpEls();
 
-  if (!task) {
+  // Helper: alles leeren
+  const clear = () => {
     if (interval) interval.value = "";
     if (last)     last.value     = "";
     if (next)     next.value     = "";
     if (nip)      nip.value      = "";
-    if (pill) { pill.textContent="–"; pill.style.background="#e9ecef"; pill.style.color="#000"; }
-    return;
-  }
+    if (pill) { pill.textContent = "–"; pill.style.background = "#e9ecef"; pill.style.color = "#000"; }
+  };
 
-  let inter   = toInt(task.intervalDays, "");
-  const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
+  if (!task) { clear(); return; }
 
-  if (inter === "" || inter === 0) {
+  // --- Intervall bestimmen (aus Task oder Regel) ---
+  let inter = toInt(task?.intervalDays, null);
+  if (inter === null || inter === 0) {
     try {
       const mName = selMaschine?.value || "";
-      const tName = task.name || "";
+      const tName = task?.name || "";
       inter = wpMailRuleInterval(mName, tName) || 28;
     } catch { inter = 28; }
   }
+  if (interval) interval.value = inter == null ? "" : String(inter);
 
-  if (interval) interval.value = inter === "" ? "" : String(inter);
-  if (last)     last.value     = lastIso;
+  // --- Datum(e) setzen ---
+  const lastIso = isIsoDate(task?.lastDateISO) ? task.lastDateISO : "";
+  if (last) last.value = lastIso;
 
-  const nextVal = (lastIso && inter !== "") ? wpComputeNext(lastIso, inter) : "";
+  const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
   if (next) next.value = nextVal;
 
-  if (nip) nip.value = toInt(task.nipples, "");
+  // --- Nippelzahl setzen ---
+  let n = task?.nipples;
+  n = (n === null || n === undefined || n === "") ? "" : toInt(n, "");
+  if (nip) nip.value = n;
 
+  // --- Status-Pill aktualisieren ---
   const st = wpStatus(nextVal || "");
-  if (pill) { pill.textContent=st.label; pill.style.background=st.bg; pill.style.color=st.fg; }
+  if (pill) { pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
 }
+
 
 function setupWartungsplanUI(){
   const { selMaschine } = wpEls();
@@ -3386,59 +3394,72 @@ function setupWartungsplanUI(){
   document.getElementById('wpOpenFromBanner')?.addEventListener('click', () => {
     const panel   = document.getElementById('wartungsplanPanel');
     const section = document.getElementById('wartungsplanSection');
-    if (panel){ panel.style.display = 'block'; }
-    // Button-Label im Kopf (falls vorhanden) umschalten
+    if (panel) panel.style.display = 'block';
     const headBtn = document.getElementById('wartungToggleHead');
     if (headBtn) headBtn.textContent = '🛠️ Wartung (zu)';
     section?.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-// Maschine ändert -> Liste, Status, Warnung, Banner
-E.selMaschine?.addEventListener("change", () => {
+  // ————— Flackerfrei: immer .on… statt addEventListener (verhindert doppelte Handler) —————
+  // Maschine geändert → Liste neu, Felder leeren, Warnung neu
+  if (E.selMaschine){
+    E.selMaschine.onchange = () => {
+      wpRefreshTaskList();
+      wpStatusUpdateForTask(null);   // Intervall/Datum/Nippel/Status zurücksetzen
+      wpEvalWarning?.();
+    };
+  }
+
+  // Aufgabe geändert → Felder aus Task setzen, ggf. Default-Intervall vorschlagen
+  if (E.selTask){
+    E.selTask.onchange = () => {
+      const t = (typeof wpCurrentTask === 'function') ? wpCurrentTask() : null;
+      wpStatusUpdateForTask(t);
+      // nur vorschlagen, wenn im Task noch kein Intervall hinterlegt ist
+      if (!t || !toInt(t?.intervalDays, "")) { try { wpApplyMailRules({ force:false }); } catch {} }
+    };
+  }
+
+  // Eingaben → NextDue live berechnen
+  if (E.interval) E.interval.oninput  = wpRecalcNext;
+  if (E.last)     E.last.onchange     = wpRecalcNext;
+
+  // Neue Aufgabe anlegen
+  if (E.btnAdd){
+    E.btnAdd.onclick = async () => {
+      const E2 = wpEls();
+      const m  = wpEnsureMachineKey(E2.selMaschine?.value);
+      if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+
+      const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
+      if (!name) return;
+
+      const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
+
+      // ggf. Nippel aus Eingabefeld als Startwert übernehmen
+      const nipVal = toInt(E2.nip?.value || "", NaN);
+      if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
+
+      wartungsplaene[m].push(t);
+      await wpSave();
+
+      wpRefreshTaskList();
+      if (E2.selTask) E2.selTask.value = t.id;
+
+      // Mail-Regeln sofort anwenden (erzwingen)
+      try { wpApplyMailRules({ force:true }); } catch {}
+
+      wpStatusUpdateForTask(t);
+      wpEvalWarning?.();
+    };
+  }
+
+  // Initial: wenn Maschine bereits gesetzt → Liste füllen und Felder anzeigen
   wpRefreshTaskList();
-  wpStatusUpdateForTask(null);
-  wpEvalWarning();
-});
+  const initTask = (typeof wpCurrentTask === 'function') ? wpCurrentTask() : null;
+  wpStatusUpdateForTask(initTask);
+}
 
-// Aufgabe ändert -> Felder/Status + Default-Intervall nach Mail-Regeln (falls Intervall leer)
-E.selTask?.addEventListener("change", () => {
-  const t = wpCurrentTask();
-  wpStatusUpdateForTask(t);
-  // nur vorschlagen, wenn noch kein Intervall im Datensatz steht
-  if (!t || !toInt(t.intervalDays, "")) { try { wpApplyMailRules({ force:false }); } catch {} }
-});
-
-
-  // Eingaben -> NextDue live rechnen
-  E.interval?.addEventListener("input", wpRecalcNext);
-  E.last?.addEventListener("change", wpRecalcNext);
-
-  // Neue Aufgabe
-E.btnAdd?.addEventListener("click", async () => {
-  const E = wpEls();
-  const m = wpEnsureMachineKey(E.selMaschine?.value);
-  if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
-  const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
-  if (!name) return;
-
-  const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
-
-  // ⬇️ NEU: ggf. Nippel aus Eingabefeld als Startwert
-  const nipVal = toInt(E.nip?.value || "", NaN);
-  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
-
-  wartungsplaene[m].push(t);
-  await wpSave();
-
-  wpRefreshTaskList();
-  if (E.selTask) E.selTask.value = t.id;
-
-  // ⬇️ NEU: Regeln aus der Mail sofort anwenden (erzwingen)
-  try { wpApplyMailRules({ force:true }); } catch {}
-
-  wpStatusUpdateForTask(t);
-  wpEvalWarning();
-});
 
 
   // Speichern
