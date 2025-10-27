@@ -767,6 +767,15 @@ window.addEventListener("load", () => {
     <div id="wpHint" style="margin-top:8px;color:#666;font-size:13px;">
       Aufgaben sind pro Maschine hinterlegt. Beim Abschluss kannst du die passende Aufgabe mit „Heute durchgeführt“ markieren.
     </div>
+    <!-- 🔽 NEU: Wartungs-Zusammenfassung -->
+<div id="wpPrintSummary" style="display:none;margin-top:10px;border:1px dashed #ccc;padding:8px;border-radius:8px;">
+  <div style="font-weight:600;margin-bottom:6px;">Wartungs-Zusammenfassung</div>
+  <div><strong>Aufgabe:</strong> <span id="wpPrintTask">–</span></div>
+  <div><strong>Intervall (Tage):</strong> <span id="wpPrintInterval">–</span></div>
+  <div><strong>Zuletzt durchgeführt:</strong> <span id="wpPrintLast">–</span></div>
+  <div><strong>Nächstes Fälligkeitsdatum:</strong> <span id="wpPrintNext">–</span></div>
+  <div><strong>Schmiernippel:</strong> <span id="wpPrintNip">–</span></div>
+</div>
   </div>
 </div>
 <!-- ⬆️ Ende Wartungsplan-Panel -->
@@ -3203,6 +3212,30 @@ function wpEvalWarning(){
   try{ wpCheckOverdueAndNotify?.({ sendMail:false, machine:m }); }catch{}
 }
 /* ---------- Ende Fix-Block ---------- */
+function wpSyncPrintSummary(task){
+  const box = document.getElementById('wpPrintSummary');
+  if (!box) return;
+
+  if (!task){
+    box.style.display = 'none';
+    return;
+  }
+
+  const { intervalDays, lastDateISO, name, nipples } = task;
+  const inter = toInt(intervalDays || 0, 0);
+  const last  = isIsoDate(lastDateISO) ? lastDateISO : "";
+  const next  = (last && inter>0) ? wpComputeNext(last, inter) : "";
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || "–"; };
+
+  set('wpPrintTask', name || "");
+  set('wpPrintInterval', inter ? String(inter) : "");
+  set('wpPrintLast', last || "");
+  set('wpPrintNext', next || "");
+  set('wpPrintNip', (nipples ?? "") === "" ? "" : String(nipples));
+
+  box.style.display = 'block';
+}
 
   
 /* ---------- Setup UI ---------- */
@@ -3210,6 +3243,7 @@ function setupWartungsplanUI(){
   const E = wpEls();
   if (!E.section) return;
 
+  // Banner-Button: Panel öffnen & scrollen
   document.getElementById('wpOpenFromBanner')?.addEventListener('click', () => {
     if (E.panel) E.panel.style.display = 'block';
     const headBtn = document.getElementById('wartungToggleHead');
@@ -3217,92 +3251,124 @@ function setupWartungsplanUI(){
     E.section.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-// Maschine geändert
-if (E.selMaschine){
-  E.selMaschine.onchange = () => {
-    wpRefreshTaskList();
-    wpStatusUpdateForTask(null);
-    wpEvalWarning?.();
-    wpUpdateGlobalBanner?.();   // Banner sofort aktualisieren
-  };
-}
+  // ── Maschine geändert ─────────────────────────────────────────────
+  if (E.selMaschine){
+    E.selMaschine.onchange = () => {
+      wpRefreshTaskList();
+      wpStatusUpdateForTask(null);
+      wpEvalWarning?.();
+      wpUpdateGlobalBanner?.();
+      wpSyncPrintSummary?.(null);        // Zusammenfassung leeren
+    };
+  }
 
-// Aufgabe geändert
-if (E.selTask){
-  E.selTask.onchange = () => {
-    const t = wpCurrentTask();
-    wpStatusUpdateForTask(t);
-    // Default-Intervall nur vorschlagen, wenn noch keins im Datensatz steht
-    if (!t || !toInt(t?.intervalDays, "")) {
-      try { wpApplyMailRules({ force:false }); } catch {}
-    }
-    wpUpdateGlobalBanner?.();   // Banner sofort aktualisieren
-  };
-}
+  // ── Aufgabe geändert ──────────────────────────────────────────────
+  if (E.selTask){
+    E.selTask.onchange = () => {
+      const t = wpCurrentTask();
+      wpStatusUpdateForTask(t);
 
+      // Intervall nur vorschlagen, wenn im Datensatz noch keins steht
+      if (!t || !toInt(t?.intervalDays, "")) {
+        try { wpApplyMailRules({ force:false }); } catch {}
+      }
 
-  // Eingaben
-  E.interval?.addEventListener('input', wpRecalcNext);
-  E.last?.addEventListener('change', wpRecalcNext);
+      wpUpdateGlobalBanner?.();
+      wpSyncPrintSummary?.(t);           // Zusammenfassung füllen
+    };
+  }
 
-  // Neue Aufgabe
+  // ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
+  E.interval?.addEventListener('input',  wpRecalcNext);
+  E.last?.addEventListener('change',     wpRecalcNext);
+
+  // (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
   E.btnAdd?.addEventListener('click', async () => {
     const m = wpEnsureMachineKey(E.selMaschine?.value);
     if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+
     const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
     if (!name) return;
 
     const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
+
+    // Nippel aus Eingabefeld übernehmen, falls vorhanden
     const nipVal = toInt(E.nip?.value || "", NaN);
     if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
 
-    wartungsplaene[m].push(t);
+    (wartungsplaene[m] ||= []).push(t);
     await wpSave();
+
     wpRefreshTaskList();
     if (E.selTask) E.selTask.value = t.id;
+
     try { wpApplyMailRules({ force:true }); } catch {}
+
     wpStatusUpdateForTask(t);
-    wpEvalWarning();
+    wpEvalWarning?.();
+    wpUpdateGlobalBanner?.();
+    wpSyncPrintSummary?.(t);             // ⇢ neue Aufgabe in die Summary
   });
 
-  // Speichern
+  // ── Speichern ─────────────────────────────────────────────────────
   E.btnSave?.addEventListener('click', async () => {
-    const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+    const t = wpCurrentTask();
+    if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+
     let inter = toInt(E.interval?.value || "", NaN);
     if (!Number.isFinite(inter) || inter < 1) inter = "";
     t.intervalDays = inter;
+
     t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
+
     const nipVal = toInt(E.nip?.value || "", NaN);
     if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
+
     await wpSave();
+
     wpRecalcNext();
-    wpEvalWarning();
+    wpEvalWarning?.();
+    wpUpdateGlobalBanner?.();
+    wpSyncPrintSummary?.(t);             // ⇢ Summary nach Speichern aktualisieren
   });
 
-  // Löschen
+  // ── Löschen ───────────────────────────────────────────────────────
   E.btnDel?.addEventListener('click', async () => {
     const m  = E.selMaschine?.value, id = E.selTask?.value;
     if (!m || !id) return;
     if (!confirm("Diese Wartungsaufgabe wirklich löschen?")) return;
-    wartungsplaene[m] = (wartungsplaene[m]||[]).filter(x => x.id !== id);
+
+    wartungsplaene[m] = (wartungsplaene[m]||[]).filter(x => String(x.id) !== String(id));
     await wpSave();
+
     wpRefreshTaskList();
     wpStatusUpdateForTask(null);
-    wpEvalWarning();
+    wpEvalWarning?.();
+    wpUpdateGlobalBanner?.();
+    wpSyncPrintSummary?.(null);
   });
 
-  // Heute durchgeführt
+  // (4) ── Heute durchgeführt ────────────────────────────────────────
   E.btnDone?.addEventListener('click', async () => {
-    const t = wpCurrentTask(); if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+    const t = wpCurrentTask();
+    if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+
     t.lastDateISO = wpTodayISO();
     await wpSave();
+
     wpRecalcNext();
-    wpEvalWarning();
+    wpEvalWarning?.();
+    wpUpdateGlobalBanner?.();
+    wpSyncPrintSummary?.(t);             // ⇢ Summary nach „heute“ aktualisieren
   });
 
-  // Initial
+  // (6) >>> Initial nach dem ersten Füllen ───────────────────────────
   wpRefreshTaskList();
-  wpStatusUpdateForTask(wpCurrentTask());
+  const initTask = wpCurrentTask();
+  wpStatusUpdateForTask(initTask);
+  wpEvalWarning?.();
+  wpUpdateGlobalBanner?.();
+  wpSyncPrintSummary?.(initTask);
 }
 
 /* ---------- Init ---------- */
@@ -3310,15 +3376,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   await wpLoad();
   setupWartungsplanUI();
 
+  // Nachträglich sicherstellen, dass alles initial gesetzt ist
   wpRefreshTaskList();
-  wpStatusUpdateForTask(wpCurrentTask());
-  wpEvalWarning();
-
-  // ⬇️ neu
-  wpUpdateGlobalBanner();
+  const cur = wpCurrentTask?.() || null;
+  wpStatusUpdateForTask(cur);
+  wpEvalWarning?.();
+  wpUpdateGlobalBanner?.();
+  wpSyncPrintSummary?.(cur);
 
   try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 });
+
+
 
 
 // 🔐 Nach Login automatisch Banner + Warnungen aktualisieren
