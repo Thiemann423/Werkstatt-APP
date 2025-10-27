@@ -3078,6 +3078,61 @@ function wpRecalcNext(){
   }
 }
 
+  /* ---------- Helpers & Warning (einmal global) ---------- */
+function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
+function toInt(v, fallback=""){ const n=parseInt(String(v??'').replace(/[^\d-]/g,''),10); return Number.isFinite(n)?n:fallback; }
+
+function wpStatusUpdateForTask(task){
+  const { interval, last, next, pill, nip, selMaschine } = wpEls();
+  const clear=()=>{ if(interval)interval.value=""; if(last)last.value=""; if(next)next.value=""; if(nip)nip.value=""; if(pill){ pill.textContent="–"; pill.style.background="#e9ecef"; pill.style.color="#000"; } };
+  if(!task){ clear(); return; }
+
+  let inter = toInt(task?.intervalDays, null);
+  if(inter===null || inter===0){
+    try{ inter = wpMailRuleInterval(selMaschine?.value||"", task?.name||"") || 28; }catch{ inter=28; }
+  }
+  if(interval) interval.value = inter==null ? "" : String(inter);
+
+  const lastIso = isIsoDate(task?.lastDateISO) ? task.lastDateISO : "";
+  if(last) last.value = lastIso;
+
+  const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
+  if(next) next.value = nextVal;
+
+  let n = task?.nipples;
+  n = (n===null || n===undefined || n==="") ? "" : toInt(n,"");
+  if(nip) nip.value = n;
+
+  const st = wpStatus(nextVal||"");
+  if(pill){ pill.textContent=st.label; pill.style.background=st.bg; pill.style.color=st.fg; }
+}
+
+function wpEvalWarning(){
+  const { selMaschine, warn } = wpEls();
+  const m = (selMaschine?.value||"").trim();
+  const tasks = m ? (window.wartungsplaene?.[m]||[]) : [];
+  let overdue=0, soon=0;
+  for(const t of tasks){
+    const inter = toInt(t.intervalDays||0,0);
+    const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
+    const next  = wpComputeNext(last, inter);
+    const st    = wpStatus(next);
+    if(st.level==="overdue") overdue++; else if(st.level==="soon") soon++;
+  }
+  if(warn){
+    if(overdue||soon){
+      const parts=[];
+      if(overdue) parts.push(`⚠️ <strong>${overdue}</strong> überfällige Wartung${overdue>1?"en":""}`);
+      if(soon)    parts.push(`⏳ <strong>${soon}</strong> bald fällige Wartung${soon>1?"en":""}`);
+      warn.style.display="block"; warn.innerHTML=parts.join(" • ");
+    }else{ warn.style.display="none"; warn.textContent=""; }
+  }
+  try{ wpUpdateGlobalBanner?.(); }catch{}
+  try{ wpCheckOverdueAndNotify?.({ sendMail:false, machine:m }); }catch{}
+}
+/* ---------- Ende Fix-Block ---------- */
+
+  
 /* ---------- Setup UI ---------- */
 function setupWartungsplanUI(){
   const E = wpEls();
