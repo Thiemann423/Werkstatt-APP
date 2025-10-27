@@ -3009,27 +3009,99 @@ function wpOverdueTasks(machineName){
     return wpStatus(next).level === "overdue";
   });
 }
+  // Alle Maschinen prüfen und überfällige Aufgaben einsammeln
+function wpOverdueAll(){
+  const res = [];
+  const wp = window.wartungsplaene || {};
+  for (const [machine, tasks] of Object.entries(wp)){
+    if (!Array.isArray(tasks)) continue;
+    const overdue = tasks.filter(t => {
+      const inter = toInt(t.intervalDays || 0, 0);
+      const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
+      const next  = wpComputeNext(last, inter);
+      return wpStatus(next).level === "overdue";
+    });
+    if (overdue.length) res.push({ machine, overdue });
+  }
+  return res;
+}
 
+
+// 🔴 Globaler Banner: zeigt entweder für die gewählte Maschine ODER global
 function wpUpdateGlobalBanner(){
   const banner = document.getElementById('wpGlobalOverdueBanner');
   if (!banner) return;
 
-  const selMaschine = wpEls().selMaschine;
-  const m = selMaschine?.value || "";
-  const overdue = wpOverdueTasks(m);
-  if (!m || overdue.length === 0){
+  const { selMaschine } = wpEls();
+  const selected = (selMaschine?.value || "").trim();
+
+  // Wenn eine Maschine gewählt ist: bisheriges Verhalten
+  if (selected){
+    const list = wpOverdueTasks(selected);
+    if (!list.length){
+      banner.style.display = "none";
+      return;
+    }
+    const msgEl = banner.querySelector('[data-msg]');
+    if (msgEl){
+      const names = list.map(t => t.name).slice(0,3).join(', ');
+      const more  = list.length > 3 ? ` (+${list.length - 3} weitere)` : '';
+      msgEl.textContent = `Maschine „${selected}“: ${list.length} Wartung(en) überfällig – ${names}${more}`;
+    }
+    banner.style.display = "flex";
+    return;
+  }
+
+  // Keine Maschine gewählt → global prüfen
+  const all = wpOverdueAll();
+  const total = all.reduce((a, x) => a + x.overdue.length, 0);
+
+  if (!total){
     banner.style.display = "none";
     return;
   }
 
+  const first = all[0];
+  const firstNames = first.overdue.map(t => t.name).slice(0,3).join(', ');
+  const rest = total - first.overdue.length;
+
   const msgEl = banner.querySelector('[data-msg]');
   if (msgEl){
-    const names = overdue.map(t => t.name).slice(0,3).join(', ');
-    const more  = overdue.length > 3 ? ` (+${overdue.length - 3} weitere)` : '';
-    msgEl.textContent = `Maschine „${m}“: ${overdue.length} Wartung(en) überfällig – ${names}${more}`;
+    // Kleiner, aber informativer Globaltext
+    msgEl.textContent =
+      `${total} überfällige Wartung(en) in ${all.length} Maschine(n) – ` +
+      `z. B. „${first.machine}“: ${firstNames}${rest>0 ? ` (+${rest} weitere)` : ''}`;
   }
   banner.style.display = "flex";
+
+  // Optional: Wenn der Banner-Button „Wartung öffnen“ existiert,
+  // und noch keine Maschine gewählt ist, wähle beim Klick die erste betroffene.
+  const openBtn = document.getElementById('wpOpenFromBanner') || banner.querySelector('[data-open]');
+  if (openBtn){
+    openBtn.onclick = () => {
+      try{
+        const { selMaschine } = wpEls();
+        if (selMaschine && !selMaschine.value && first?.machine){
+          // versuche die Maschine vorzuwählen
+          // 1) exakter Name
+          selMaschine.value = first.machine;
+          // 2) falls nicht exakt vorhanden: suche per Normalisierung
+          if (selMaschine.value !== first.machine){
+            const norm = wpNorm(first.machine);
+            const opt = [...selMaschine.options].find(o => wpNorm(o.value) === norm || wpNorm(o.textContent||"") === norm);
+            if (opt) selMaschine.value = opt.value;
+          }
+          selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+      }catch{}
+      // Panel öffnen, falls du das so handhabst:
+      document.getElementById('wartungsplanPanel')?.style && (document.getElementById('wartungsplanPanel').style.display = 'block');
+      document.getElementById('wartungToggleHead') && (document.getElementById('wartungToggleHead').textContent = '🛠️ Wartung (zu)');
+      document.getElementById('wartungsplanSection')?.scrollIntoView({ behavior:'smooth', block:'start' });
+    };
+  }
 }
+
 
 function wpEvalWarning(){
   const { selMaschine, warn } = wpEls();
@@ -3145,19 +3217,29 @@ function setupWartungsplanUI(){
     E.section.scrollIntoView({ behavior:'smooth', block:'start' });
   });
 
-  // Maschine geändert
-  E.selMaschine?.addEventListener('change', () => {
+// Maschine geändert
+if (E.selMaschine){
+  E.selMaschine.onchange = () => {
     wpRefreshTaskList();
     wpStatusUpdateForTask(null);
-    wpEvalWarning();
-  }, { passive:true });
+    wpEvalWarning?.();
+    wpUpdateGlobalBanner?.();   // Banner sofort aktualisieren
+  };
+}
 
-  // Aufgabe geändert
-  E.selTask?.addEventListener('change', () => {
+// Aufgabe geändert
+if (E.selTask){
+  E.selTask.onchange = () => {
     const t = wpCurrentTask();
     wpStatusUpdateForTask(t);
-    if (!t || !toInt(t.intervalDays, "")) { try { wpApplyMailRules({ force:false }); } catch {} }
-  }, { passive:true });
+    // Default-Intervall nur vorschlagen, wenn noch keins im Datensatz steht
+    if (!t || !toInt(t?.intervalDays, "")) {
+      try { wpApplyMailRules({ force:false }); } catch {}
+    }
+    wpUpdateGlobalBanner?.();   // Banner sofort aktualisieren
+  };
+}
+
 
   // Eingaben
   E.interval?.addEventListener('input', wpRecalcNext);
@@ -3227,10 +3309,41 @@ function setupWartungsplanUI(){
 document.addEventListener("DOMContentLoaded", async () => {
   await wpLoad();
   setupWartungsplanUI();
+
+  wpRefreshTaskList();
+  wpStatusUpdateForTask(wpCurrentTask());
   wpEvalWarning();
+
+  // ⬇️ neu
+  wpUpdateGlobalBanner();
+
+  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
 });
 
-</script>
 
+// 🔐 Nach Login automatisch Banner + Warnungen aktualisieren
+(function hookLogin(){
+  const orig = window.signInAndAcquireToken;
+  if (typeof orig === "function"){
+    window.signInAndAcquireToken = async function(...args){
+      const r = await orig.apply(this, args);
+      try {
+        await wpLoad();
+        wpBuildIndex?.();
+        wpRefreshTaskList?.();
+        wpStatusUpdateForTask?.(wpCurrentTask?.());
+        wpEvalWarning?.();
+
+        // Banner nach Login sofort aktualisieren
+        wpUpdateGlobalBanner?.();
+
+        // Optional: beim Login Mail-Benachrichtigung erlauben
+        wpCheckOverdueAndNotify?.({ sendMail:true });
+      } catch(e){}
+      return r;
+    };
+  }
+})();
+</script>
 </body>
 </html>
