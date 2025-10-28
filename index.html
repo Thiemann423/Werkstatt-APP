@@ -3278,37 +3278,51 @@ function setupWartungsplanUI(){
     };
   }
 
-  // ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
-  E.interval?.addEventListener('input',  wpRecalcNext);
-  E.last?.addEventListener('change',     wpRecalcNext);
+// ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
+E.interval?.addEventListener('input',  wpRecalcNext);
 
-  // (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
-  E.btnAdd?.addEventListener('click', async () => {
-    const m = wpEnsureMachineKey(E.selMaschine?.value);
-    if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+// NEU: Datum setzen ⇒ sofort speichern + neu berechnen
+E.last?.addEventListener('change',     async () => {
+  const t = wpCurrentTask();
+  if (!t) return;
 
-    const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
-    if (!name) return;
+  // ISO prüfen und im Datensatz hinterlegen (yyyy-mm-dd)
+  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(E.last.value) ? E.last.value : "";
 
-    const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
+  await wpSave();            // Persistiert (Cache + ggf. OneDrive)
+  wpRecalcNext();            // Nächstes Fälligkeitsdatum/Status
+  wpEvalWarning?.();         // Warnungen aktualisieren
+  wpUpdateGlobalBanner?.();  // Globales Banner aktualisieren
+  wpSyncPrintSummary?.(t);   // Zusammenfassung aktualisieren
+});
 
-    // Nippel aus Eingabefeld übernehmen, falls vorhanden
-    const nipVal = toInt(E.nip?.value || "", NaN);
-    if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
+// (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
+E.btnAdd?.addEventListener('click', async () => {
+  const m = wpEnsureMachineKey(E.selMaschine?.value);
+  if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
 
-    (wartungsplaene[m] ||= []).push(t);
-    await wpSave();
+  const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
+  if (!name) return;
 
-    wpRefreshTaskList();
-    if (E.selTask) E.selTask.value = t.id;
+  const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
 
-    try { wpApplyMailRules({ force:true }); } catch {}
+  // Nippel aus Eingabefeld übernehmen, falls vorhanden
+  const nipVal = toInt(E.nip?.value || "", NaN);
+  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
 
-    wpStatusUpdateForTask(t);
-    wpEvalWarning?.();
-    wpUpdateGlobalBanner?.();
-    wpSyncPrintSummary?.(t);             // ⇢ neue Aufgabe in die Summary
-  });
+  (wartungsplaene[m] ||= []).push(t);
+  await wpSave();
+
+  wpRefreshTaskList();
+  if (E.selTask) E.selTask.value = t.id;
+
+  try { wpApplyMailRules({ force:true }); } catch {}
+
+  wpStatusUpdateForTask(t);
+  wpEvalWarning?.();
+  wpUpdateGlobalBanner?.();
+  wpSyncPrintSummary?.(t);             // ⇢ neue Aufgabe in die Summary
+});
 
   // ── Speichern ─────────────────────────────────────────────────────
   E.btnSave?.addEventListener('click', async () => {
