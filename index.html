@@ -3402,20 +3402,25 @@ function setupWartungsplanUI(){
 // ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
 E.interval?.addEventListener('input',  wpRecalcNext);
 
-// NEU: Datum setzen ⇒ sofort speichern + neu berechnen
-E.last?.addEventListener('change',     async () => {
-  const t = wpCurrentTask();
-  if (!t) return;
+// NEU: "Zuletzt durchgeführt" akzeptiert dd.mm.jjjj ODER ISO und speichert sofort
+E.last?.addEventListener('change', async () => {
+  const t = wpCurrentTask(); if (!t) return;
+  let v = (E.last.value || "").trim();
 
-  // ISO prüfen und im Datensatz hinterlegen (yyyy-mm-dd)
-  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(E.last.value) ? E.last.value : "";
+  // dd.mm.jjjj -> yyyy-mm-dd
+  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; E.last.value = v; }
 
-  await wpSave();            // Persistiert (Cache + ggf. OneDrive)
-  wpRecalcNext();            // Nächstes Fälligkeitsdatum/Status
-  wpEvalWarning?.();         // Warnungen aktualisieren
-  wpUpdateGlobalBanner?.();  // Globales Banner aktualisieren
-  wpSyncPrintSummary?.(t);   // Zusammenfassung aktualisieren
+  // nur gültiges ISO übernehmen
+  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+
+  await wpSave();            // persistieren
+  wpRecalcNext?.();          // Next-Datum in das Feld schreiben
+  wpEvalWarning?.();         // Warnungen/Banner aktualisieren
+  wpUpdateGlobalBanner?.();
+  wpSyncPrintSummary?.(t);   // Zusammenfassung unter dem Panel
 });
+
 
 // (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
 E.btnAdd?.addEventListener('click', async () => {
