@@ -319,76 +319,139 @@ async function loadHtml2PdfIfNeeded(){
 
   
 
-  <!-- z-index-Kapselung fürs Sticky-Header -->
-  <div id="dashPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
-      <div>
-        <label for="f_bearbeitet_am">Bearbeitet am</label>
-        <input type="date" id="f_bearbeitet_am" style="width:100%;padding:6px;">
-      </div>
-      <div>
-        <label for="f_techniker">Techniker</label>
-        <input type="text" id="f_techniker" placeholder="z. B. Merker" style="width:100%;padding:6px;">
-      </div>
-      <div>
-        <label for="f_maschine">Maschine</label>
-        <input type="text" id="f_maschine" placeholder="z. B. Multivac" style="width:100%;padding:6px;">
-      </div>
-      <div>
-        <label for="f_anlagenteil">Anlagenteil</label>
-        <input type="text" id="f_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
-      </div>
+<!-- z-index-Kapselung fürs Sticky-Header -->
+<div id="dashPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
+    <div>
+      <label for="f_bearbeitet_am">Bearbeitet am</label>
+      <input type="date" id="f_bearbeitet_am" style="width:100%;padding:6px;">
     </div>
-
-    <div style="margin:10px 0;">
-      <button type="button" id="dashReload"
-              style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
-        🔄 Neu laden
-      </button>
-      <button type="button" id="dashClear"
-              style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
-        ❌ Filter löschen
-      </button>
-      <button type="button" id="dashRangeBtn" data-mode="30"
-              style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
-       🗓️ Letzte 30 Tage
-      </button>
+    <div>
+      <label for="f_techniker">Techniker</label>
+      <input type="text" id="f_techniker" placeholder="z. B. Merker" style="width:100%;padding:6px;">
     </div>
-
-    <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
-      <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-        <!-- Sticky-Header bleibt innerhalb des Panels -->
-        <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-          <tr>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
-            <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
-          </tr>
-        </thead>
-        <tbody id="dashboardBody"></tbody>
-      </table>
+    <div>
+      <label for="f_maschine">Maschine</label>
+      <input type="text" id="f_maschine" placeholder="z. B. Multivac" style="width:100%;padding:6px;">
     </div>
+    <div>
+      <label for="f_anlagenteil">Anlagenteil</label>
+      <input type="text" id="f_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
+    </div>
+  </div>
 
-    <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
+  <div style="margin:10px 0;">
+    <button type="button" id="dashReload"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
+      🔄 Neu laden
+    </button>
+    <button type="button" id="dashClear"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
+      ❌ Filter löschen
+    </button>
+    <button type="button" id="dashRangeBtn" data-mode="30"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+     🗓️ Letzte 30 Tage
+    </button>
+  </div>
 
-    <!-- 🔎 Analytics-Blöcke -->
-    <div id="dashAnalytics" style="display:none; margin-top:12px; padding-top:10px; border-top:1px solid #eee;">
-      <div style="font-weight:600; margin-bottom:6px;">🔎 Häufigste Einträge (aktuelle Filter)</div>
-      <div class="analytics-grid">
-        <div>
-          <div style="font-weight:600; margin-bottom:6px;">Maschinen – Top 5</div>
-          <div id="topMachines"></div>
-        </div>
-        <div>
-          <div style="font-weight:600; margin-bottom:6px;">Anlagenteile – Top 5</div>
-          <div id="topParts"></div>
-        </div>
+  <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
+    <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+      <!-- Sticky-Header bleibt innerhalb des Panels -->
+      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
+        </tr>
+      </thead>
+      <tbody id="dashboardBody"></tbody>
+    </table>
+  </div>
+
+  <div id="dashEmpty" style="display:none;padding:8px;color:#666;">Keine Aufträge gefunden.</div>
+
+  <!-- 🔎 Analytics-Blöcke -->
+  <div id="dashAnalytics" style="display:none; margin-top:12px; padding-top:10px; border-top:1px solid #eee;">
+    <div style="font-weight:600; margin-bottom:6px;">🔎 Häufigste Einträge (aktuelle Filter)</div>
+    <div class="analytics-grid">
+      <div>
+        <div style="font-weight:600; margin-bottom:6px;">Maschinen – Top 5</div>
+        <div id="topMachines"></div>
+      </div>
+      <div>
+        <div style="font-weight:600; margin-bottom:6px;">Anlagenteile – Top 5</div>
+        <div id="topParts"></div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- ===== Wartungs-Dashboard (Log) ===== -->
+<div id="wpLogPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
+    <div>
+      <label for="wpLog_from">Von</label>
+      <input type="date" id="wpLog_from" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="wpLog_to">Bis</label>
+      <input type="date" id="wpLog_to" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="wpLog_machine">Maschine</label>
+      <input type="text" id="wpLog_machine" placeholder="z. B. Minirolle" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="wpLog_task">Aufgabe</label>
+      <input type="text" id="wpLog_task" placeholder="z. B. Vakuumfüller" style="width:100%;padding:6px;">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;margin-top:10px;">
+    <div>
+      <label for="wpLog_tech">Techniker</label>
+      <input type="text" id="wpLog_tech" placeholder="Name oder Teil" style="width:100%;padding:6px;">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" id="wpLogReload"
+              style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
+        🔄 Neu laden
+      </button>
+      <button type="button" id="wpLogClear"
+              style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;">
+        ❌ Filter löschen
+      </button>
+      <button type="button" id="wpLogRangeBtn" data-mode="30"
+              style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;cursor:pointer;">
+        🗓️ Letzte 30 Tage
+      </button>
+    </div>
+    <div></div><div></div>
+  </div>
+
+  <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;margin-top:10px;">
+    <table id="wpLogTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+        </tr>
+      </thead>
+      <tbody id="wpLogBody"></tbody>
+    </table>
+  </div>
+
+  <div id="wpLogEmpty" style="display:none;padding:8px;color:#666;">Keine Einträge gefunden.</div>
+</div>
+
 
 
 <!-- ⬇️ WICHTIG: Ab hier ist alles im PDF-Container -->
@@ -3427,7 +3490,13 @@ E.btnAdd?.addEventListener('click', async () => {
 
     t.lastDateISO = wpTodayISO();
     await wpSave();
-await wpLogExecution({ dateISO: t.lastDateISO, task: t, machine: E.selMaschine?.value || "", technician: E.selTechniker1?.value || "" });
+await wpLogExecutionAndRefresh({
+  dateISO: t.lastDateISO,
+  task: t,
+  machine: E.selMaschine?.value || "",
+  technician: E.selTechniker1?.value || ""
+});
+
 
     wpRecalcNext();
     wpEvalWarning?.();
@@ -3488,6 +3557,125 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
   }
 })();
+
+  <script>
+// ===== Wartungs-Dashboard (Log) =====
+function _wpNorm(s){ return String(s||"").toLowerCase().trim(); }
+function _wpFmtISO(s){ return s || ""; }
+
+// Filter anwenden + sortieren (neueste zuerst)
+function wpLogApplyFilters(list){
+  const from = document.getElementById("wpLog_from")?.value || "";
+  const to   = document.getElementById("wpLog_to")?.value   || "";
+  const m    = _wpNorm(document.getElementById("wpLog_machine")?.value);
+  const t    = _wpNorm(document.getElementById("wpLog_task")?.value);
+  const tech = _wpNorm(document.getElementById("wpLog_tech")?.value);
+
+  return (list||[]).filter(e=>{
+    if (from && e.dateISO < from) return false;
+    if (to   && e.dateISO > to)   return false;
+    if (m && !_wpNorm(e.machine).includes(m)) return false;
+    if (t && !_wpNorm(e.taskName).includes(t)) return false;
+    if (tech && !_wpNorm(e.technician).includes(tech)) return false;
+    return true;
+  }).sort((a,b)=>(b.dateISO||"").localeCompare(a.dateISO||""));
+}
+
+// Tabelle rendern
+function renderWpLogTable(){
+  const body = document.getElementById("wpLogBody");
+  const empty= document.getElementById("wpLogEmpty");
+  if (!body) return;
+
+  const rows = wpLogApplyFilters(window.wartungslog || []);
+  body.innerHTML = "";
+
+  if (!rows.length){
+    if (empty) empty.style.display = "block";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+
+  const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
+  body.innerHTML = rows.map(e => `
+    <tr>
+      ${td(_wpFmtISO(e.dateISO))}
+      ${td(e.machine || "–")}
+      ${td(e.taskName || "–")}
+      ${td((e.intervalDays ?? "") === "" ? "–" : e.intervalDays)}
+      ${td((e.nipples ?? "") === "" ? "–" : e.nipples)}
+      ${td(e.technician || "–")}
+    </tr>
+  `).join("");
+}
+
+// Panel ein/aus und (wenn auf) rendern
+function toggleWpLogPanel(){
+  const p = document.getElementById("wpLogPanel");
+  if (!p) return;
+
+  // optional: anderes Dashboard schließen
+  const orders = document.getElementById("dashPanel");
+  if (orders && orders.style.display === "block") orders.style.display = "none";
+
+  p.style.display = (p.style.display==="none" || !p.style.display) ? "block" : "none";
+  if (p.style.display==="block") renderWpLogTable();
+}
+
+// UI-Events binden
+function bindWpLogUi(){
+  const byId = (id)=>document.getElementById(id);
+
+  byId("toggleWpLogBtn")?.addEventListener("click", toggleWpLogPanel);
+
+  // Filter live anwenden
+  ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
+    .forEach(id => byId(id)?.addEventListener("input", renderWpLogTable));
+
+  // Reload (lädt aus OneDrive/Cache neu)
+  byId("wpLogReload")?.addEventListener("click", async ()=>{
+    try { await wpLogLoad?.(); } catch(e){ console.warn("wpLogLoad:", e); }
+    renderWpLogTable();
+  });
+
+  // Filter löschen
+  byId("wpLogClear")?.addEventListener("click", ()=>{
+    ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
+      .forEach(id => { const el = byId(id); if (el) el.value = ""; });
+    renderWpLogTable();
+  });
+
+  // 30→90→7-Tage Zyklus
+  byId("wpLogRangeBtn")?.addEventListener("click",(ev)=>{
+    const btn = ev.currentTarget;
+    const mode = String(btn?.dataset?.mode || "30");
+    const today = new Date();
+    const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const from = new Date(today);
+
+    if (mode === "30"){ from.setDate(from.getDate()-30); btn.dataset.mode="90"; btn.textContent="🗓️ Letzte 90 Tage"; }
+    else if (mode === "90"){ from.setDate(from.getDate()-90); btn.dataset.mode="7";  btn.textContent="🗓️ Letzte 7 Tage"; }
+    else { from.setDate(from.getDate()-7);  btn.dataset.mode="30"; btn.textContent="🗓️ Letzte 30 Tage"; }
+
+    byId("wpLog_from").value = toISO(from);
+    byId("wpLog_to").value   = toISO(today);
+    renderWpLogTable();
+  });
+}
+
+// Helper: direkt nach Log-Schreiben optional Tabelle refreshen
+async function wpLogExecutionAndRefresh(entry){
+  try { await wpLogExecution(entry); } catch(e){ console.warn("wpLogExecution:", e); }
+  const p = document.getElementById("wpLogPanel");
+  if (p && p.style.display === "block") renderWpLogTable();
+}
+
+// Beim Start binden (nachdem DOM da ist)
+document.addEventListener("DOMContentLoaded", ()=>{
+  try { bindWpLogUi(); } catch(e){ console.warn("bindWpLogUi:", e); }
+});
+
+
 </script>
 </body>
 </html>
