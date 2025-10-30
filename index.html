@@ -3445,27 +3445,34 @@ E.btnAdd?.addEventListener('click', async () => {
   wpSyncPrintSummary?.(t);             // ⇢ neue Aufgabe in die Summary
 });
 
-  // ── Speichern ─────────────────────────────────────────────────────
-  E.btnSave?.addEventListener('click', async () => {
-    const t = wpCurrentTask();
-    if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+E.btnSave?.addEventListener('click', async () => {
+  const t = wpCurrentTask();
+  if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
 
-    let inter = toInt(E.interval?.value || "", NaN);
-    if (!Number.isFinite(inter) || inter < 1) inter = "";
-    t.intervalDays = inter;
+  // Intervall übernehmen/validieren
+  let inter = toInt(E.interval?.value || "", NaN);
+  if (!Number.isFinite(inter) || inter < 1) inter = "";
+  t.intervalDays = inter;
 
-    t.lastDateISO  = isIsoDate(E.last?.value) ? E.last.value : "";
+  // >>> NEU: Datum aus dem Feld normalisieren (dd.mm.jjjj -> ISO) und übernehmen
+  let v = (E.last?.value || "").trim();
+  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; if (E.last) E.last.value = v; }
+  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
 
-    const nipVal = toInt(E.nip?.value || "", NaN);
-    if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
+  // Nippelzahl übernehmen (optional)
+  const nipVal = toInt(E.nip?.value || "", NaN);
+  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
 
-    await wpSave();
+  await wpSave();
 
-    wpRecalcNext();
-    wpEvalWarning?.();
-    wpUpdateGlobalBanner?.();
-    wpSyncPrintSummary?.(t);             // ⇢ Summary nach Speichern aktualisieren
-  });
+  wpRecalcNext?.();
+  wpEvalWarning?.();
+  wpUpdateGlobalBanner?.();
+  wpSyncPrintSummary?.(t);
+});
+
+
 
   // ── Löschen ───────────────────────────────────────────────────────
   E.btnDel?.addEventListener('click', async () => {
