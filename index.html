@@ -358,17 +358,19 @@ async function loadHtml2PdfIfNeeded(){
     };
   }
 
-  // Button sicher aktivieren + Zusatzlistener
-  window.addEventListener('load', function () {
-    var btn = document.getElementById('toggleWpLogBtn');
-    var panel = document.getElementById('wpLogPanel');
-    if (btn) {
-      btn.removeAttribute('disabled');
-      btn.setAttribute('aria-controls', 'wpLogPanel');
-      btn.setAttribute('aria-expanded', (panel && panel.style.display === 'block') ? 'true' : 'false');
-      btn.addEventListener('click', window.__toggleWpLogPanel);
-    }
-  });
+// Button sicher aktivieren + Zusatzlistener
+window.addEventListener('load', function () {
+  var btn = document.getElementById('toggleWpLogBtn');
+  var panel = document.getElementById('wpLogPanel');
+  if (btn) {
+    btn.removeAttribute('disabled');
+    btn.setAttribute('aria-controls', 'wpLogPanel');
+    btn.setAttribute('aria-expanded', (panel && panel.style.display === 'block') ? 'true' : 'false');
+    // ❌ diese Zeile bitte raus:
+    // btn.addEventListener('click', window.__toggleWpLogPanel);
+  }
+});
+
 
   // Tastaturkürzel: Alt+W
   window.addEventListener('keydown', function (e) {
@@ -661,14 +663,7 @@ window.addEventListener("load", () => {
     el?.addEventListener("input", loadWpLog);
   });
 
-  // Kopf-Button „🧰 Wartungs-Dashboard“ öffnet/schließt Panel & lädt beim Öffnen
-  document.getElementById("toggleWpLogBtn")?.addEventListener("click", () => {
-    const panel = document.getElementById("wpLogPanel");
-    if (!panel) return;
-    const hidden = panel.style.display === "none" || panel.style.display === "";
-    panel.style.display = hidden ? "block" : "none";
-    if (hidden) loadWpLog(); // beim Öffnen laden
-  });
+
 
   // Falls Panel beim Start schon sichtbar ist
   const panel = document.getElementById("wpLogPanel");
