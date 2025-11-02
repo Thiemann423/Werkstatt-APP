@@ -3963,72 +3963,167 @@ document.addEventListener("DOMContentLoaded", ()=>{
   }
 
   function recomputeNextDue(){
-    const last = byId("wpLastDate")?.value || "";      // Zuletzt durchgeführt
+    const last = byId("wpLastDate")?.value || "";         // Zuletzt durchgeführt
     const intv = parseInt(byId("wpIntervalDays")?.value || "0", 10) || 0;
     const out  = byId("wpNextDue");
     if (!out) return;
     if (!last || !intv) { out.value = ""; return; }
     const d = new Date(last);
-    d.setDate(d.getDate() + intv);
+    d.setDate(d.getDate() + intv);                        // funktioniert auch bei Intervall = 1
     out.value = toISO(d);
   }
 
   // bei manuellen Änderungen neu berechnen
   window.addEventListener("load", ()=>{
-    byId("wpIntervalDays")?.addEventListener("input", recomputeNextDue);
-    byId("wpLastDate")?.addEventListener("change", recomputeNextDue);
-    // falls Felder schon Werte haben:
+    byId("wpIntervalDays")?.addEventListener("input",  recomputeNextDue);
+    byId("wpLastDate")?.addEventListener("change",     recomputeNextDue);
+
+    // Falls „Heute durchgeführt“ existiert, danach sicher neu rechnen
+    byId("wpMarkDoneToday")?.addEventListener("click", ()=>{
+      // unser anderer Code setzt lastDate + Intervall; hier nur neu berechnen
+      setTimeout(recomputeNextDue, 0);
+    });
+
+    // initial (falls Felder schon Werte haben)
     recomputeNextDue();
   });
-
-  // falls dein „Heute durchgeführt“-Handler schon existiert:
-  // – unser früherer Block setzt lastDate und intv; hier nichts weiter nötig.
-  // – ansonsten kannst du hier noch einmal recomputeNextDue() aufrufen.
 })();
 
-// === 2) Schutz für leeren Schmierstellen-Select (wpTaskSelect) ===
-
+// === 2) Schutz für leeren Schmierstellen-Select (wpTaskSelect) – robust & pro Maschine ===
 (function(){
   const byId = (id)=>document.getElementById(id);
+  const PLACEHOLDER_TEXT = "Bitte auswählen";
 
-  let WP_TASK_SNAPSHOT = null;
+  // Snapshots je Maschine (Key = Maschinenwert)
+  const SNAPSHOT_BY_MACHINE = new Map();
+  let childObserver = null, docObserver = null;
+  let currentSelect = null;
+  let restoring = false;
 
-  function snapshotWpTaskSelect(){
-    const sel = byId("wpTaskSelect");
-    if (!sel) return;
-    if (!WP_TASK_SNAPSHOT && sel.options.length){
-      WP_TASK_SNAPSHOT = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
-    }
+  function norm(s){ return String(s||"").trim().toLowerCase(); }
+
+  function getMachineKey(){
+    return byId("maschine")?.value || "__default__";
   }
 
-  function ensureWpTaskSelectNotEmpty(){
-    const sel = byId("wpTaskSelect");
+  function takeSnapshotForMachine(sel){
+    if (!sel || !sel.options.length) return;
+    const key = getMachineKey();
+    const snap = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
+    SNAPSHOT_BY_MACHINE.set(key, snap);
+  }
+
+  function ensurePlaceholder(sel){
     if (!sel) return;
-    if (sel.options.length === 0){
-      if (WP_TASK_SNAPSHOT && WP_TASK_SNAPSHOT.length){
-        WP_TASK_SNAPSHOT.forEach(opt => sel.add(new Option(opt.t, opt.v)));
-      } else {
-        sel.add(new Option("Bitte auswählen", ""));
-      }
+    if (!sel.options.length){
+      sel.add(new Option(PLACEHOLDER_TEXT, ""));
+      sel.value = "";
+      return;
+    }
+    const first = sel.options[0];
+    if (!first || norm(first.textContent) !== norm(PLACEHOLDER_TEXT)){
+      // nur hinzufügen, wenn nicht schon vorhanden
+      const hasPH = Array.from(sel.options).some(o => norm(o.textContent) === norm(PLACEHOLDER_TEXT) && o.value === "");
+      if (!hasPH) sel.insertBefore(new Option(PLACEHOLDER_TEXT, ""), sel.firstChild);
       sel.value = "";
     }
   }
 
-  window.addEventListener("load", ()=>{
-    snapshotWpTaskSelect();
-    ensureWpTaskSelectNotEmpty();
+  function restoreOptionsIfEmpty(sel){
+    if (!sel || restoring) return;
+    if (sel.options.length > 0) return;
 
-    // Beim Öffnen des Wartungs-Dashboards sicherstellen, dass der Select nicht leer ist
-    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-      setTimeout(()=>{ ensureWpTaskSelectNotEmpty(); }, 100); // <- angepasst
+    restoring = true;
+    try{
+      const key = getMachineKey();
+      const snap = SNAPSHOT_BY_MACHINE.get(key) || SNAPSHOT_BY_MACHINE.get("__default__");
+
+      if (snap && snap.length){
+        sel.innerHTML = "";
+        snap.forEach(o => sel.add(new Option(o.t, o.v)));
+        ensurePlaceholder(sel);
+      } else {
+        // Minimal-Variante
+        sel.innerHTML = "";
+        ensurePlaceholder(sel);
+      }
+    } finally { restoring = false; }
+  }
+
+  function attachChildObserver(sel){
+    if (!sel) return;
+    if (childObserver) childObserver.disconnect();
+    childObserver = new MutationObserver(() => {
+      // Wenn geleert wurde → wiederherstellen
+      if (!sel.options.length) restoreOptionsIfEmpty(sel);
     });
+    childObserver.observe(sel, { childList: true });
+  }
 
-    // Wenn sich die Maschine ändert, nach kurzem Delay prüfen & ggf. auffüllen
-    byId("maschine")?.addEventListener("change", ()=>{
-      setTimeout(()=>{ 
-        snapshotWpTaskSelect();           
-        ensureWpTaskSelectNotEmpty(); 
-      }, 100); // <- hier angepasst von 0 auf 100
+  function attachToSelect(){
+    const sel = byId("wpTaskSelect");
+    if (!sel) return false;
+    currentSelect = sel;
+
+    // Nach kleinem Delay snappen (falls ein anderes Skript gerade befüllt)
+    setTimeout(()=>{
+      // Default-Snapshot einmalig merken
+      if (!SNAPSHOT_BY_MACHINE.has("__default__") && sel.options.length){
+        SNAPSHOT_BY_MACHINE.set("__default__", Array.from(sel.options).map(o => ({v:o.value, t:o.textContent})));
+      }
+
+      takeSnapshotForMachine(sel);
+      restoreOptionsIfEmpty(sel);  // falls leer → wieder befüllen
+      ensurePlaceholder(sel);
+      attachChildObserver(sel);
+    }, 150);
+
+    return true;
+  }
+
+  function watchForReplacement(){
+    if (docObserver) docObserver.disconnect();
+    docObserver = new MutationObserver(()=>{
+      const sel = byId("wpTaskSelect");
+      if (sel && sel !== currentSelect){
+        currentSelect = sel;
+        // Bei Ersatz: erneut Snapshot/Fallback setzen
+        takeSnapshotForMachine(sel);
+        restoreOptionsIfEmpty(sel);
+        ensurePlaceholder(sel);
+        attachChildObserver(sel);
+      }
+    });
+    docObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function onMachineChange(){
+    // Nach Maschinenwechsel bauen andere Skripte evtl. um → kurze Pause, dann sichern/auffüllen
+    setTimeout(()=>{
+      const sel = byId("wpTaskSelect");
+      if (!sel) return;
+      takeSnapshotForMachine(sel);  // pro Maschine speichern
+      restoreOptionsIfEmpty(sel);
+      ensurePlaceholder(sel);
+    }, 150);
+  }
+
+  window.addEventListener("load", ()=>{
+    attachToSelect();
+    watchForReplacement();
+
+    byId("maschine")?.addEventListener("change", onMachineChange);
+
+    // Beim Öffnen des Wartungs-Dashboards ebenfalls sicherstellen
+    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+      setTimeout(()=>{
+        const sel = byId("wpTaskSelect");
+        if (!sel) return;
+        // nach Öffnen ggf. neu sichern & auffüllen
+        takeSnapshotForMachine(sel);
+        restoreOptionsIfEmpty(sel);
+        ensurePlaceholder(sel);
+      }, 150);
     });
   });
 })();
