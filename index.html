@@ -2940,52 +2940,30 @@ function wpApplyMailRules({ force = false } = {}) {
  * Stabil über driveId + itemId (für alle Nutzer)
  **********************************************/
 
-// ⚙️ IDs aus deinem Popup (Wartungsplaene.json)
-const WP_DRIVE_ID = "b!6dIyDF2ij0WEQsTlCtGvnSgCY98AAp1PvTliFUE1VP2jPn4UM29dRqvq9sYTScmD";
-const WP_ITEM_ID  = "01SHJXXEUMKQNVNKEC5VAZKQEUZA73M6CK";
+const WP_LOG_FILE       = "Wartungslog.json";
+const WP_CACHE_KEY      = "TE15_WARTUNGSPLAENE";
+const WP_LOG_CACHE_KEY  = "TE15_WARTUNGSLOG";
 
-// Ziel-Dateiname fürs Log (liegt im selben Ordner wie die Pläne)
-const WP_LOG_FILE  = "Wartungslog.json";
+const WP_FILE_URL =
+  `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
 
-// Cache-Keys
-const WP_CACHE_KEY     = "TE15_WARTUNGSPLAENE";
-const WP_LOG_CACHE_KEY = "TE15_WARTUNGSLOG";
+let WP_FOLDER_ID = null; // parent-Ordner der Pläne (für Log)
 
-// Ab hier werden die Graph-URLs generiert
-const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
-
-// Wird beim ersten Laden ermittelt (Ordner der Pläne)
-let WP_FOLDER_ID = null;
-
-// Globale Daten
-
-let wartungslog    = [];
-
-/* ────────────────────────────────────────────
-   Helper: Parent-Ordner (FolderId) ermitteln
-   ──────────────────────────────────────────── */
 async function ensureWpFolderId(){
   if (WP_FOLDER_ID || !window.accessToken) return;
-  try{
-    // Metadaten der Plan-Datei lesen, um an den Ordner zu kommen
-    const metaUrl = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}`;
-    const r = await fetch(metaUrl, { headers:{ Authorization:`Bearer ${accessToken}` } });
-    if (r.ok){
-      const j = await r.json();
-      WP_FOLDER_ID = j?.parentReference?.id || null;
-    }
-  }catch(e){ console.warn("[WP] ensureWpFolderId:", e); }
+  const metaUrl = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}`;
+  const r = await fetch(metaUrl, { headers:{ Authorization:`Bearer ${accessToken}` } });
+  if (r.ok){
+    const j = await r.json();
+    WP_FOLDER_ID = j?.parentReference?.id || null;
+  }
 }
 
-// URL zum Log (liegt im selben Ordner wie die Pläne)
 function wpLogUrl(){
   if (!WP_FOLDER_ID) return null;
   return `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_FOLDER_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
 }
 
-/* ────────────────────────────────────────────
-   Laden der Wartungspläne
-   ──────────────────────────────────────────── */
 async function wpLoad(){
   // 1) Cache
   try {
@@ -2993,88 +2971,52 @@ async function wpLoad(){
     wartungsplaene = raw ? JSON.parse(raw) : {};
   } catch { wartungsplaene = {}; }
 
-  // 2) OneDrive (nur wenn eingeloggt)
+  // 2) OneDrive
   if (window.accessToken){
-    try{
-      const r = await fetch(WP_FILE_URL, {
-        headers:{ Authorization:`Bearer ${accessToken}` }
-      });
-      if (r.ok){
-        wartungsplaene = JSON.parse(await r.text() || "{}");
-        try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch {}
-      }
-    }catch(e){ console.warn("[WP] OneDrive load failed:", e); }
+    const r = await fetch(WP_FILE_URL, { headers:{ Authorization:`Bearer ${accessToken}` } });
+    if (r.ok){
+      wartungsplaene = JSON.parse(await r.text() || "{}");
+      try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch {}
+    } else {
+      console.warn("[WP] Load failed:", r.status, r.statusText);
+    }
   }
 
-  // Ordner-ID der Plan-Datei einmalig ermitteln (fürs Log)
-  try { await ensureWpFolderId(); } catch {}
-
-  // 3) Index bauen & UI anstoßen
-  try { wpBuildIndex?.(); } catch {}
-  console.info("[WP] geladen:", Object.keys(wartungsplaene || {}).length, "Maschinen");
-  try { wpRefreshTaskList?.(); wpStatusUpdateForTask?.(); } catch {}
+  await ensureWpFolderId();
+  wpBuildIndex();
 }
 
-/* ────────────────────────────────────────────
-   Speichern der Wartungspläne
-   ──────────────────────────────────────────── */
 async function wpSave(){
-  // 1) Cache
   try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch {}
-  try { wpRebuildIndex?.(); } catch {}
+  wpRebuildIndex();
 
-  // 2) OneDrive
   if (!window.accessToken) return;
-  try{
-    const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
-    await fetch(WP_FILE_URL, {
-      method:"PUT",
-      headers:{ Authorization:`Bearer ${accessToken}` },
-      body: blob
-    });
-  }catch(e){ console.warn("[WP] Save failed:", e); }
+  const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
+  const r = await fetch(WP_FILE_URL, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` }, body: blob });
+  if (!r.ok) console.warn("[WP] Save failed:", r.status, r.statusText);
 }
 
-/* ────────────────────────────────────────────
-   Wartungs-LOG: Laden
-   ──────────────────────────────────────────── */
+// ---- LOG
 async function wpLogLoad(){
-  // 1) Cache
-  try { wartungslog = JSON.parse(localStorage.getItem(WP_LOG_CACHE_KEY) || "[]"); }
-  catch { wartungslog = []; }
-
-  // 2) OneDrive
-  if (window.accessToken){
-    try{
-      await ensureWpFolderId();
-      const url = wpLogUrl();
-      if (url){
-        const r = await fetch(url, { headers:{ Authorization:`Bearer ${accessToken}` } });
-        if (r.ok) wartungslog = JSON.parse(await r.text() || "[]");
-      }
-    } catch(e){ console.warn("[WP-LOG] Load failed:", e); }
-  }
-
-  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
-}
-
-/* ────────────────────────────────────────────
-   Wartungs-LOG: Speichern
-   ──────────────────────────────────────────── */
-async function wpLogSave(){
-  // 1) Cache
-  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
-
-  // 2) OneDrive
+  try { wartungslog = JSON.parse(localStorage.getItem(WP_LOG_CACHE_KEY) || "[]"); } catch { wartungslog = []; }
   if (!window.accessToken) return;
-  try{
-    await ensureWpFolderId();
-    const url = wpLogUrl();
-    if (!url) return;
-    const blob = new Blob([JSON.stringify(wartungslog, null, 2)], { type:"application/json" });
-    await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` }, body: blob });
-  } catch(e){ console.warn("[WP-LOG] Save failed:", e); }
+  await ensureWpFolderId();
+  const url = wpLogUrl(); if (!url) return;
+  const r = await fetch(url, { headers:{ Authorization:`Bearer ${accessToken}` } });
+  if (r.ok) wartungslog = JSON.parse(await r.text() || "[]");
+  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
 }
+
+async function wpLogSave(){
+  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
+  if (!window.accessToken) return;
+  await ensureWpFolderId();
+  const url = wpLogUrl(); if (!url) return;
+  const blob = new Blob([JSON.stringify(wartungslog, null, 2)], { type:"application/json" });
+  const r = await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` }, body: blob });
+  if (!r.ok) console.warn("[WP-LOG] Save failed:", r.status, r.statusText);
+}
+
 
 /* ────────────────────────────────────────────
    Wartungs-LOG: Eintrag hinzufügen
