@@ -3950,6 +3950,90 @@ document.addEventListener("DOMContentLoaded", ()=>{
   }
 });
 </script>
+<script>
+// === 1) Fälligkeit immer sauber nachziehen ===
+(function(){
+  const byId = (id)=>document.getElementById(id);
+
+  function toISO(d){
+    const dd = (d instanceof Date) ? d : new Date(d || Date.now());
+    const m = String(dd.getMonth()+1).padStart(2,"0");
+    const day = String(dd.getDate()).padStart(2,"0");
+    return `${dd.getFullYear()}-${m}-${day}`;
+  }
+
+  function recomputeNextDue(){
+    const last = byId("wpLastDate")?.value || "";      // Zuletzt durchgeführt
+    const intv = parseInt(byId("wpIntervalDays")?.value || "0", 10) || 0;
+    const out  = byId("wpNextDue");
+    if (!out) return;
+    if (!last || !intv) { out.value = ""; return; }
+    const d = new Date(last);
+    d.setDate(d.getDate() + intv);
+    out.value = toISO(d);
+  }
+
+  // bei manuellen Änderungen neu berechnen
+  window.addEventListener("load", ()=>{
+    byId("wpIntervalDays")?.addEventListener("input", recomputeNextDue);
+    byId("wpLastDate")?.addEventListener("change", recomputeNextDue);
+    // falls Felder schon Werte haben:
+    recomputeNextDue();
+  });
+
+  // falls dein „Heute durchgeführt“-Handler schon existiert:
+  // – unser früherer Block setzt lastDate und intv; hier nichts weiter nötig.
+  // – ansonsten kannst du hier noch einmal recomputeNextDue() aufrufen.
+})();
+
+// === 2) Schutz für leeren Schmierstellen-Select (wpTaskSelect) ===
+<script>
+(function(){
+  const byId = (id)=>document.getElementById(id);
+
+  let WP_TASK_SNAPSHOT = null;
+
+  function snapshotWpTaskSelect(){
+    const sel = byId("wpTaskSelect");
+    if (!sel) return;
+    if (!WP_TASK_SNAPSHOT && sel.options.length){
+      WP_TASK_SNAPSHOT = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
+    }
+  }
+
+  function ensureWpTaskSelectNotEmpty(){
+    const sel = byId("wpTaskSelect");
+    if (!sel) return;
+    if (sel.options.length === 0){
+      if (WP_TASK_SNAPSHOT && WP_TASK_SNAPSHOT.length){
+        WP_TASK_SNAPSHOT.forEach(opt => sel.add(new Option(opt.t, opt.v)));
+      } else {
+        sel.add(new Option("Bitte auswählen", ""));
+      }
+      sel.value = "";
+    }
+  }
+
+  window.addEventListener("load", ()=>{
+    snapshotWpTaskSelect();
+    ensureWpTaskSelectNotEmpty();
+
+    // Beim Öffnen des Wartungs-Dashboards sicherstellen, dass der Select nicht leer ist
+    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+      setTimeout(()=>{ ensureWpTaskSelectNotEmpty(); }, 100); // <- angepasst
+    });
+
+    // Wenn sich die Maschine ändert, nach kurzem Delay prüfen & ggf. auffüllen
+    byId("maschine")?.addEventListener("change", ()=>{
+      setTimeout(()=>{ 
+        snapshotWpTaskSelect();           
+        ensureWpTaskSelectNotEmpty(); 
+      }, 100); // <- hier angepasst von 0 auf 100
+    });
+  });
+})();
+</script>
+
 
 </body>
 </html>
