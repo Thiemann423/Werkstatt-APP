@@ -2951,20 +2951,16 @@ function wpApplyMailRules({ force = false } = {}) {
 /**********************************************
  * OneDrive / Graph – IDs + Konstanten
  **********************************************/
-const WP_FILE         = "Wartungsplaene.json";
-const WP_LOG_FILE     = "Wartungslog.json";
-const WP_CACHE_KEY    = "TE15_WARTUNGSPLAENE";
-const WP_LOG_CACHE_KEY= "TE15_WARTUNGSLOG";
-
-// ⚙️ IDs aus deinem Popup (Wartungsplaene.json)
 const WP_DRIVE_ID = "b!6dIyDF2ij0WEQsTlCtGvnSgCY98AAp1PvTliFUE1VP2jPn4UM29dRqvq9sYTScmD";
 const WP_ITEM_ID  = "01SHJXXEUMKQNVNKEC5VAZKQEUZA73M6CK";
 
-// Datei-URL für die Pläne (MUSS nach den IDs kommen)
-const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
+const WP_LOG_FILE       = "Wartungslog.json";
+const WP_CACHE_KEY      = "TE15_WARTUNGSPLAENE";
+const WP_LOG_CACHE_KEY  = "TE15_WARTUNGSLOG";
 
-// Laufzeit-State
-let WP_FOLDER_ID = null; // wird über ensureWpFolderId() ermittelt
+const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
+let WP_FOLDER_ID = null;
+
 
 /**********************************************
  * Globale Daten (einmalige Quelle, robust gegen Doppel-Laden)
