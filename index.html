@@ -2931,12 +2931,57 @@ function wpApplyMailRules({ force = false } = {}) {
   if (pill) { pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
 }
 
-// ===============================
-// Laden aus OneDrive
-// ===============================
-const WP_FILE_PATH = "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content";
-const WP_CACHE_KEY = "TE15_WARTUNGSPLAENE";
+/**********************************************
+ * Wartungspläne + Wartungs-Log (OneDrive/Graph)
+ * Stabil über driveId + itemId (für alle Nutzer)
+ **********************************************/
 
+// ⚙️ IDs aus deinem Popup (Wartungsplaene.json)
+const WP_DRIVE_ID = "b!6dIyDF2ij0WEQsTlCtGvnSgCY98AAp1PvTliFUE1VP2jPn4UM29dRqvq9sYTScmD";
+const WP_ITEM_ID  = "01SHJXXEUMKQNVNKEC5VAZKQEUZA73M6CK";
+
+// Ziel-Dateiname fürs Log (liegt im selben Ordner wie die Pläne)
+const WP_LOG_FILE  = "Wartungslog.json";
+
+// Cache-Keys
+const WP_CACHE_KEY     = "TE15_WARTUNGSPLAENE";
+const WP_LOG_CACHE_KEY = "TE15_WARTUNGSLOG";
+
+// Ab hier werden die Graph-URLs generiert
+const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
+
+// Wird beim ersten Laden ermittelt (Ordner der Pläne)
+let WP_FOLDER_ID = null;
+
+// Globale Daten
+let wartungsplaene = {};
+let wartungslog    = [];
+
+/* ────────────────────────────────────────────
+   Helper: Parent-Ordner (FolderId) ermitteln
+   ──────────────────────────────────────────── */
+async function ensureWpFolderId(){
+  if (WP_FOLDER_ID || !window.accessToken) return;
+  try{
+    // Metadaten der Plan-Datei lesen, um an den Ordner zu kommen
+    const metaUrl = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}`;
+    const r = await fetch(metaUrl, { headers:{ Authorization:`Bearer ${accessToken}` } });
+    if (r.ok){
+      const j = await r.json();
+      WP_FOLDER_ID = j?.parentReference?.id || null;
+    }
+  }catch(e){ console.warn("[WP] ensureWpFolderId:", e); }
+}
+
+// URL zum Log (liegt im selben Ordner wie die Pläne)
+function wpLogUrl(){
+  if (!WP_FOLDER_ID) return null;
+  return `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_FOLDER_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
+}
+
+/* ────────────────────────────────────────────
+   Laden der Wartungspläne
+   ──────────────────────────────────────────── */
 async function wpLoad(){
   // 1) Cache
   try {
@@ -2947,69 +2992,92 @@ async function wpLoad(){
   // 2) OneDrive (nur wenn eingeloggt)
   if (window.accessToken){
     try{
-      const r = await fetch("https://graph.microsoft.com/v1.0" + WP_FILE_PATH, {
+      const r = await fetch(WP_FILE_URL, {
         headers:{ Authorization:`Bearer ${accessToken}` }
       });
       if (r.ok){
-        wartungsplaene = JSON.parse(await r.text());
-        localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene));
+        wartungsplaene = JSON.parse(await r.text() || "{}");
+        try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch {}
       }
     }catch(e){ console.warn("[WP] OneDrive load failed:", e); }
   }
 
+  // Ordner-ID der Plan-Datei einmalig ermitteln (fürs Log)
+  try { await ensureWpFolderId(); } catch {}
+
   // 3) Index bauen & UI anstoßen
-  wpBuildIndex();
+  try { wpBuildIndex?.(); } catch {}
   console.info("[WP] geladen:", Object.keys(wartungsplaene || {}).length, "Maschinen");
   try { wpRefreshTaskList?.(); wpStatusUpdateForTask?.(); } catch {}
 }
 
-// Speichern (Cache + OneDrive)
+/* ────────────────────────────────────────────
+   Speichern der Wartungspläne
+   ──────────────────────────────────────────── */
 async function wpSave(){
-  try { localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); } catch {}
-  wpRebuildIndex();
+  // 1) Cache
+  try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch {}
+  try { wpRebuildIndex?.(); } catch {}
 
-  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
-  const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_FILE)}:/content`;
-  const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
+  // 2) OneDrive
+  if (!window.accessToken) return;
   try{
-    await fetch(url, { method:"PUT", headers:{Authorization:`Bearer ${accessToken}`}, body:blob });
-  }catch(e){ console.warn("wpSave()", e); }
+    const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
+    await fetch(WP_FILE_URL, {
+      method:"PUT",
+      headers:{ Authorization:`Bearer ${accessToken}` },
+      body: blob
+    });
+  }catch(e){ console.warn("[WP] Save failed:", e); }
 }
-// ===== Wartungs-LOG (Historie) ===================================
-const WP_LOG_FILE   = "Wartungslog.json";
-const WP_LOG_CACHE  = "TE15_WARTUNGSLOG";
-// Wird in den gleichen Meta-Ordner geschrieben wie die Wartungspläne
-let wartungslog = [];
 
+/* ────────────────────────────────────────────
+   Wartungs-LOG: Laden
+   ──────────────────────────────────────────── */
 async function wpLogLoad(){
   // 1) Cache
-  try { wartungslog = JSON.parse(localStorage.getItem(WP_LOG_CACHE) || "[]"); }
+  try { wartungslog = JSON.parse(localStorage.getItem(WP_LOG_CACHE_KEY) || "[]"); }
   catch { wartungslog = []; }
 
-  // 2) OneDrive (nur wenn eingeloggt + Meta-Ordner vorhanden)
-  if (window.accessToken && window.TARGET_META_ITEM_ID){
+  // 2) OneDrive
+  if (window.accessToken){
     try{
-      const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
-      const r = await fetch(url, { headers:{ Authorization:`Bearer ${accessToken}` } });
-      if (r.ok) wartungslog = JSON.parse(await r.text());
+      await ensureWpFolderId();
+      const url = wpLogUrl();
+      if (url){
+        const r = await fetch(url, { headers:{ Authorization:`Bearer ${accessToken}` } });
+        if (r.ok) wartungslog = JSON.parse(await r.text() || "[]");
+      }
     } catch(e){ console.warn("[WP-LOG] Load failed:", e); }
   }
-  try { localStorage.setItem(WP_LOG_CACHE, JSON.stringify(wartungslog)); } catch {}
+
+  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
 }
 
+/* ────────────────────────────────────────────
+   Wartungs-LOG: Speichern
+   ──────────────────────────────────────────── */
 async function wpLogSave(){
-  try { localStorage.setItem(WP_LOG_CACHE, JSON.stringify(wartungslog)); } catch {}
-  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
+  // 1) Cache
+  try { localStorage.setItem(WP_LOG_CACHE_KEY, JSON.stringify(wartungslog)); } catch {}
+
+  // 2) OneDrive
+  if (!window.accessToken) return;
   try{
-    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
+    await ensureWpFolderId();
+    const url = wpLogUrl();
+    if (!url) return;
     const blob = new Blob([JSON.stringify(wartungslog, null, 2)], { type:"application/json" });
     await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` }, body: blob });
   } catch(e){ console.warn("[WP-LOG] Save failed:", e); }
 }
 
-// Eintrag hinzufügen
+/* ────────────────────────────────────────────
+   Wartungs-LOG: Eintrag hinzufügen
+   ──────────────────────────────────────────── */
 async function wpLogExecution({dateISO, task, machine, technician=""}){
   if (!dateISO || !task) return;
+
   // Duplikate vermeiden (gleiches Task+Datum)
   const exists = wartungslog.some(e => e.taskId === task.id && e.dateISO === dateISO);
   if (exists) return;
@@ -3024,8 +3092,10 @@ async function wpLogExecution({dateISO, task, machine, technician=""}){
     nipples: task.nipples ?? "",
     technician
   });
+
   await wpLogSave();
 }
+
 
 /* ===== Wartungsplan – UI (final, stabil, inkl. Nippel & Banner) ===== */
 function wpEls(){
