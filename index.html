@@ -2943,15 +2943,22 @@ function wpApplyMailRules({ force = false } = {}) {
  * Wartungspläne + Wartungs-Log (OneDrive/Graph)
  * Stabil über driveId + itemId (für alle Nutzer)
  **********************************************/
+/* ===== OneDrive / Graph – IDs + Konstanten ===== */
+const WP_FILE       = "Wartungsplaene.json";     // Pläne
+const WP_LOG_FILE   = "Wartungslog.json";        // Log
+const WP_CACHE_KEY     = "TE15_WARTUNGSPLAENE";
+const WP_LOG_CACHE_KEY = "TE15_WARTUNGSLOG";
 
-const WP_LOG_FILE       = "Wartungslog.json";
-const WP_CACHE_KEY      = "TE15_WARTUNGSPLAENE";
-const WP_LOG_CACHE_KEY  = "TE15_WARTUNGSLOG";
+// ⚙️ IDs aus deinem Popup (Wartungsplaene.json)
+const WP_DRIVE_ID = "b!6dIyDF2ij0WEQsTlCtGvnSgCY98AAp1PvTliFUE1VP2jPn4UM29dRqvq9sYTScmD";
+const WP_ITEM_ID  = "01SHJXXEUMKQNVNKEC5VAZKQEUZA73M6CK";
 
-const WP_FILE_URL =
-  `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
+// Datei-URL für die Pläne (WICHTIG: NACH den IDs definieren!)
+const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/items/${WP_ITEM_ID}/content`;
 
-let WP_FOLDER_ID = null; // parent-Ordner der Pläne (für Log)
+// Laufzeit-State (erst danach!)
+let WP_FOLDER_ID   = null;   // wird über ensureWpFolderId() ermittelt
+
 
 async function ensureWpFolderId(){
   if (WP_FOLDER_ID || !window.accessToken) return;
