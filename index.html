@@ -391,6 +391,7 @@ async function loadHtml2PdfIfNeeded(){
   </div>
 </div>
 
+<!-- ✅ BEGIN: Wartungs-Dashboard (Log) + Logik -->
 <!-- ===== Wartungs-Dashboard (Log) ===== -->
 <div id="wpLogPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
 
@@ -453,6 +454,167 @@ async function loadHtml2PdfIfNeeded(){
 
   <div id="wpLogEmpty" style="display:none;padding:8px;color:#666;">Keine Einträge gefunden.</div>
 </div>
+
+<script>
+/* ========= Wartungs-Log: Speicherung + Anzeige (localStorage) ========= */
+const WP_STORAGE_KEY = "wpLog";
+
+/* 🧾 Eintrag speichern – wird über #wpSaveTask ausgelöst */
+function saveWpTask() {
+  const today = new Date().toISOString().split("T")[0];
+
+  const task = {
+    // wenn du lieber das Feld "Zuletzt durchgeführt" nehmen willst:
+    // date: document.getElementById("wpLastDate")?.value || today,
+    date: today,
+    machine: document.getElementById("maschine")?.value || "",
+    task: document.getElementById("wpTaskSelect")?.value || "",
+    interval: document.getElementById("wpIntervalDays")?.value || "",
+    nipCount: document.getElementById("wpNipCount")?.value || "",
+    tech: document.getElementById("techniker1")?.value || ""
+  };
+
+  const list = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
+  list.push(task);
+  localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list));
+  alert("Wartung gespeichert!");
+
+  // Wenn das Wartungs-Dashboard sichtbar ist, sofort aktualisieren
+  const panel = document.getElementById("wpLogPanel");
+  if (panel && panel.style.display !== "none") {
+    loadWpLog();
+  }
+}
+
+/* 🔎 Filter einsammeln */
+function getWpFilters() {
+  const from  = document.getElementById("wpLog_from")?.value || "";
+  const to    = document.getElementById("wpLog_to")?.value || "";
+  const mach  = (document.getElementById("wpLog_machine")?.value || "").trim().toLowerCase();
+  const task  = (document.getElementById("wpLog_task")?.value || "").trim().toLowerCase();
+  const tech  = (document.getElementById("wpLog_tech")?.value || "").trim().toLowerCase();
+  return { from, to, mach, task, tech };
+}
+
+/* 🧮 Datums-Check */
+function inDateRange(dateStr, from, to) {
+  if (!dateStr) return false;
+  if (from && dateStr < from) return false;
+  if (to && dateStr > to) return false;
+  return true;
+}
+
+/* 📋 Tabelle aus localStorage bauen (mit Filtern) */
+function loadWpLog() {
+  const tbody = document.getElementById("wpLogBody");
+  const empty = document.getElementById("wpLogEmpty");
+  if (!tbody) return;
+
+  const { from, to, mach, task, tech } = getWpFilters();
+  const raw = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
+
+  const data = raw.filter(e => {
+    const dateOk = inDateRange(e.date || "", from, to);
+    const machOk = !mach || (e.machine || "").toLowerCase().includes(mach);
+    const taskOk = !task || (e.task || "").toLowerCase().includes(task);
+    const techOk = !tech || (e.tech || "").toLowerCase().includes(tech);
+    return dateOk && machOk && taskOk && techOk;
+  });
+
+  tbody.innerHTML = "";
+  if (!data.length) {
+    if (empty) empty.style.display = "block";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+
+  // optional: nach Datum absteigend sortieren
+  data.sort((a,b) => (b.date||"").localeCompare(a.date||""));
+
+  data.forEach(e => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${e.date || ""}</td>
+      <td>${e.machine || ""}</td>
+      <td>${e.task || ""}</td>
+      <td>${e.interval || ""}</td>
+      <td>${e.nipCount || ""}</td>
+      <td>${e.tech || ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* 🧼 Filter löschen */
+function clearWpFilters() {
+  ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  loadWpLog();
+}
+
+/* 🗓️ „Letzte 30 Tage“ (Button toggelt 30/90/365) */
+function setWpRange(btn) {
+  const modes = ["30","90","365"];
+  const nowMode = btn.getAttribute("data-mode") || "30";
+  const nextMode = modes[(modes.indexOf(nowMode)+1) % modes.length];
+  btn.setAttribute("data-mode", nextMode);
+
+  // Button-Label
+  btn.textContent = nextMode === "30" ? "🗓️ Letzte 30 Tage"
+                  : nextMode === "90" ? "🗓️ Letzte 90 Tage"
+                  : "🗓️ Letzte 365 Tage";
+
+  // Von/Bis setzen
+  const today = new Date();
+  const days = parseInt(nextMode, 10);
+  const from = new Date(today);
+  from.setDate(today.getDate() - days + 1);
+
+  const toStr   = today.toISOString().split("T")[0];
+  const fromStr = from.toISOString().split("T")[0];
+
+  const fromEl = document.getElementById("wpLog_from");
+  const toEl   = document.getElementById("wpLog_to");
+  if (fromEl) fromEl.value = fromStr;
+  if (toEl)   toEl.value   = toStr;
+
+  loadWpLog();
+}
+
+/* 🔌 Verdrahten (wenn DOM geladen ist) */
+window.addEventListener("load", () => {
+  // Speichern aus dem Wartungs-Panel (Button existiert bereits in deinem Wartungsplan-Panel)
+  document.getElementById("wpSaveTask")?.addEventListener("click", saveWpTask);
+
+  // Wartungs-Log Panel: Buttons
+  document.getElementById("wpLogReload")?.addEventListener("click", loadWpLog);
+  document.getElementById("wpLogClear")?.addEventListener("click", clearWpFilters);
+  document.getElementById("wpLogRangeBtn")?.addEventListener("click", (e) => setWpRange(e.currentTarget));
+
+  // Filterfelder reagieren live
+  ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"].forEach(id => {
+    const el = document.getElementById(id);
+    el?.addEventListener("input", loadWpLog);
+  });
+
+  // Kopf-Button „🧰 Wartungs-Dashboard“ öffnet/schließt Panel & lädt beim Öffnen
+  document.getElementById("toggleWpLogBtn")?.addEventListener("click", () => {
+    const panel = document.getElementById("wpLogPanel");
+    if (!panel) return;
+    const hidden = panel.style.display === "none" || panel.style.display === "";
+    panel.style.display = hidden ? "block" : "none";
+    if (hidden) loadWpLog(); // beim Öffnen laden
+  });
+
+  // Falls Panel beim Start schon sichtbar ist
+  const panel = document.getElementById("wpLogPanel");
+  if (panel && panel.style.display !== "none") loadWpLog();
+});
+</script>
+<!-- ✅ END: Wartungs-Dashboard (Log) + Logik -->
+
 
 
 
