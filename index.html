@@ -315,11 +315,61 @@ async function loadHtml2PdfIfNeeded(){
     📊 Dashboard anzeigen
   </button>
   
-<button type="button" id="toggleWpLogBtn"
-        onclick="window.__toggleWpLogPanel && window.__toggleWpLogPanel()"
-        style="padding:8px 12px;border:0;border-radius:6px;background:#0f6cbd;color:#fff;cursor:pointer;margin-left:6px;">
+<button
+  type="button"
+  id="toggleWpLogBtn"
+  onclick="window.__toggleWpLogPanel && window.__toggleWpLogPanel()"
+  aria-controls="wpLogPanel"
+  aria-expanded="false"
+  title="Wartungs-Dashboard (Alt+W)"
+  style="padding:8px 12px;border:0;border-radius:6px;background:#0f6cbd;color:#fff;cursor:pointer;margin-left:6px;">
   🧰 Wartungs-Dashboard
 </button>
+
+<script>
+/* Failsafe: Toggle bereitstellen + Button sicher aktivieren */
+(function () {
+  // Toggle nur definieren, falls noch nicht vorhanden
+  if (!window.__toggleWpLogPanel) {
+    window.__toggleWpLogPanel = function () {
+      var p = document.getElementById('wpLogPanel');
+      if (!p) { alert('Hinweis: #wpLogPanel nicht gefunden.'); return; }
+      var willOpen = (p.style.display === '' || p.style.display === 'none');
+      p.style.display = willOpen ? 'block' : 'none';
+
+      // ARIA aktualisieren
+      var btn = document.getElementById('toggleWpLogBtn');
+      if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+
+      // Beim Öffnen Daten laden
+      if (willOpen) {
+        if (typeof wpLogLoad === 'function') { try { wpLogLoad(); } catch(e) {} }
+        if (typeof renderWpLogTable === 'function') { try { renderWpLogTable(); } catch(e) {} }
+      }
+    };
+  }
+
+  // Button sicher aktivieren + Zusatzlistener
+  window.addEventListener('load', function () {
+    var btn = document.getElementById('toggleWpLogBtn');
+    var panel = document.getElementById('wpLogPanel');
+    if (btn) {
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-controls', 'wpLogPanel');
+      btn.setAttribute('aria-expanded', (panel && panel.style.display === 'block') ? 'true' : 'false');
+      btn.addEventListener('click', window.__toggleWpLogPanel);
+    }
+  });
+
+  // Tastaturkürzel: Alt+W
+  window.addEventListener('keydown', function (e) {
+    if (e.altKey && (e.key === 'w' || e.key === 'W')) {
+      e.preventDefault();
+      window.__toggleWpLogPanel();
+    }
+  });
+})();
+</script>
 
 
   
