@@ -2847,8 +2847,12 @@ const WP_FILE = "Wartungsplaene.json";
 // ===============================
 // Wartungspläne – Kern-Helfer
 // ===============================
-let wartungsplaene = {};
-let _wpIdx = {}; // { normMaschinenName: tasks[] }
+// Einmalige globale Quelle (robust gegen doppeltes Laden)
+window.wartungsplaene = window.wartungsplaene || {};
+let wartungsplaene = window.wartungsplaene;
+
+let _wpIdx = {}; // bleibt wie gehabt
+
 
 // Namen robust vergleichen (Umlaute/ß/Mehrfach-Spaces egal)
 function wpNorm(s){
@@ -2954,7 +2958,7 @@ const WP_FILE_URL = `https://graph.microsoft.com/v1.0/drives/${WP_DRIVE_ID}/item
 let WP_FOLDER_ID = null;
 
 // Globale Daten
-let wartungsplaene = {};
+
 let wartungslog    = [];
 
 /* ────────────────────────────────────────────
