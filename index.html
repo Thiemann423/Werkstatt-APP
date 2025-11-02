@@ -318,13 +318,22 @@ async function loadHtml2PdfIfNeeded(){
 <button
   type="button"
   id="toggleWpLogBtn"
-  onclick="window.__toggleWpLogPanel && window.__toggleWpLogPanel()"
+  onclick="(function(){
+    var p=document.getElementById('wpLogPanel');
+    if(!p){alert('Hinweis: #wpLogPanel nicht gefunden.');return;}
+    var open=(p.style.display===''||p.style.display==='none');
+    p.style.display=open?'block':'none';
+    // beim Öffnen Daten laden (falls Funktionen existieren)
+    try{ if(open && typeof wpLogLoad==='function') wpLogLoad(); }catch(e){}
+    try{ if(open && typeof renderWpLogTable==='function') renderWpLogTable(); }catch(e){}
+  })()"
   aria-controls="wpLogPanel"
   aria-expanded="false"
   title="Wartungs-Dashboard (Alt+W)"
   style="padding:8px 12px;border:0;border-radius:6px;background:#0f6cbd;color:#fff;cursor:pointer;margin-left:6px;">
   🧰 Wartungs-Dashboard
 </button>
+
 
 <script>
 /* Failsafe: Toggle bereitstellen + Button sicher aktivieren */
@@ -4176,10 +4185,176 @@ document.addEventListener("DOMContentLoaded", ()=>{
         restoreOptionsIfEmpty(sel);
         ensurePlaceholder(sel);
       }, 150);
+    }
+<script>
+/* ===== Overdue-Alarm für Wartung: Badge + Hinweis + optionaler Beep =====
+   - Nimmt letzte Ausführung pro (Maschine + Aufgabe) aus window.wartungslog
+   - nextDue = lastDate + intervalDays
+   - "Überfällig" wenn nextDue < heute
+   - Roter Punkt am Button + Hinweisleiste im Panel
+   - Optional: kurzer Beep beim Öffnen
+*/
+(function(){
+  const byId = (id)=>document.getElementById(id);
+  const todayISO = ()=>{
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+
+  function addDays(iso, n){
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d)) return "";
+    d.setDate(d.getDate() + (Number(n)||0));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  // Map je (Maschine||Aufgabe) mit lastDate, intervalDays, nextDue
+  function computeDueMap(){
+    try { if (typeof wpLogLoad === "function") wpLogLoad(); } catch(e){}
+    const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+    const map = new Map();
+
+    list.forEach(e=>{
+      const key  = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
+      const last = (e.dateISO||"").trim();
+      const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
+      const prev = map.get(key);
+      // Nur den jüngsten Eintrag je Key behalten
+      if (!prev || (last && last > (prev.lastDate||""))) {
+        map.set(key, {
+          machine: e.machine || "",
+          taskName: e.taskName || "",
+          lastDate: last || "",
+          intervalDays: intv || 0,
+          nextDue: (last && intv) ? addDays(last, intv) : ""
+        });
+      }
     });
+    return map;
+  }
+
+  function anyOverdue(dueMap){
+    const t = todayISO();
+    for (const [,v] of dueMap) {
+      if (v.nextDue && v.nextDue < t) return true;
+    }
+    return false;
+  }
+
+  // Roter Punkt am Button + Title/ARIA
+  function updateButtonBadge(isOverdue){
+    const btn = byId("toggleWpLogBtn");
+    if (!btn) return;
+    // kleinen roten Punkt rechts neben dem Text einfügen/entfernen
+    let dot = btn.querySelector(".wpBadge");
+    if (isOverdue) {
+      if (!dot) {
+        dot = document.createElement("span");
+        dot.className = "wpBadge";
+        dot.setAttribute("aria-hidden","true");
+        dot.style.cssText = "display:inline-block;margin-left:8px;width:8px;height:8px;border-radius:50%;background:#e53935;vertical-align:middle;";
+        btn.appendChild(dot);
+      }
+      btn.setAttribute("title","Überfällige Wartung vorhanden (Alt+W)");
+      btn.setAttribute("aria-label","Wartungs-Dashboard – Überfällig");
+    } else {
+      if (dot) dot.remove();
+      btn.removeAttribute("title");
+      btn.removeAttribute("aria-label");
+    }
+  }
+
+  // Hinweisbalken im Panel
+  function ensurePanelBanner(){
+    const panel = byId("wpLogPanel");
+    if (!panel) return null;
+    let bar = byId("wpOverdueBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "wpOverdueBar";
+      bar.style.cssText = "display:none;margin:-12px -12px 12px -12px;padding:10px 12px;background:#fdecea;color:#b71c1c;border-bottom:1px solid #f5c6c6;border-radius:8px 8px 0 0;font-size:14px;";
+      bar.textContent = "Achtung: Es gibt überfällige Wartungen. Bitte prüfen.";
+      panel.insertBefore(bar, panel.firstChild);
+    }
+    return bar;
+  }
+
+  // kurzer Beep (nur nach User-Interaktion zuverlässig)
+  function beep(){
+    try{
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880; // A5
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+      o.start(); o.stop(ctx.currentTime + 0.15);
+    } catch(e) {}
+  }
+
+  function refreshOverdueUI({beepOnOverdue=false}={}){
+    const map = computeDueMap();
+    const overdue = anyOverdue(map);
+    updateButtonBadge(overdue);
+
+    const bar = ensurePanelBanner();
+    if (bar) bar.style.display = overdue ? "block" : "none";
+
+    if (overdue && beepOnOverdue) beep();
+  }
+
+  // Wiring
+  window.addEventListener("load", ()=>{
+    // Initial
+    refreshOverdueUI();
+
+    // Beim Panel-Öffnen -> Hinweis aktualisieren + optional Beep
+    const btn = byId("toggleWpLogBtn");
+    if (btn) {
+      btn.addEventListener("click", ()=> {
+        setTimeout(()=> refreshOverdueUI({beepOnOverdue:true}), 60);
+      });
+    }
+
+    // Nach „Speichern“ / „Heute durchgeführt“ aktualisieren
+    const safe = (id) => byId(id)?.addEventListener("click", ()=> setTimeout(()=>{ try{ refreshOverdueUI(); }catch(e){} }, 60));
+    safe("wpSaveTask");
+    safe("wpMarkDoneToday");
+
+    // Falls Log-Funktion direkt genutzt wird, nach jedem Schreiben refreshen
+    if (typeof window.wpLogExecution === "function") {
+      const orig = window.wpLogExecution;
+      window.wpLogExecution = function(entry){
+        const r = orig.apply(this, arguments);
+        try { refreshOverdueUI(); } catch(e){}
+        return r;
+      };
+    }
   });
+
+  // Tastenkürzel: Alt+W toggelt Panel und refresht UI
+  window.addEventListener('keydown', function(e){
+    if(e.altKey && (e.key==='w' || e.key==='W')){
+      e.preventDefault();
+      var p = byId('wpLogPanel');
+      if(!p){ alert('Hinweis: #wpLogPanel nicht gefunden.'); return; }
+      var open = (p.style.display==='' || p.style.display==='none');
+      p.style.display = open ? 'block' : 'none';
+      try{ if(open && typeof wpLogLoad==='function') wpLogLoad(); }catch(e){}
+      try{ if(open && typeof renderWpLogTable==='function') renderWpLogTable(); }catch(e){}
+      // nach dem Öffnen UI prüfen + ggf. Beep
+      setTimeout(()=> refreshOverdueUI({beepOnOverdue:true}), 60);
+    }
+  });
+
+  // Optional: regelmäßige Prüfung, falls Seite lange offen bleibt
+  setInterval(()=>{ try{ refreshOverdueUI(); }catch(e){} }, 6*60*60*1000);
 })();
 </script>
+
 
 
 </body>
