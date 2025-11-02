@@ -3743,7 +3743,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 // *** Selbstversorgender Block: nutzt localStorage und deine bestehenden Felder ***
 
 /* ---------- Storage + Normalisierung ---------- */
-const WP_STORAGE_KEY = "wpLogV2";
+// Ein global geteilter Key – keine Mehrfach-consts mehr
+window.__WP_LOG_KEY__ = window.__WP_LOG_KEY__ || "wpLogV2";
+
 
 function _wpNorm(s){ return String(s||"").toLowerCase().trim(); }
 function _wpFmtISO(s){ return s || ""; }
