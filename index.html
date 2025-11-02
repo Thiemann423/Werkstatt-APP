@@ -2849,7 +2849,11 @@ const WP_FILE = "Wartungsplaene.json";
 // ===============================
 // Einmalige globale Quelle (robust gegen doppeltes Laden)
 window.wartungsplaene = window.wartungsplaene || {};
-let wartungsplaene = window.wartungsplaene;
+let wartungsplaene    = window.wartungsplaene;
+
+window.wartungslog    = window.wartungslog || [];
+let wartungslog       = window.wartungslog;
+
 
 let _wpIdx = {}; // bleibt wie gehabt
 
