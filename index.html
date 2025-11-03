@@ -4098,11 +4098,7 @@ function displayTechnicianFor(entry){
   return (u && u.name) ? u.name : "–";
 }
 
-  function displayTechnicianFor(entry){
-  if (entry && entry.technician && entry.technician.trim()) return entry.technician;
-  const u = (typeof getSignedInUser === 'function') ? getSignedInUser() : null;
-  return (u && u.name) ? u.name : "–";
-}
+
 
 
 function wpLogApplyFilters(list){
