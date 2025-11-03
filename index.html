@@ -3793,31 +3793,27 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 
+<script>
 // ===== Wartungs-Dashboard (Log) =====
 // *** Selbstversorgender Block: nutzt localStorage und deine bestehenden Felder ***
 
-/* ---------- Storage + Normalisierung ---------- */
 // Ein global geteilter Key – keine Mehrfach-consts mehr
 window.__WP_LOG_KEY__ = window.__WP_LOG_KEY__ || "wpLogV2";
-
 
 function _wpNorm(s){ return String(s||"").toLowerCase().trim(); }
 function _wpFmtISO(s){ return s || ""; }
 function _byId(id){ return document.getElementById(id); }
-
 function _toISO(d){
   if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
   const dt = d instanceof Date ? d : new Date();
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
 }
-
 function _getSelectText(sel){
   const el = _byId(sel);
   if (!el) return "";
   const opt = el.options?.[el.selectedIndex];
   return (opt?.textContent || opt?.innerText || el.value || "").trim();
 }
-
 function _collectEntryFromForm({useTodayIfEmpty=true}={}){
   const todayISO = _toISO(new Date());
   const dateISO = _byId("wpLastDate")?.value || (useTodayIfEmpty ? todayISO : "");
@@ -3831,10 +3827,10 @@ function _collectEntryFromForm({useTodayIfEmpty=true}={}){
   };
 }
 
+// *** HIER die beiden Stellen auf window.__WP_LOG_KEY__ umgestellt ***
 function wpLogLoad(){
   try{
-    const raw = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
-    // robust normalisieren
+    const raw = JSON.parse(localStorage.getItem(window.__WP_LOG_KEY__) || "[]");
     window.wartungslog = (raw||[]).map(e => ({
       dateISO: _toISO(e.dateISO || e.date || ""),
       machine: e.machine || e.maschine || "",
@@ -3848,13 +3844,11 @@ function wpLogLoad(){
     window.wartungslog = [];
   }
 }
-
 function _saveAll(list){
-  localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || []));
+  localStorage.setItem(window.__WP_LOG_KEY__, JSON.stringify(list || []));
 }
 
 function wpLogExecution(entry){
-  // einen Eintrag hinzufügen (normalisiert) und speichern
   const e = {
     dateISO: _toISO(entry?.dateISO),
     machine: entry?.machine || "",
@@ -3869,14 +3863,12 @@ function wpLogExecution(entry){
   _saveAll(list);
 }
 
-/* ---------- Filter + Render ---------- */
 function wpLogApplyFilters(list){
   const from = _byId("wpLog_from")?.value || "";
   const to   = _byId("wpLog_to")?.value   || "";
   const m    = _wpNorm(_byId("wpLog_machine")?.value);
   const t    = _wpNorm(_byId("wpLog_task")?.value);
   const tech = _wpNorm(_byId("wpLog_tech")?.value);
-
   return (list||[]).filter(e=>{
     if (from && e.dateISO < from) return false;
     if (to   && e.dateISO > to)   return false;
@@ -3886,21 +3878,14 @@ function wpLogApplyFilters(list){
     return true;
   }).sort((a,b)=>(b.dateISO||"").localeCompare(a.dateISO||""));
 }
-
 function renderWpLogTable(){
   const body = _byId("wpLogBody");
   const empty= _byId("wpLogEmpty");
   if (!body) return;
-
   const rows = wpLogApplyFilters(window.wartungslog || []);
   body.innerHTML = "";
-
-  if (!rows.length){
-    if (empty) empty.style.display = "block";
-    return;
-  }
+  if (!rows.length){ if (empty) empty.style.display = "block"; return; }
   if (empty) empty.style.display = "none";
-
   const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
   body.innerHTML = rows.map(e => `
     <tr>
@@ -3914,96 +3899,64 @@ function renderWpLogTable(){
   `).join("");
 }
 
-/* ---------- Panel Toggle + UI ---------- */
 function toggleWpLogPanel(){
   const p = _byId("wpLogPanel");
   if (!p) return;
-
-  // optional: anderes Dashboard schließen
   const orders = _byId("dashPanel");
   if (orders && orders.style.display === "block") orders.style.display = "none";
-
   const willOpen = (p.style.display==="none" || !p.style.display);
   p.style.display = willOpen ? "block" : "none";
-  if (willOpen){
-    wpLogLoad();          // frisch aus Storage laden
-    renderWpLogTable();   // und rendern
-  }
+  if (willOpen){ wpLogLoad(); renderWpLogTable(); }
 }
 
 function bindWpLogUi(){
   _byId("toggleWpLogBtn")?.addEventListener("click", toggleWpLogPanel);
-
-  // Filter live anwenden
   ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
     .forEach(id => _byId(id)?.addEventListener("input", renderWpLogTable));
-
-  // Reload (aus Storage neu lesen)
-  _byId("wpLogReload")?.addEventListener("click", ()=>{
-    wpLogLoad();
-    renderWpLogTable();
-  });
-
-  // Filter löschen
+  _byId("wpLogReload")?.addEventListener("click", ()=>{ wpLogLoad(); renderWpLogTable(); });
   _byId("wpLogClear")?.addEventListener("click", ()=>{
     ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
       .forEach(id => { const el = _byId(id); if (el) el.value = ""; });
     renderWpLogTable();
   });
-
-  // 30→90→7-Tage Zyklus
   _byId("wpLogRangeBtn")?.addEventListener("click",(ev)=>{
     const btn = ev.currentTarget;
     const mode = String(btn?.dataset?.mode || "30");
     const today = new Date();
     const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
     const from = new Date(today);
-
     if (mode === "30"){ from.setDate(from.getDate()-30); btn.dataset.mode="90"; btn.textContent="🗓️ Letzte 90 Tage"; }
     else if (mode === "90"){ from.setDate(from.getDate()-90); btn.dataset.mode="7";  btn.textContent="🗓️ Letzte 7 Tage"; }
     else { from.setDate(from.getDate()-7);  btn.dataset.mode="30"; btn.textContent="🗓️ Letzte 30 Tage"; }
-
     if (_byId("wpLog_from")) _byId("wpLog_from").value = toISO(from);
     if (_byId("wpLog_to"))   _byId("wpLog_to").value   = toISO(today);
     renderWpLogTable();
   });
-
-  // „💾 Speichern“ aus Wartungs-Panel
   _byId("wpSaveTask")?.addEventListener("click", ()=>{
     const entry = _collectEntryFromForm({useTodayIfEmpty:true});
     wpLogExecution(entry);
-    // Wenn Panel offen, sofort refresh
     if (_byId("wpLogPanel")?.style.display === "block") renderWpLogTable();
     alert("Wartung gespeichert!");
   });
-
-  // „✅ Heute durchgeführt“: setzt wpLastDate = heute, berechnet Fälligkeit neu und loggt
   _byId("wpMarkDoneToday")?.addEventListener("click", ()=>{
     const todayISO = _toISO(new Date());
     const lastEl = _byId("wpLastDate");
     if (lastEl) lastEl.value = todayISO;
-
     const intervalDays = parseInt(_byId("wpIntervalDays")?.value || "0", 10) || 0;
     if (intervalDays > 0) {
-      const next = new Date();
-      next.setDate(next.getDate() + intervalDays);
+      const next = new Date(); next.setDate(next.getDate() + intervalDays);
       if (_byId("wpNextDue")) _byId("wpNextDue").value = _toISO(next);
     }
-
     const entry = _collectEntryFromForm({useTodayIfEmpty:true});
     wpLogExecution(entry);
     if (_byId("wpLogPanel")?.style.display === "block") renderWpLogTable();
   });
 }
 
-/* ---------- Boot ---------- */
 document.addEventListener("DOMContentLoaded", ()=>{
   try { wpLogLoad(); } catch(e){ console.warn("wpLogLoad:", e); }
   try { bindWpLogUi(); } catch(e){ console.warn("bindWpLogUi:", e); }
-  // Falls Panel beim Start schon sichtbar ist -> rendern
-  if (_byId("wpLogPanel") && _byId("wpLogPanel").style.display === "block"){
-    renderWpLogTable();
-  }
+  if (_byId("wpLogPanel") && _byId("wpLogPanel").style.display === "block"){ renderWpLogTable(); }
 });
 </script>
 <script>
