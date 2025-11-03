@@ -733,52 +733,61 @@ function _loadAll(){
   return (window.__memLog || []);
 }
 
-/* 🧾 Eintrag speichern – wird über #wpSaveTask ausgelöst */
 function saveWpTask() {
   // Datum (YYYY-MM-DD)
-  var today = new Date();
-  var todayISO = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
+  var d = new Date();
+  var todayISO = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 
-  // MS-User + Formularwert (Formular hat Vorrang)
+  // MS-User + Formularwert
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
   var elTech = document.getElementById("techniker1");
   var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
   var tech = techFromForm || u.name || "";
   var techEmail = u.email || "";
 
-  // Felder sicher lesen (ohne optional chaining)
-  var elMachine   = document.getElementById("maschine");
-  var elTask      = document.getElementById("wpTaskSelect");
-  var elInterval  = document.getElementById("wpIntervalDays");
-  var elNip       = document.getElementById("wpNipCount");
+  // Felder
+  var elMachine  = document.getElementById("maschine");
+  var elTask     = document.getElementById("wpTaskSelect");
+  var elInterval = document.getElementById("wpIntervalDays");
+  var elNip      = document.getElementById("wpNipCount");
 
-  var task = {
+  // 🔧 Task-Text robust holen (Anzeigename)
+  function getSelectText(sel){
+    if (!sel) return "";
+    var i = sel.selectedIndex;
+    if (i >= 0 && sel.options && sel.options[i]) {
+      var t = sel.options[i].text || sel.options[i].label || sel.value;
+      return String(t || "").trim();
+    }
+    return String(sel.value || "").trim();
+  }
+
+  var taskText = (typeof _getSelectText === "function" ? _getSelectText("wpTaskSelect") : "") || getSelectText(elTask);
+
+  var entry = {
     date     : todayISO,
     machine  : (elMachine && elMachine.value) || "",
-    task     : (elTask && elTask.value) || "",
+    task     : taskText,                    // ← jetzt sicher gefüllt
     interval : (elInterval && elInterval.value) || "",
     nipCount : (elNip && elNip.value) || "",
-    // Techniker
     tech     : tech,
     techEmail: techEmail
   };
 
-  // Speichern
   var list = _loadAll();
-  list.push(task);
+  list.push(entry);
   _saveAll(list);
 
   // UI aktualisieren
   var panel = document.getElementById("wpLogPanel");
-  if (panel && panel.style.display !== "none") {
+  if (panel && panel.style.display !== "none" && typeof loadWpLog === "function") {
     loadWpLog();
   }
-  if (typeof window.wpRefreshOverdueUI === "function") {
-    try { window.wpRefreshOverdueUI(); } catch(_) {}
-  }
+  if (typeof window.wpRefreshOverdueUI === "function") { try { window.wpRefreshOverdueUI(); } catch(_){} }
 
   alert("Wartung gespeichert!");
 }
+
 
 
 /* 🔎 Filter einsammeln */
@@ -804,25 +813,37 @@ function loadWpLog() {
   var empty = document.getElementById("wpLogEmpty");
   if (!tbody) return;
 
-  var f = getWpFilters();
-  var from = f.from, to = f.to, mach = f.mach, task = f.task, tech = f.tech;
+  // 🔧 Filters sicher beziehen
+  var from="", to="", mach="", task="", tech="";
+  try {
+    if (typeof getWpFilters === "function") {
+      var f = getWpFilters() || {};
+      from = f.from || ""; to = f.to || "";
+      mach = (f.mach || "").toLowerCase();
+      task = (f.task || "").toLowerCase();
+      tech = (f.tech || "").toLowerCase();
+    }
+  } catch(_) {}
 
-  // Einheitlich laden (mit iPad/Privatmodus-Fallback)
   var raw = _loadAll();
   if (!Array.isArray(raw)) raw = [];
 
   function norm(s){ return String(s || "").toLowerCase(); }
+  function dateInRange(d, a, b){
+    if (!d) return true;
+    if (a && d < a) return false;
+    if (b && d > b) return false;
+    return true;
+  }
 
-  // Filtern (robust gegen alte/neue Feldnamen)
   var data = raw.filter(function(e){
     var date     = e.date || e.dateISO || "";
     var machine  = e.machine || e.maschine || "";
     var taskName = e.task || e.taskName || "";
 
-    var dateOk = inDateRange(String(date), from, to);
-    var machOk = !mach || norm(machine).includes(mach);
-    var taskOk = !task || norm(taskName).includes(task);
-    if (!dateOk || !machOk || !taskOk) return false;
+    if (!dateInRange(String(date), from, to)) return false;
+    if (mach && !norm(machine).includes(mach)) return false;
+    if (task && !norm(taskName).includes(task)) return false;
 
     if (tech){
       var u = (typeof getSignedInUser === "function") ? getSignedInUser() : {name:"", email:"", upn:""};
@@ -831,13 +852,11 @@ function loadWpLog() {
         (!e.tech && !e.technician ? u.name : ""),
         (!e.techEmail && !e.technicianEmail ? u.email : ""),
         (!e.technicianUpn ? u.upn : "")
-      ].filter(function(x){ return !!x; }).map(norm).join(" ");
-      if (!haystack.includes(norm(tech))) return false;
+      ].filter(Boolean).map(norm).join(" ");
+      if (!haystack.includes(tech)) return false;
     }
-
     return true;
   }).sort(function(a,b){
-    // nach Datum absteigend; beide Varianten erlauben
     return String((b.date||b.dateISO)||"").localeCompare(String((a.date||a.dateISO)||""));
   });
 
@@ -849,7 +868,7 @@ function loadWpLog() {
   }
   if (empty) empty.style.display = "none";
 
-  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
   }); }
 
@@ -858,7 +877,7 @@ function loadWpLog() {
   tbody.innerHTML = data.map(function(e){
     var date     = e.date || e.dateISO || "";
     var machine  = e.machine || e.maschine || "";
-    var taskName = e.task || e.taskName || "";
+    var taskName = e.task || e.taskName || "";   // ← zeigt wieder deine „Schmierstelle/Aufgabe“
     var interval = (e.interval != null ? e.interval : e.intervalDays);
     var nipCount = (e.nipCount != null ? e.nipCount : e.nipples);
 
@@ -876,6 +895,7 @@ function loadWpLog() {
       + "</tr>";
   }).join("");
 }
+
 
 
 
