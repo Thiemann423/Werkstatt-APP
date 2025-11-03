@@ -714,15 +714,23 @@ const WP_STORAGE_KEY = "wpLog";
 function saveWpTask() {
   const today = new Date().toISOString().split("T")[0];
 
+  // NEU: MS-User holen + Formularwert (falls gesetzt) bevorzugen
+  const u = (typeof getSignedInUser === "function")
+    ? getSignedInUser()
+    : { name:"", email:"", upn:"" };
+  const techFromForm = (document.getElementById("techniker1")?.value || "").trim();
+  const tech = techFromForm || u.name || "";
+  const techEmail = u.email || "";
+
   const task = {
-    // wenn du lieber das Feld "Zuletzt durchgeführt" nehmen willst:
-    // date: document.getElementById("wpLastDate")?.value || today,
     date: today,
     machine: document.getElementById("maschine")?.value || "",
     task: document.getElementById("wpTaskSelect")?.value || "",
     interval: document.getElementById("wpIntervalDays")?.value || "",
     nipCount: document.getElementById("wpNipCount")?.value || "",
-    tech: document.getElementById("techniker1")?.value || ""
+    // NEU:
+    tech,
+    techEmail
   };
 
   const list = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
@@ -755,7 +763,6 @@ function inDateRange(dateStr, from, to) {
   return true;
 }
 
-/* 📋 Tabelle aus localStorage bauen (mit Filtern) */
 function loadWpLog() {
   const tbody = document.getElementById("wpLogBody");
   const empty = document.getElementById("wpLogEmpty");
@@ -764,14 +771,39 @@ function loadWpLog() {
   const { from, to, mach, task, tech } = getWpFilters();
   const raw = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
 
-  const data = raw.filter(e => {
-    const dateOk = inDateRange(e.date || "", from, to);
-    const machOk = !mach || (e.machine || "").toLowerCase().includes(mach);
-    const taskOk = !task || (e.task || "").toLowerCase().includes(task);
-    const techOk = !tech || (e.tech || "").toLowerCase().includes(tech);
-    return dateOk && machOk && taskOk && techOk;
-  });
+  const norm = s => String(s || "").toLowerCase();
 
+  const data = (raw || [])
+    .filter(e => {
+      // Basis-Filter
+      const dateOk = inDateRange(String(e.date || ""), from, to);
+      const machOk = !mach || norm(e.machine).includes(mach);
+      const taskOk = !task || norm(e.task).includes(task);
+      if (!dateOk || !machOk || !taskOk) return false;
+
+      // Techniker-Filter (Name, E-Mail, UPN + Fallbacks für alte Einträge)
+      if (tech) {
+        const u = (typeof getSignedInUser === "function")
+          ? getSignedInUser()
+          : { name: "", email: "", upn: "" };
+
+        const haystack = [
+          // Felder aus alten/neuen Logs
+          e.tech, e.techEmail, e.technician, e.technicianEmail, e.technicianUpn,
+          // Fallbacks, falls im Eintrag leer
+          (!e.tech && !e.technician ? u.name : ""),
+          (!e.techEmail && !e.technicianEmail ? u.email : ""),
+          (!e.technicianUpn ? u.upn : "")
+        ].filter(Boolean).map(norm).join(" ");
+
+        if (!haystack.includes(norm(tech))) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+  // Render
   tbody.innerHTML = "";
   if (!data.length) {
     if (empty) empty.style.display = "block";
@@ -779,22 +811,31 @@ function loadWpLog() {
   }
   if (empty) empty.style.display = "none";
 
-  // optional: nach Datum absteigend sortieren
-  data.sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
 
-  data.forEach(e => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${e.date || ""}</td>
-      <td>${e.machine || ""}</td>
-      <td>${e.task || ""}</td>
-      <td>${e.interval || ""}</td>
-      <td>${e.nipCount || ""}</td>
-      <td>${e.tech || ""}</td>
+  const currentUser = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
+
+  tbody.innerHTML = data.map(e => {
+    const techCell =
+      (e.tech && e.tech.trim()) ? e.tech :
+      (e.technician && e.technician.trim()) ? e.technician :
+      (currentUser?.name || "–");
+
+    return `
+      <tr>
+        <td>${esc(e.date || "")}</td>
+        <td>${esc(e.machine || "")}</td>
+        <td>${esc(e.task || "")}</td>
+        <td>${esc(e.interval || "")}</td>
+        <td>${esc(e.nipCount || "")}</td>
+        <td>${esc(techCell)}</td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join("");
 }
+
 
 /* 🧼 Filter löschen */
 function clearWpFilters() {
