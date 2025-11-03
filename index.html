@@ -463,7 +463,10 @@ window.addEventListener('load', function () {
         }
       }
       // Wartungs-Panel öffnen (falls vorhanden)
-      document.querySelector('[data-wp-panel="wartung"]')?.click();
+     // NEU: iPad-kompatibel
+var wartungTab = document.querySelector('[data-wp-panel="wartung"]');
+if (wartungTab) wartungTab.click();
+
       // Alternativ: dein vorhandener Toggle-Button
       if (!document.querySelector('[data-wp-panel="wartung"]')) {
         document.getElementById('toggleWpLogBtn')?.click();
@@ -489,68 +492,72 @@ window.addEventListener('load', function () {
     if (!on && dot){ dot.remove(); }
   }
 
-  // Banner + Alert befüllen
-  function renderGlobalOverdueUI(due){
-    const banner = document.getElementById('wpGlobalOverdueBanner');
-    const openBtn = document.getElementById('wpOpenFromBanner');
-    const alertBox = document.getElementById('wpGlobalAlert');
+// Banner + Alert befüllen (iPad-safe, ohne optional chaining)
+function renderGlobalOverdueUI(due){
+  var banner  = document.getElementById('wpGlobalOverdueBanner');
+  var openBtn = document.getElementById('wpOpenFromBanner');
+  var alertBox= document.getElementById('wpGlobalAlert');
 
-    // Banner
-    if (banner){
-      if (due.length){
-        const msgEl = banner.querySelector('[data-msg]');
-        if (msgEl){
-          const over = due.filter(d => d.status==='overdue').length;
-          const tod  = due.filter(d => d.status==='today').length;
-          msgEl.textContent =
-            over ? `Es gibt ${over} überfällige und ${tod} heute fällige Wartungen.` :
-                   `Es gibt ${tod} heute fällige Wartungen.`;
-        }
-        banner.style.display = 'flex';
-      } else {
-        banner.style.display = 'none';
+  // Banner
+  if (banner){
+    if (due && due.length){
+      var msgEl = banner.querySelector('[data-msg]');
+      if (msgEl){
+        var over = due.filter(function(d){ return d.status === 'overdue'; }).length;
+        var tod  = due.filter(function(d){ return d.status === 'today'; }).length;
+        msgEl.textContent = over
+          ? ('Es gibt ' + over + ' überfällige und ' + tod + ' heute fällige Wartungen.')
+          : ('Es gibt ' + tod + ' heute fällige Wartungen.');
       }
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
     }
+  }
 
-    // Button im Banner führt – falls nur 1 Eintrag – direkt dorthin
-    if (openBtn){
-      openBtn.onclick = () => {
-        if (due.length === 1 && due[0].machine){
+  // Button im Banner führt – falls nur 1 Eintrag – direkt dorthin
+  if (openBtn){
+    openBtn.onclick = function(){
+      if (due && due.length === 1 && due[0] && due[0].machine){
+        if (typeof wpOpenMachineFromName === 'function'){
           wpOpenMachineFromName(due[0].machine);
-        } else {
-          // Mehrere: öffne Dashboard, der Nutzer wählt dort
-          document.getElementById('toggleWpLogBtn')?.click();
+          return;
         }
-      };
-    }
-
-    // Alert-Liste mit Klick
-    if (alertBox){
-      if (due.length){
-        const items = due.slice(0, 8).map(d => {
-          const label = [d.machine, d.task].filter(Boolean).join(' – ');
-          const when  = d.nextDue ? ` (${d.nextDue}${d.status==='overdue' ? ' überfällig' : ' heute'})` : '';
-          return `<li><button data-goto="${encodeURIComponent(d.machine||'')}"
-                     style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">
-                     ${label}${when}</button></li>`;
-        }).join('');
-        alertBox.innerHTML = `
-          <strong>⚠️ Wartung fällig:</strong>
-          <ul style="margin:6px 0 0 18px;list-style:disc;">${items}</ul>
-        `;
-        alertBox.style.display = 'block';
-
-        alertBox.querySelectorAll('button[data-goto]').forEach(btn=>{
-          btn.addEventListener('click', (ev)=>{
-            const name = decodeURIComponent(ev.currentTarget.getAttribute('data-goto')||'');
-            if (name) wpOpenMachineFromName(name);
-          });
-        });
-      } else {
-        alertBox.style.display = 'none';
-        alertBox.innerHTML = '';
       }
+      // Mehrere: Dashboard öffnen (ohne ?.click())
+      var tgl = document.getElementById('toggleWpLogBtn');
+      if (tgl) tgl.click();
+    };
+  }
+
+  // Alert-Liste mit Klick
+  if (alertBox){
+    if (due && due.length){
+      var items = due.slice(0,8).map(function(d){
+        var label = [d.machine || '', d.task || ''].filter(Boolean).join(' – ');
+        var when  = d.nextDue ? (' (' + d.nextDue + (d.status === 'overdue' ? ' überfällig' : ' heute') + ')') : '';
+        return '<li><button data-goto="' + encodeURIComponent(d.machine || '') + '" ' +
+               'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
+               label + when + '</button></li>';
+      }).join('');
+      alertBox.innerHTML = '<strong>⚠️ Wartung fällig:</strong>' +
+                           '<ul style="margin:6px 0 0 18px;list-style:disc;">' + items + '</ul>';
+      alertBox.style.display = 'block';
+
+      var btns = alertBox.querySelectorAll('button[data-goto]');
+      for (var i=0;i<btns.length;i++){
+        btns[i].addEventListener('click', function(ev){
+          var name = decodeURIComponent(this.getAttribute('data-goto') || '');
+          if (name && typeof wpOpenMachineFromName === 'function') wpOpenMachineFromName(name);
+        });
+      }
+    } else {
+      alertBox.style.display = 'none';
+      alertBox.innerHTML = '';
     }
+  }
+}
+
 
     // Badge am Kopf-Button
     setWartungBadge(due.length > 0);
@@ -710,40 +717,69 @@ window.addEventListener('load', function () {
 /* ========= Wartungs-Log: Speicherung + Anzeige (localStorage) ========= */
 const WP_STORAGE_KEY = "wpLog";
 
+/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
+function _saveAll(list){
+  try {
+    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || []));
+  } catch(e){
+    window.__memLog = (list || []).slice(); // überlebt Reload nicht, verhindert aber „leeres Dashboard“
+  }
+}
+function _loadAll(){
+  try {
+    var txt = localStorage.getItem(WP_STORAGE_KEY);
+    if (txt) return JSON.parse(txt);
+  } catch(e){}
+  return (window.__memLog || []);
+}
+
 /* 🧾 Eintrag speichern – wird über #wpSaveTask ausgelöst */
 function saveWpTask() {
-  const today = new Date().toISOString().split("T")[0];
+  // Datum (YYYY-MM-DD)
+  var today = new Date();
+  var todayISO = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
 
-  // NEU: MS-User holen + Formularwert (falls gesetzt) bevorzugen
-  const u = (typeof getSignedInUser === "function")
-    ? getSignedInUser()
-    : { name:"", email:"", upn:"" };
-  const techFromForm = (document.getElementById("techniker1")?.value || "").trim();
-  const tech = techFromForm || u.name || "";
-  const techEmail = u.email || "";
+  // MS-User + Formularwert (Formular hat Vorrang)
+  var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
+  var elTech = document.getElementById("techniker1");
+  var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
+  var tech = techFromForm || u.name || "";
+  var techEmail = u.email || "";
 
-  const task = {
-    date: today,
-    machine: document.getElementById("maschine")?.value || "",
-    task: document.getElementById("wpTaskSelect")?.value || "",
-    interval: document.getElementById("wpIntervalDays")?.value || "",
-    nipCount: document.getElementById("wpNipCount")?.value || "",
-    // NEU:
-    tech,
-    techEmail
+  // Felder sicher lesen (ohne optional chaining)
+  var elMachine   = document.getElementById("maschine");
+  var elTask      = document.getElementById("wpTaskSelect");
+  var elInterval  = document.getElementById("wpIntervalDays");
+  var elNip       = document.getElementById("wpNipCount");
+
+  var task = {
+    date     : todayISO,
+    machine  : (elMachine && elMachine.value) || "",
+    task     : (elTask && elTask.value) || "",
+    interval : (elInterval && elInterval.value) || "",
+    nipCount : (elNip && elNip.value) || "",
+    // Techniker
+    tech     : tech,
+    techEmail: techEmail
   };
 
-  const list = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
+  // Speichern
+  var list = _loadAll();
   list.push(task);
-  localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list));
-  alert("Wartung gespeichert!");
+  _saveAll(list);
 
-  // Wenn das Wartungs-Dashboard sichtbar ist, sofort aktualisieren
-  const panel = document.getElementById("wpLogPanel");
+  // UI aktualisieren
+  var panel = document.getElementById("wpLogPanel");
   if (panel && panel.style.display !== "none") {
     loadWpLog();
   }
+  if (typeof window.wpRefreshOverdueUI === "function") {
+    try { window.wpRefreshOverdueUI(); } catch(_) {}
+  }
+
+  alert("Wartung gespeichert!");
 }
+
 
 /* 🔎 Filter einsammeln */
 function getWpFilters() {
@@ -764,44 +800,46 @@ function inDateRange(dateStr, from, to) {
 }
 
 function loadWpLog() {
-  const tbody = document.getElementById("wpLogBody");
-  const empty = document.getElementById("wpLogEmpty");
+  var tbody = document.getElementById("wpLogBody");
+  var empty = document.getElementById("wpLogEmpty");
   if (!tbody) return;
 
-  const { from, to, mach, task, tech } = getWpFilters();
-  const raw = JSON.parse(localStorage.getItem(WP_STORAGE_KEY) || "[]");
+  var f = getWpFilters();
+  var from = f.from, to = f.to, mach = f.mach, task = f.task, tech = f.tech;
 
-  const norm = s => String(s || "").toLowerCase();
+  // Einheitlich laden (mit iPad/Privatmodus-Fallback)
+  var raw = _loadAll();
+  if (!Array.isArray(raw)) raw = [];
 
-  const data = (raw || [])
-    .filter(e => {
-      // Basis-Filter
-      const dateOk = inDateRange(String(e.date || ""), from, to);
-      const machOk = !mach || norm(e.machine).includes(mach);
-      const taskOk = !task || norm(e.task).includes(task);
-      if (!dateOk || !machOk || !taskOk) return false;
+  function norm(s){ return String(s || "").toLowerCase(); }
 
-      // Techniker-Filter (Name, E-Mail, UPN + Fallbacks für alte Einträge)
-      if (tech) {
-        const u = (typeof getSignedInUser === "function")
-          ? getSignedInUser()
-          : { name: "", email: "", upn: "" };
+  // Filtern (robust gegen alte/neue Feldnamen)
+  var data = raw.filter(function(e){
+    var date     = e.date || e.dateISO || "";
+    var machine  = e.machine || e.maschine || "";
+    var taskName = e.task || e.taskName || "";
 
-        const haystack = [
-          // Felder aus alten/neuen Logs
-          e.tech, e.techEmail, e.technician, e.technicianEmail, e.technicianUpn,
-          // Fallbacks, falls im Eintrag leer
-          (!e.tech && !e.technician ? u.name : ""),
-          (!e.techEmail && !e.technicianEmail ? u.email : ""),
-          (!e.technicianUpn ? u.upn : "")
-        ].filter(Boolean).map(norm).join(" ");
+    var dateOk = inDateRange(String(date), from, to);
+    var machOk = !mach || norm(machine).includes(mach);
+    var taskOk = !task || norm(taskName).includes(task);
+    if (!dateOk || !machOk || !taskOk) return false;
 
-        if (!haystack.includes(norm(tech))) return false;
-      }
+    if (tech){
+      var u = (typeof getSignedInUser === "function") ? getSignedInUser() : {name:"", email:"", upn:""};
+      var haystack = [
+        e.tech, e.techEmail, e.technician, e.technicianEmail, e.technicianUpn,
+        (!e.tech && !e.technician ? u.name : ""),
+        (!e.techEmail && !e.technicianEmail ? u.email : ""),
+        (!e.technicianUpn ? u.upn : "")
+      ].filter(function(x){ return !!x; }).map(norm).join(" ");
+      if (!haystack.includes(norm(tech))) return false;
+    }
 
-      return true;
-    })
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    return true;
+  }).sort(function(a,b){
+    // nach Datum absteigend; beide Varianten erlauben
+    return String((b.date||b.dateISO)||"").localeCompare(String((a.date||a.dateISO)||""));
+  });
 
   // Render
   tbody.innerHTML = "";
@@ -811,30 +849,35 @@ function loadWpLog() {
   }
   if (empty) empty.style.display = "none";
 
-  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  }); }
 
-  const currentUser = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
+  var currentUser = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
 
-  tbody.innerHTML = data.map(e => {
-    const techCell =
-      (e.tech && e.tech.trim()) ? e.tech :
-      (e.technician && e.technician.trim()) ? e.technician :
-      (currentUser?.name || "–");
+  tbody.innerHTML = data.map(function(e){
+    var date     = e.date || e.dateISO || "";
+    var machine  = e.machine || e.maschine || "";
+    var taskName = e.task || e.taskName || "";
+    var interval = (e.interval != null ? e.interval : e.intervalDays);
+    var nipCount = (e.nipCount != null ? e.nipCount : e.nipples);
 
-    return `
-      <tr>
-        <td>${esc(e.date || "")}</td>
-        <td>${esc(e.machine || "")}</td>
-        <td>${esc(e.task || "")}</td>
-        <td>${esc(e.interval || "")}</td>
-        <td>${esc(e.nipCount || "")}</td>
-        <td>${esc(techCell)}</td>
-      </tr>
-    `;
+    var techCell = (e.tech && e.tech.trim()) ? e.tech :
+                   (e.technician && e.technician.trim()) ? e.technician :
+                   (currentUser && currentUser.name ? currentUser.name : "–");
+
+    return "<tr>"
+      + "<td>"+esc(date)+"</td>"
+      + "<td>"+esc(machine)+"</td>"
+      + "<td>"+esc(taskName)+"</td>"
+      + "<td>"+esc(interval == null || interval === "" ? "" : interval)+"</td>"
+      + "<td>"+esc(nipCount == null || nipCount === "" ? "" : nipCount)+"</td>"
+      + "<td>"+esc(techCell)+"</td>"
+      + "</tr>";
   }).join("");
 }
+
+
 
 
 /* 🧼 Filter löschen */
@@ -3666,33 +3709,62 @@ function wpUpdateGlobalBanner(){
   }
   banner.style.display = "flex";
 
-  // Optional: Wenn der Banner-Button „Wartung öffnen“ existiert,
-  // und noch keine Maschine gewählt ist, wähle beim Klick die erste betroffene.
-  const openBtn = document.getElementById('wpOpenFromBanner') || banner.querySelector('[data-open]');
-  if (openBtn){
-    openBtn.onclick = () => {
-      try{
-        const { selMaschine } = wpEls();
-        if (selMaschine && !selMaschine.value && first?.machine){
-          // versuche die Maschine vorzuwählen
-          // 1) exakter Name
-          selMaschine.value = first.machine;
-          // 2) falls nicht exakt vorhanden: suche per Normalisierung
-          if (selMaschine.value !== first.machine){
-            const norm = wpNorm(first.machine);
-            const opt = [...selMaschine.options].find(o => wpNorm(o.value) === norm || wpNorm(o.textContent||"") === norm);
-            if (opt) selMaschine.value = opt.value;
-          }
-          selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
+// Optional: Wenn der Banner-Button „Wartung öffnen“ existiert,
+// und noch keine Maschine gewählt ist, wähle beim Klick die erste betroffene.
+var openBtn = document.getElementById('wpOpenFromBanner') || (banner && banner.querySelector && banner.querySelector('[data-open]'));
+if (openBtn){
+  openBtn.onclick = function () {
+    try{
+      var els = (typeof wpEls === "function") ? wpEls() : {};
+      var selMaschine = els ? els.selMaschine : null;
+
+      // "first" muss vorher aus deiner Due-Liste kommen; hier robust prüfen:
+      if (selMaschine && !selMaschine.value && first && first.machine){
+        // 1) exakter Name
+        selMaschine.value = first.machine;
+
+        // 2) falls nicht exakt vorhanden: suche per Normalisierung
+        if (selMaschine.value !== first.machine){
+          var norm = typeof wpNorm === "function" ? wpNorm(first.machine) : String(first.machine||"").toLowerCase().trim();
+          var opt = Array.prototype.slice.call(selMaschine.options || []).find(function(o){
+            var ov = (typeof wpNorm === "function" ? wpNorm(o.value) : String(o.value||"").toLowerCase().trim());
+            var ot = (typeof wpNorm === "function" ? wpNorm(o.textContent||"") : String(o.textContent||"").toLowerCase().trim());
+            return ov === norm || ot === norm;
+          });
+          if (opt) selMaschine.value = opt.value;
         }
-      }catch{}
-      // Panel öffnen, falls du das so handhabst:
-      document.getElementById('wartungsplanPanel')?.style && (document.getElementById('wartungsplanPanel').style.display = 'block');
-      document.getElementById('wartungToggleHead') && (document.getElementById('wartungToggleHead').textContent = '🛠️ Wartung (zu)');
-      document.getElementById('wartungsplanSection')?.scrollIntoView({ behavior:'smooth', block:'start' });
-    };
-  }
+
+        // Change-Event feuern
+        try {
+          selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
+        } catch(_){
+          // Fallback für ältere Browser
+          var evt = document.createEvent('HTMLEvents');
+          evt.initEvent('change', true, false);
+          selMaschine.dispatchEvent(evt);
+        }
+      }
+    } catch(e){ /* schlucken, UI geht weiter */ }
+
+    // Panel öffnen (ohne optional chaining)
+    var panel = document.getElementById('wartungsplanPanel');
+    if (panel && panel.style) panel.style.display = 'block';
+
+    var headBtn = document.getElementById('wartungToggleHead');
+    if (headBtn) headBtn.textContent = '🛠️ Wartung (zu)';
+
+    // Scrollen – iPad-kompatibel (Fallback ohne Options-Objekt)
+    var sec = document.getElementById('wartungsplanSection');
+    if (sec){
+      try {
+        sec.scrollIntoView({ behavior:'smooth', block:'start' });
+      } catch(_) {
+        sec.scrollIntoView(true);
+      }
+    }
+  };
 }
+
 
 
 function wpEvalWarning(){
@@ -4086,20 +4158,59 @@ function _collectEntryFromForm({ useTodayIfEmpty = true } = {}) {
 // *** HIER die beiden Stellen auf window.__WP_LOG_KEY__ umgestellt ***
 function wpLogLoad(){
   try{
-    const raw = JSON.parse(localStorage.getItem(window.__WP_LOG_KEY__) || "[]");
-    window.wartungslog = (raw||[]).map(e => ({
-      dateISO: _toISO(e.dateISO || e.date || ""),
-      machine: e.machine || e.maschine || "",
-      taskName: e.taskName || e.task || "",
-      intervalDays: (e.intervalDays ?? e.interval ?? ""),
-      nipples: (e.nipples ?? e.nipCount ?? ""),
-      technician: e.technician || e.tech || ""
-    }));
-  }catch(e){
-    console.warn("wpLogLoad parse:", e);
+    var raw = _loadAll();
+    if (!Array.isArray(raw)) raw = [];
+
+    // aktuell angemeldeter User (Fallback für alte/leere Einträge)
+    var u = (typeof getSignedInUser === "function")
+      ? getSignedInUser()
+      : { name:"", email:"", upn:"" };
+
+    window.wartungslog = raw.map(function(e){
+      var dateISO = _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : ""));
+      var machine = e.machine ? e.machine : (e.maschine ? e.maschine : "");
+      var taskName = e.taskName ? e.taskName : (e.task ? e.task : "");
+
+      var intervalDays =
+        (e.intervalDays !== undefined && e.intervalDays !== null) ? e.intervalDays :
+        (e.interval     !== undefined && e.interval     !== null) ? e.interval     : "";
+
+      var nipples =
+        (e.nipples  !== undefined && e.nipples  !== null) ? e.nipples  :
+        (e.nipCount !== undefined && e.nipCount !== null) ? e.nipCount : "";
+
+      // Techniker + Mail/UPN mit Fallbacks (alte Keys: tech/techEmail)
+      var technician =
+        (e.technician && String(e.technician).trim()) ? e.technician :
+        (e.tech       && String(e.tech).trim())       ? e.tech       :
+        (u.name || "");
+
+      var technicianEmail =
+        (e.technicianEmail && String(e.technicianEmail).trim()) ? e.technicianEmail :
+        (e.techEmail       && String(e.techEmail).trim())       ? e.techEmail       :
+        (u.email || "");
+
+      var technicianUpn =
+        (e.technicianUpn && String(e.technicianUpn).trim()) ? e.technicianUpn :
+        (u.upn || "");
+
+      return {
+        dateISO      : dateISO,
+        machine      : machine,
+        taskName     : taskName,
+        intervalDays : (intervalDays === "" ? "" : Number(intervalDays)),
+        nipples      : (nipples === "" ? "" : Number(nipples)),
+        technician   : technician,
+        technicianEmail: technicianEmail,
+        technicianUpn  : technicianUpn
+      };
+    });
+  } catch(e){
+    console.warn("wpLogLoad:", e);
     window.wartungslog = [];
   }
 }
+
 function _saveAll(list){
   localStorage.setItem(window.__WP_LOG_KEY__, JSON.stringify(list || []));
 }
@@ -4209,48 +4320,62 @@ function toggleWpLogPanel(){
 }
 
 function bindWpLogUi(){
+  var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
+  for (var i=0;i<ids.length;i++){
+    var el = _byId(ids[i]);
+    if (el) el.addEventListener("input", renderWpLogTable);
+  }
 
-  ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
-    .forEach(id => _byId(id)?.addEventListener("input", renderWpLogTable));
-  _byId("wpLogReload")?.addEventListener("click", ()=>{ wpLogLoad(); renderWpLogTable(); });
-  _byId("wpLogClear")?.addEventListener("click", ()=>{
-    ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
-      .forEach(id => { const el = _byId(id); if (el) el.value = ""; });
+  var btnReload = _byId("wpLogReload");
+  if (btnReload) btnReload.addEventListener("click", function(){ wpLogLoad(); renderWpLogTable(); });
+
+  var btnClear = _byId("wpLogClear");
+  if (btnClear) btnClear.addEventListener("click", function(){
+    for (var i=0;i<ids.length;i++){ var el=_byId(ids[i]); if (el) el.value=""; }
     renderWpLogTable();
   });
-  _byId("wpLogRangeBtn")?.addEventListener("click",(ev)=>{
-    const btn = ev.currentTarget;
-    const mode = String(btn?.dataset?.mode || "30");
-    const today = new Date();
-    const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    const from = new Date(today);
+
+  var rangeBtn = _byId("wpLogRangeBtn");
+  if (rangeBtn) rangeBtn.addEventListener("click", function(ev){
+    var btn   = ev.currentTarget || ev.target;
+    var mode  = String((btn && btn.dataset && btn.dataset.mode) || "30");
+    var today = new Date();
+    function toISO(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+    var from = new Date(today);
     if (mode === "30"){ from.setDate(from.getDate()-30); btn.dataset.mode="90"; btn.textContent="🗓️ Letzte 90 Tage"; }
     else if (mode === "90"){ from.setDate(from.getDate()-90); btn.dataset.mode="7";  btn.textContent="🗓️ Letzte 7 Tage"; }
     else { from.setDate(from.getDate()-7);  btn.dataset.mode="30"; btn.textContent="🗓️ Letzte 30 Tage"; }
-    if (_byId("wpLog_from")) _byId("wpLog_from").value = toISO(from);
-    if (_byId("wpLog_to"))   _byId("wpLog_to").value   = toISO(today);
+    var elFrom=_byId("wpLog_from"); if (elFrom) elFrom.value = toISO(from);
+    var elTo=_byId("wpLog_to"); if (elTo) elTo.value = toISO(today);
     renderWpLogTable();
   });
-  _byId("wpSaveTask")?.addEventListener("click", ()=>{
-    const entry = _collectEntryFromForm({useTodayIfEmpty:true});
+
+  var saveBtn = _byId("wpSaveTask");
+  if (saveBtn) saveBtn.addEventListener("click", function(){
+    var entry = _collectEntryFromForm({useTodayIfEmpty:true});
     wpLogExecution(entry);
-    if (_byId("wpLogPanel")?.style.display === "block") renderWpLogTable();
+    var pnl=_byId("wpLogPanel");
+    if (pnl && pnl.style.display === "block") renderWpLogTable();
     alert("Wartung gespeichert!");
   });
-  _byId("wpMarkDoneToday")?.addEventListener("click", ()=>{
-    const todayISO = _toISO(new Date());
-    const lastEl = _byId("wpLastDate");
+
+  var doneBtn = _byId("wpMarkDoneToday");
+  if (doneBtn) doneBtn.addEventListener("click", function(){
+    var todayISO = _toISO(new Date());
+    var lastEl = _byId("wpLastDate");
     if (lastEl) lastEl.value = todayISO;
-    const intervalDays = parseInt(_byId("wpIntervalDays")?.value || "0", 10) || 0;
+    var intervalDays = parseInt((_byId("wpIntervalDays") && _byId("wpIntervalDays").value) || "0", 10) || 0;
     if (intervalDays > 0) {
-      const next = new Date(); next.setDate(next.getDate() + intervalDays);
-      if (_byId("wpNextDue")) _byId("wpNextDue").value = _toISO(next);
+      var next = new Date(); next.setDate(next.getDate() + intervalDays);
+      var nextEl = _byId("wpNextDue"); if (nextEl) nextEl.value = _toISO(next);
     }
-    const entry = _collectEntryFromForm({useTodayIfEmpty:true});
+    var entry = _collectEntryFromForm({useTodayIfEmpty:true});
     wpLogExecution(entry);
-    if (_byId("wpLogPanel")?.style.display === "block") renderWpLogTable();
+    var pnl=_byId("wpLogPanel");
+    if (pnl && pnl.style.display === "block") renderWpLogTable();
   });
 }
+
 
 document.addEventListener("DOMContentLoaded", ()=>{
   try { wpLogLoad(); } catch(e){ console.warn("wpLogLoad:", e); }
@@ -4779,6 +4904,31 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
   });
 })();
 </script>
+  <script>
+/* ===== Wartungs-Init beim Seitenstart (iPad-safe) ===== */
+(function(){
+  function safe(fn){ try{ fn && fn(); }catch(e){} }
+
+  // 1) Log aus Storage (mit iPad/Privatmodus-Fallback) in den RAM laden
+  if (!Array.isArray(window.wartungslog)) {
+    window.wartungslog = (typeof _loadAll === "function") ? _loadAll() : [];
+  }
+
+  // 2) Alte/neue Feldnamen mappen (falls Funktion vorhanden)
+  safe(function(){ if (typeof wpLogLoad === "function") wpLogLoad(); });
+
+  // 3) Dashboard-Tabelle rendern, wenn das Element existiert
+  safe(function(){
+    if (document.getElementById("wpLogBody") && typeof loadWpLog === "function") {
+      loadWpLog();
+    }
+  });
+
+  // 4) Overdue-Badge/Banner aktualisieren (falls vorhanden)
+  safe(function(){ if (typeof wpRefreshOverdueUI === "function") wpRefreshOverdueUI(); });
+})();
+</script>
+
 
 
 
