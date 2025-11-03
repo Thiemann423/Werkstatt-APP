@@ -4151,12 +4151,22 @@ document.addEventListener("DOMContentLoaded", ()=>{
 (function(){
   const byId = (id)=>document.getElementById(id);
 
-  function toISO(d){
-    const dd = (d instanceof Date) ? d : new Date(d || Date.now());
-    const m = String(dd.getMonth()+1).padStart(2,"0");
-    const day = String(dd.getDate()).padStart(2,"0");
-    return `${dd.getFullYear()}-${m}-${day}`;
-  }
+function toISO(d){
+  // wenn schon im Format YYYY-MM-DD, lass so
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+
+  const dd  = (d instanceof Date) ? d : new Date(d || Date.now());
+  const m   = String(dd.getMonth() + 1).padStart(2, "0"); // <- String
+  const day = String(dd.getDate()).padStart(2, "0");      // <- String
+  return `${dd.getFullYear()}-${m}-${day}`;
+}
+
+// Kompatibilität für alten Code
+window.todayISO = window.todayISO || function () {
+  return toISO(new Date());
+};
+
+
 
   function recomputeNextDue(){
     const last = byId("wpLastDate")?.value || "";         // Zuletzt durchgeführt
