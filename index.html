@@ -382,6 +382,193 @@ window.addEventListener('load', function () {
 })();
 </script>
 
+<script>
+/* ===== Globaler Wartungs-Hinweis ohne geöffnetes Dashboard ===== */
+(function(){
+  // kleine Helfer (nutzt vorhandene, wenn sie da sind)
+  const wpEls = window.wpEls || function(){
+    return {
+      selMaschine: document.getElementById('selMaschine') || document.querySelector('#selMaschine, [name="maschine"], select[data-maschine]')
+    };
+  };
+  const wpNorm = window.wpNorm || (s => String(s||"").toLowerCase().trim());
+
+  function toISO(d){
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dt = d instanceof Date ? d : new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  }
+  function addDays(iso, n){
+    if (!iso) return "";
+    const d = new Date(iso); if (isNaN(d)) return "";
+    d.setDate(d.getDate() + Number(n||0));
+    return toISO(d);
+  }
+  function cmpISO(a,b){ return a===b ? 0 : (a<b ? -1 : 1); }
+
+  // Sichere Quelle für fällige/überfällige Einträge
+  function getDueList(){
+    // Wenn deine neue computeDueMap() existiert, nutze sie
+    if (typeof window.computeDueMap === 'function'){
+      const map = window.computeDueMap();
+      const out = [];
+      for (const [,v] of map){
+        if (v.status === 'today' || v.status === 'overdue'){
+          out.push({
+            machine: v.machine || "",
+            task: v.taskName || "",
+            nextDue: v.nextDue || "",
+            status: v.status
+          });
+        }
+      }
+      return out;
+    }
+    // Fallback (falls computeDueMap nicht vorhanden ist)
+    const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+    const latest = new Map();
+    for (const e of list){
+      const key = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
+      const last = (e.dateISO||"").trim();
+      if (!latest.has(key) || (last && last > (latest.get(key).dateISO||""))){
+        latest.set(key, e);
+      }
+    }
+    const today = toISO(new Date());
+    const out = [];
+    latest.forEach(e=>{
+      const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
+      const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
+      if (!next) return;
+      const status = cmpISO(next, today) < 0 ? 'overdue' : (cmpISO(next, today)===0 ? 'today' : 'ok');
+      if (status !== 'ok'){
+        out.push({ machine: e.machine||"", task: e.taskName||"", nextDue: next, status });
+      }
+    });
+    return out;
+  }
+
+  // Öffnet Dashboard + wählt Maschine
+  function wpOpenMachineFromName(name){
+    try{
+      const { selMaschine } = wpEls();
+      if (selMaschine){
+        const norm = wpNorm(name);
+        const opt = [...selMaschine.options].find(
+          o => wpNorm(o.value) === norm || wpNorm(o.textContent||"") === norm
+        );
+        if (opt){
+          selMaschine.value = opt.value;
+          selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+      }
+      // Wartungs-Panel öffnen (falls vorhanden)
+      document.querySelector('[data-wp-panel="wartung"]')?.click();
+      // Alternativ: dein vorhandener Toggle-Button
+      if (!document.querySelector('[data-wp-panel="wartung"]')) {
+        document.getElementById('toggleWpLogBtn')?.click();
+      }
+    }catch(e){ console.warn('wpOpenMachineFromName:', e); }
+  }
+
+  // Rote Badge am Kopf-Button
+  function setWartungBadge(on){
+    const btn = document.getElementById('wartungToggleHead');
+    if (!btn) return;
+    let dot = btn.querySelector('.wp-badge-dot');
+    if (on && !dot){
+      dot = document.createElement('span');
+      dot.className = 'wp-badge-dot';
+      Object.assign(dot.style, {
+        display:'inline-block', width:'10px', height:'10px',
+        background:'#dc3545', borderRadius:'999px', marginLeft:'8px',
+        verticalAlign:'middle'
+      });
+      btn.appendChild(dot);
+    }
+    if (!on && dot){ dot.remove(); }
+  }
+
+  // Banner + Alert befüllen
+  function renderGlobalOverdueUI(due){
+    const banner = document.getElementById('wpGlobalOverdueBanner');
+    const openBtn = document.getElementById('wpOpenFromBanner');
+    const alertBox = document.getElementById('wpGlobalAlert');
+
+    // Banner
+    if (banner){
+      if (due.length){
+        const msgEl = banner.querySelector('[data-msg]');
+        if (msgEl){
+          const over = due.filter(d => d.status==='overdue').length;
+          const tod  = due.filter(d => d.status==='today').length;
+          msgEl.textContent =
+            over ? `Es gibt ${over} überfällige und ${tod} heute fällige Wartungen.` :
+                   `Es gibt ${tod} heute fällige Wartungen.`;
+        }
+        banner.style.display = 'flex';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    // Button im Banner führt – falls nur 1 Eintrag – direkt dorthin
+    if (openBtn){
+      openBtn.onclick = () => {
+        if (due.length === 1 && due[0].machine){
+          wpOpenMachineFromName(due[0].machine);
+        } else {
+          // Mehrere: öffne Dashboard, der Nutzer wählt dort
+          document.getElementById('toggleWpLogBtn')?.click();
+        }
+      };
+    }
+
+    // Alert-Liste mit Klick
+    if (alertBox){
+      if (due.length){
+        const items = due.slice(0, 8).map(d => {
+          const label = [d.machine, d.task].filter(Boolean).join(' – ');
+          const when  = d.nextDue ? ` (${d.nextDue}${d.status==='overdue' ? ' überfällig' : ' heute'})` : '';
+          return `<li><button data-goto="${encodeURIComponent(d.machine||'')}"
+                     style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">
+                     ${label}${when}</button></li>`;
+        }).join('');
+        alertBox.innerHTML = `
+          <strong>⚠️ Wartung fällig:</strong>
+          <ul style="margin:6px 0 0 18px;list-style:disc;">${items}</ul>
+        `;
+        alertBox.style.display = 'block';
+
+        alertBox.querySelectorAll('button[data-goto]').forEach(btn=>{
+          btn.addEventListener('click', (ev)=>{
+            const name = decodeURIComponent(ev.currentTarget.getAttribute('data-goto')||'');
+            if (name) wpOpenMachineFromName(name);
+          });
+        });
+      } else {
+        alertBox.style.display = 'none';
+        alertBox.innerHTML = '';
+      }
+    }
+
+    // Badge am Kopf-Button
+    setWartungBadge(due.length > 0);
+  }
+
+  // Start-Check (ohne Dashboard)
+  document.addEventListener('DOMContentLoaded', function(){
+    try{
+      // Logs laden, falls Funktion vorhanden
+      if (typeof window.wpLogLoad === 'function'){ try{ window.wpLogLoad(); }catch(e){} }
+      const due = getDueList();
+      renderGlobalOverdueUI(due);
+    }catch(e){
+      console.warn('Globaler Wartungs-Check:', e);
+    }
+  });
+})();
+</script>
 
   
 
@@ -4144,21 +4331,35 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
    - Optional: kurzer Beep beim Öffnen
 */
 (function(){
-  const byId = (id)=>document.getElementById(id);
-  const todayISO = ()=>{
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  };
+  // ===== Allgemeine Helfer =====
+  function _wpNorm(s){ return String(s||"").toLowerCase().trim(); }
+  function _wpFmtISO(s){ return s || ""; }
+  function _byId(id){ return document.getElementById(id); }
+  function _toISO(d){
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dt = d instanceof Date ? d : new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  }
 
+  // ===== Wartungs-Helfer (Datum, Vergleiche etc.) =====
+  function toISO(d){
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dt = d instanceof Date ? d : new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  }
   function addDays(iso, n){
     if (!iso) return "";
     const d = new Date(iso);
     if (isNaN(d)) return "";
-    d.setDate(d.getDate() + (Number(n)||0));
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    d.setDate(d.getDate() + Number(n || 0));
+    return toISO(d);
+  }
+  function cmpISO(a, b){
+    return a === b ? 0 : (a < b ? -1 : 1); // nur YYYY-MM-DD
   }
 
-  // Map je (Maschine||Aufgabe) mit lastDate, intervalDays, nextDue
+  // ===== Wartungsberechnung =====
+  // Map je (Maschine||Aufgabe) mit lastDate, intervalDays, nextDue, status
   function computeDueMap(){
     try { if (typeof wpLogLoad === "function") wpLogLoad(); } catch(e){}
     const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
@@ -4169,19 +4370,28 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
       const last = (e.dateISO||"").trim();
       const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
       const prev = map.get(key);
-      // Nur den jüngsten Eintrag je Key behalten
+
       if (!prev || (last && last > (prev.lastDate||""))) {
+        const next = (last && intv) ? addDays(last, intv) : "";
+        const today = toISO(new Date());
+        let status = "ok";
+        if (next) {
+          if (cmpISO(next, today) < 0) status = "overdue";
+          else if (cmpISO(next, today) === 0) status = "today";
+        }
         map.set(key, {
           machine: e.machine || "",
           taskName: e.taskName || "",
           lastDate: last || "",
           intervalDays: intv || 0,
-          nextDue: (last && intv) ? addDays(last, intv) : ""
+          nextDue: next,
+          status
         });
       }
     });
     return map;
   }
+
 
 function anyDueOrOverdue(dueMap){
   const t = todayISO();
