@@ -562,31 +562,29 @@ function renderGlobalOverdueUI(due){
           if (name && typeof wpOpenMachineFromName === 'function') wpOpenMachineFromName(name);
         });
       }
-    } else {
-      alertBox.style.display = 'none';
-      alertBox.innerHTML = '';
-    }
+  } else {
+    alertBox.style.display = 'none';
+    alertBox.innerHTML = '';
   }
-}
+} // <-- das schließt renderGlobalOverdueUI vollständig
 
+// Badge am Kopf-Button
+setWartungBadge(due.length > 0);
 
-    // Badge am Kopf-Button
-    setWartungBadge(due.length > 0);
+// Start-Check (ohne Dashboard)
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    // Logs laden, falls Funktion vorhanden
+    if (typeof window.wpLogLoad === 'function'){ try{ window.wpLogLoad(); }catch(e){} }
+    const due = getDueList();
+    renderGlobalOverdueUI(due);
+  } catch(e) {
+    console.warn('Globaler Wartungs-Check:', e);
   }
-
-  // Start-Check (ohne Dashboard)
-  document.addEventListener('DOMContentLoaded', function(){
-    try{
-      // Logs laden, falls Funktion vorhanden
-      if (typeof window.wpLogLoad === 'function'){ try{ window.wpLogLoad(); }catch(e){} }
-      const due = getDueList();
-      renderGlobalOverdueUI(due);
-    }catch(e){
-      console.warn('Globaler Wartungs-Check:', e);
-    }
-  });
+});
 })();
 </script>
+
 
   
 
@@ -4927,14 +4925,20 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
     });
 
     // Wenn Wartungs-Dashboard geöffnet wird, auch nochmal versuchen (falls Pläne dann erst da sind)
-    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-      setTimeout(()=>{
-        if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
-      }, 120);
-    });
+  byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+    setTimeout(()=>{
+      const sel = byId("wpTaskSelect");
+      if (!sel) return;
+      takeSnapshotForMachine(sel);
+      restoreOptionsIfEmpty(sel);
+      ensurePlaceholder(sel);
+    }, 150);
   });
-})();
+});                 // Ende: window.addEventListener("load", ...)
+})();               // ⬅️ schließt die IIFE
 </script>
+
+
   <script>
 /* ===== Wartungs-Init beim Seitenstart (iPad-safe) ===== */
 (function(){
