@@ -4412,13 +4412,25 @@ function anyDueOrOverdue(dueMap){
 }
 
 function listDueOrOverdue(dueMap){
-  const t = todayISO();
+  // robust: nutze window.todayISO() wenn vorhanden, sonst toISO(new Date())
+  const t = (typeof window.todayISO === 'function')
+              ? window.todayISO()
+              : toISO(new Date());
+
   const out = [];
-  for (const [,v] of dueMap) {
-    if (v.nextDue && v.nextDue <= t) out.push(v);
+  // akzeptiert Map oder Plain-Object
+  const it = (dueMap instanceof Map)
+    ? dueMap
+    : new Map(Object.entries(dueMap || {}));
+
+  for (const [, v] of it) {
+    const next = v && v.nextDue ? String(v.nextDue) : "";
+    // ISO-Strings lassen sich lexikographisch vergleichen
+    if (next && next <= t) out.push(v);
   }
   return out.sort((a,b)=> (a.nextDue||"").localeCompare(b.nextDue||""));
 }
+
 
   // Roter Punkt am Button + Title/ARIA
   function updateButtonBadge(isOverdue){
@@ -4473,13 +4485,24 @@ function listDueOrOverdue(dueMap){
     } catch(e) {}
   }
 
-function refreshOverdueUI({beepOnOverdue=false}={}){
-  const map     = computeDueMap();
-  const dueList = listDueOrOverdue(map);     // heute/überfällig sammeln
+function refreshOverdueUI({ beepOnOverdue = false } = {}) {
+  // Sicherstellen, dass computeDueMap existiert
+  const map = (typeof computeDueMap === "function") ? computeDueMap() : new Map();
 
-  updateButtonBadge(dueList.length > 0);
+  // todayISO robust holen (alte oder neue Variante)
+  const getToday = () => (typeof window.todayISO === "function"
+    ? window.todayISO()
+    : toISO(new Date()));
 
-  const bar = ensurePanelBanner();
+  const dueList = listDueOrOverdue(map); // heute/überfällige sammeln
+
+  // Badge aktualisieren, falls Funktion existiert
+  if (typeof updateButtonBadge === "function") {
+    updateButtonBadge(dueList.length > 0);
+  }
+
+  // Panel-Hinweisleiste (Dashboard)
+  const bar = (typeof ensurePanelBanner === "function") ? ensurePanelBanner() : null;
   if (bar) {
     if (dueList.length) {
       bar.style.display = "block";
@@ -4489,8 +4512,27 @@ function refreshOverdueUI({beepOnOverdue=false}={}){
     }
   }
 
-  if (dueList.length && beepOnOverdue) beep();
+  // Optionaler akustischer Hinweis
+  if (dueList.length && beepOnOverdue && typeof beep === "function") {
+    beep();
+  }
+
+  // 🔔 Auch globalen Hinweis / Banner außerhalb des Dashboards aktualisieren
+  if (typeof renderGlobalOverdueUI === "function") {
+    // Wir erzeugen ein vereinheitlichtes Array für das globale UI
+    const today = getToday();
+    const globalDue = dueList.map(v => ({
+      machine: v.machine || "",
+      task: v.taskName || "",
+      nextDue: v.nextDue || "",
+      status: v.nextDue < today
+        ? "overdue"
+        : (v.nextDue === today ? "today" : "ok")
+    }));
+    renderGlobalOverdueUI(globalDue);
+  }
 }
+
 
 
   // Wiring
