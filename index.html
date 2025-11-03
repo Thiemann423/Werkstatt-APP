@@ -234,10 +234,21 @@ async function loadHtml2PdfIfNeeded(){
 
   
 
+<!-- ⤵️ HIER EINFÜGEN -->
+  <script>
+  // Globaler DOM-Helfer (für alle Blöcke verfügbar)
+  window.byId = window.byId || function(id){ return document.getElementById(id); };
 
+  // Alte/Neue Funktionsnamen kompatibel halten
+  // (einige Stellen rufen wpRefreshOverdueUI auf, andere refreshOverdueUI)
+  window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
+    try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
+  };
+  </script>
 </head>
-
 <body>
+
+  
   <!-- Offscreen-Renderframe nur für den PDF-Export -->
   <iframe id="pdfSandbox"
           style="position:fixed;left:-99999px;top:-99999px;width:820px;height:1200px;visibility:hidden;border:0;"></iframe>
