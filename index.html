@@ -1776,6 +1776,19 @@ window.addEventListener('load', function() {
   const msalInstance = new msal.PublicClientApplication(msalConfig);
   let accessToken = "";
 
+  // einmal global merken
+window.getSignedInUser = function(){
+  const msal = window.myMSALObj || window.msalInstance;
+  const acc  = msal && typeof msal.getAllAccounts === 'function'
+    ? (msal.getAllAccounts()[0] || null)
+    : null;
+
+  const name  = acc?.name || acc?.idTokenClaims?.name || "";
+  const email = acc?.username || acc?.idTokenClaims?.preferred_username || "";
+  const upn   = acc?.idTokenClaims?.upn || email;
+  return { name, email, upn };
+};
+
   
   function hideLoginHint(){
     const el = document.getElementById("loginHint");
@@ -4001,18 +4014,30 @@ function _getSelectText(sel){
   const opt = el.options?.[el.selectedIndex];
   return (opt?.textContent || opt?.innerText || el.value || "").trim();
 }
-function _collectEntryFromForm({useTodayIfEmpty=true}={}){
+function _collectEntryFromForm({ useTodayIfEmpty = true } = {}) {
   const todayISO = _toISO(new Date());
-  const dateISO = _byId("wpLastDate")?.value || (useTodayIfEmpty ? todayISO : "");
+  const dateISO  = _byId("wpLastDate")?.value || (useTodayIfEmpty ? todayISO : "");
+
+  // ⬇️ Neu: angemeldeten User holen (fallbacks sind ok)
+  const u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name: "", email: "" };
+
+  // Formularfeld(e) für Techniker (falls befüllt, hat Vorrang)
+  const techFromForm =
+    (_byId("techniker1")?.value || _byId("f_techniker")?.value || "").trim();
+
   return {
-    dateISO: _toISO(dateISO),
-    machine: _byId("maschine")?.value || "",
-    taskName: _getSelectText("wpTaskSelect") || _byId("wpTaskSelect")?.value || "",
-    intervalDays: parseInt(_byId("wpIntervalDays")?.value || "", 10) || "",
-    nipples: parseInt(_byId("wpNipCount")?.value || "", 10) || "",
-    technician: _byId("techniker1")?.value || ""
+    dateISO       : _toISO(dateISO),
+    machine       : _byId("maschine")?.value || "",
+    taskName      : _getSelectText("wpTaskSelect") || _byId("wpTaskSelect")?.value || "",
+    intervalDays  : parseInt(_byId("wpIntervalDays")?.value || "", 10) || "",
+    nipples       : parseInt(_byId("wpNipCount")?.value || "", 10) || "",
+
+    // ⬇️ Neu: Techniker automatisch setzen
+    technician    : techFromForm || u.name || "",
+    technicianEmail: u.email || ""        // falls du die Spalte später anzeigen willst
   };
 }
+
 
 // *** HIER die beiden Stellen auf window.__WP_LOG_KEY__ umgestellt ***
 function wpLogLoad(){
@@ -4036,18 +4061,41 @@ function _saveAll(list){
 }
 
 function wpLogExecution(entry){
+  // angemeldeten Nutzer holen (falls verfügbar)
+  const u = (typeof getSignedInUser === "function")
+    ? getSignedInUser()
+    : { name: "", email: "" };
+
   const e = {
-    dateISO: _toISO(entry?.dateISO),
-    machine: entry?.machine || "",
-    taskName: entry?.taskName || "",
-    intervalDays: (entry?.intervalDays ?? ""),
-    nipples: (entry?.nipples ?? ""),
-    technician: entry?.technician || ""
+    dateISO      : _toISO(entry?.dateISO || new Date()),
+    machine      : (entry?.machine || "").trim(),
+    taskName     : (entry?.taskName || "").trim(),
+    intervalDays : (entry?.intervalDays === "" || entry?.intervalDays == null)
+                    ? "" : Number(entry.intervalDays),
+    nipples      : (entry?.nipples === "" || entry?.nipples == null)
+                    ? "" : Number(entry.nipples),
+
+    // Techniker: Formularwert hat Vorrang, sonst angemeldeter Nutzer
+    technician       : (entry?.technician && String(entry.technician).trim()) || u.name || "",
+    technicianEmail  : entry?.technicianEmail || u.email || ""
   };
-  const list = Array.isArray(window.wartungslog) ? [...window.wartungslog] : [];
+
+  const list = Array.isArray(window.wartungslog) ? window.wartungslog.slice() : [];
   list.push(e);
   window.wartungslog = list;
   _saveAll(list);
+
+  // UI aktualisieren (falls Funktionen existieren)
+  try { if (typeof renderWpLogTable === "function") renderWpLogTable(); } catch {}
+  try { if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI(); } catch {}
+}
+
+
+// ➕ Fallback-Anzeige für die Techniker-Spalte (für alte/leere Einträge)
+function displayTechnicianFor(entry){
+  if (entry && entry.technician && entry.technician.trim()) return entry.technician;
+  const u = (typeof getSignedInUser === 'function') ? getSignedInUser() : null;
+  return (u && u.name) ? u.name : "–";
 }
 
 function wpLogApplyFilters(list){
@@ -4056,24 +4104,43 @@ function wpLogApplyFilters(list){
   const m    = _wpNorm(_byId("wpLog_machine")?.value);
   const t    = _wpNorm(_byId("wpLog_task")?.value);
   const tech = _wpNorm(_byId("wpLog_tech")?.value);
+
   return (list||[]).filter(e=>{
     if (from && e.dateISO < from) return false;
     if (to   && e.dateISO > to)   return false;
     if (m && !_wpNorm(e.machine).includes(m)) return false;
     if (t && !_wpNorm(e.taskName).includes(t)) return false;
-    if (tech && !_wpNorm(e.technician).includes(tech)) return false;
+
+    if (tech){
+      // Suchkandidat zusammenbauen: Name, Email, UPN; bei alten Einträgen Fallback auf aktuellen User
+      const u = (typeof getSignedInUser === 'function') ? getSignedInUser() : {name:"", email:"", upn:""};
+      const haystack = [
+        e.technician, e.technicianEmail, e.technicianUpn,          // aus dem Log (falls vorhanden)
+        (!e.technician ? u.name : ""), (!e.technicianEmail ? u.email : ""), (!e.technicianUpn ? u.upn : "") // Fallbacks
+      ].filter(Boolean).map(_wpNorm).join(" ");
+
+      if (!haystack.includes(tech)) return false;
+    }
+
     return true;
   }).sort((a,b)=>(b.dateISO||"").localeCompare(a.dateISO||""));
 }
+
 function renderWpLogTable(){
-  const body = _byId("wpLogBody");
-  const empty= _byId("wpLogEmpty");
+  const body  = _byId("wpLogBody");
+  const empty = _byId("wpLogEmpty");
   if (!body) return;
+
   const rows = wpLogApplyFilters(window.wartungslog || []);
   body.innerHTML = "";
-  if (!rows.length){ if (empty) empty.style.display = "block"; return; }
+  if (!rows.length){
+    if (empty) empty.style.display = "block";
+    return;
+  }
   if (empty) empty.style.display = "none";
+
   const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
+
   body.innerHTML = rows.map(e => `
     <tr>
       ${td(_wpFmtISO(e.dateISO))}
@@ -4081,7 +4148,7 @@ function renderWpLogTable(){
       ${td(e.taskName || "–")}
       ${td((e.intervalDays ?? "") === "" ? "–" : e.intervalDays)}
       ${td((e.nipples ?? "") === "" ? "–" : e.nipples)}
-      ${td(e.technician || "–")}
+      ${td(displayTechnicianFor(e))}   <!-- Techniker mit Fallback -->
     </tr>
   `).join("");
 }
