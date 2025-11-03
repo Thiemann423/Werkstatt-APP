@@ -4183,13 +4183,22 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
     return map;
   }
 
-  function anyOverdue(dueMap){
-    const t = todayISO();
-    for (const [,v] of dueMap) {
-      if (v.nextDue && v.nextDue < t) return true;
-    }
-    return false;
+function anyDueOrOverdue(dueMap){
+  const t = todayISO();
+  for (const [,v] of dueMap) {
+    if (v.nextDue && v.nextDue <= t) return true; // heute ODER überfällig
   }
+  return false;
+}
+
+function listDueOrOverdue(dueMap){
+  const t = todayISO();
+  const out = [];
+  for (const [,v] of dueMap) {
+    if (v.nextDue && v.nextDue <= t) out.push(v);
+  }
+  return out.sort((a,b)=> (a.nextDue||"").localeCompare(b.nextDue||""));
+}
 
   // Roter Punkt am Button + Title/ARIA
   function updateButtonBadge(isOverdue){
@@ -4244,16 +4253,25 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
     } catch(e) {}
   }
 
-  function refreshOverdueUI({beepOnOverdue=false}={}){
-    const map = computeDueMap();
-    const overdue = anyOverdue(map);
-    updateButtonBadge(overdue);
+function refreshOverdueUI({beepOnOverdue=false}={}){
+  const map     = computeDueMap();
+  const dueList = listDueOrOverdue(map);     // heute/überfällig sammeln
 
-    const bar = ensurePanelBanner();
-    if (bar) bar.style.display = overdue ? "block" : "none";
+  updateButtonBadge(dueList.length > 0);
 
-    if (overdue && beepOnOverdue) beep();
+  const bar = ensurePanelBanner();
+  if (bar) {
+    if (dueList.length) {
+      bar.style.display = "block";
+      bar.textContent = `Hinweis: ${dueList.length} Wartung(en) heute/überfällig.`;
+    } else {
+      bar.style.display = "none";
+    }
   }
+
+  if (dueList.length && beepOnOverdue) beep();
+}
+
 
   // Wiring
   window.addEventListener("load", ()=>{
