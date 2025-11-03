@@ -4098,6 +4098,12 @@ function displayTechnicianFor(entry){
   return (u && u.name) ? u.name : "–";
 }
 
+  function displayTechnicianFor(entry){
+  if (entry && entry.technician && entry.technician.trim()) return entry.technician;
+  const u = (typeof getSignedInUser === 'function') ? getSignedInUser() : null;
+  return (u && u.name) ? u.name : "–";
+}
+
 
 function wpLogApplyFilters(list){
   const from = _byId("wpLog_from")?.value || "";
@@ -4140,18 +4146,19 @@ function renderWpLogTable(){
   }
   if (empty) empty.style.display = "none";
 
-  const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
+const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
 
-  body.innerHTML = rows.map(e => `
-    <tr>
-      ${td(_wpFmtISO(e.dateISO))}
-      ${td(e.machine || "–")}
-      ${td(e.taskName || "–")}
-      ${td((e.intervalDays ?? "") === "" ? "–" : e.intervalDays)}
-      ${td((e.nipples ?? "") === "" ? "–" : e.nipples)}
-      ${td(displayTechnicianFor(e))}   <!-- Techniker mit Fallback -->
-    </tr>
-  `).join("");
+body.innerHTML = rows.map(e => `
+  <tr>
+    ${td(_wpFmtISO(e.dateISO))}
+    ${td(e.machine || "–")}
+    ${td(e.taskName || "–")}
+    ${td((e.intervalDays ?? "") === "" ? "–" : e.intervalDays)}
+    ${td((e.nipples ?? "") === "" ? "–" : e.nipples)}
+    ${td(displayTechnicianFor(e))}   <!-- NEU -->
+  </tr>
+`).join("");
+
 }
 
 function toggleWpLogPanel(){
