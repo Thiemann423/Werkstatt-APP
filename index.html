@@ -3910,7 +3910,7 @@ function toggleWpLogPanel(){
 }
 
 function bindWpLogUi(){
-  _byId("toggleWpLogBtn")?.addEventListener("click", toggleWpLogPanel);
+
   ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"]
     .forEach(id => _byId(id)?.addEventListener("input", renderWpLogTable));
   _byId("wpLogReload")?.addEventListener("click", ()=>{ wpLogLoad(); renderWpLogTable(); });
@@ -4123,17 +4123,18 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
     byId("maschine")?.addEventListener("change", onMachineChange);
 
-    // Beim Öffnen des Wartungs-Dashboards ebenfalls sicherstellen
-    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-      setTimeout(()=>{
-        const sel = byId("wpTaskSelect");
-        if (!sel) return;
-        // nach Öffnen ggf. neu sichern & auffüllen
-        takeSnapshotForMachine(sel);
-        restoreOptionsIfEmpty(sel);
-        ensurePlaceholder(sel);
-      }, 150);
-    }
+byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+    setTimeout(()=>{
+      const sel = byId("wpTaskSelect");
+      if (!sel) return;
+      takeSnapshotForMachine(sel);
+      restoreOptionsIfEmpty(sel);
+      ensurePlaceholder(sel);
+    }, 150);
+  });
+});                 <!-- Ende: window.addEventListener("load", ...) -->
+</script>
+
 <script>
 /* ===== Overdue-Alarm für Wartung: Badge + Hinweis + optionaler Beep =====
    - Nimmt letzte Ausführung pro (Maschine + Aufgabe) aus window.wartungslog
