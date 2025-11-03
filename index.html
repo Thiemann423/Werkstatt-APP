@@ -4018,25 +4018,28 @@ function _collectEntryFromForm({ useTodayIfEmpty = true } = {}) {
   const todayISO = _toISO(new Date());
   const dateISO  = _byId("wpLastDate")?.value || (useTodayIfEmpty ? todayISO : "");
 
-  // ⬇️ Neu: angemeldeten User holen (fallbacks sind ok)
-  const u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name: "", email: "" };
+  // angemeldeten User (Fallback)
+  const u = (typeof getSignedInUser === "function")
+    ? getSignedInUser()
+    : { name: "", email: "" };
 
-  // Formularfeld(e) für Techniker (falls befüllt, hat Vorrang)
+  // Formularwert hat Vorrang
   const techFromForm =
     (_byId("techniker1")?.value || _byId("f_techniker")?.value || "").trim();
 
   return {
-    dateISO       : _toISO(dateISO),
-    machine       : _byId("maschine")?.value || "",
-    taskName      : _getSelectText("wpTaskSelect") || _byId("wpTaskSelect")?.value || "",
-    intervalDays  : parseInt(_byId("wpIntervalDays")?.value || "", 10) || "",
-    nipples       : parseInt(_byId("wpNipCount")?.value || "", 10) || "",
+    dateISO      : _toISO(dateISO),
+    machine      : _byId("maschine")?.value || "",
+    taskName     : _getSelectText("wpTaskSelect") || _byId("wpTaskSelect")?.value || "",
+    intervalDays : parseInt(_byId("wpIntervalDays")?.value || "", 10) || "",
+    nipples      : parseInt(_byId("wpNipCount")?.value || "", 10) || "",
 
-    // ⬇️ Neu: Techniker automatisch setzen
-    technician    : techFromForm || u.name || "",
-    technicianEmail: u.email || ""        // falls du die Spalte später anzeigen willst
+    // << neu
+    technician       : techFromForm || u.name || "",
+    technicianEmail  : u.email || ""
   };
 }
+
 
 
 // *** HIER die beiden Stellen auf window.__WP_LOG_KEY__ umgestellt ***
@@ -4061,7 +4064,6 @@ function _saveAll(list){
 }
 
 function wpLogExecution(entry){
-  // angemeldeten Nutzer holen (falls verfügbar)
   const u = (typeof getSignedInUser === "function")
     ? getSignedInUser()
     : { name: "", email: "" };
@@ -4070,14 +4072,12 @@ function wpLogExecution(entry){
     dateISO      : _toISO(entry?.dateISO || new Date()),
     machine      : (entry?.machine || "").trim(),
     taskName     : (entry?.taskName || "").trim(),
-    intervalDays : (entry?.intervalDays === "" || entry?.intervalDays == null)
-                    ? "" : Number(entry.intervalDays),
-    nipples      : (entry?.nipples === "" || entry?.nipples == null)
-                    ? "" : Number(entry.nipples),
+    intervalDays : (entry?.intervalDays === "" || entry?.intervalDays == null) ? "" : Number(entry.intervalDays),
+    nipples      : (entry?.nipples === "" || entry?.nipples == null) ? "" : Number(entry.nipples),
 
-    // Techniker: Formularwert hat Vorrang, sonst angemeldeter Nutzer
-    technician       : (entry?.technician && String(entry.technician).trim()) || u.name || "",
-    technicianEmail  : entry?.technicianEmail || u.email || ""
+    // << neu
+    technician      : (entry?.technician && String(entry.technician).trim()) || u.name || "",
+    technicianEmail : entry?.technicianEmail || u.email || ""
   };
 
   const list = Array.isArray(window.wartungslog) ? window.wartungslog.slice() : [];
@@ -4085,10 +4085,10 @@ function wpLogExecution(entry){
   window.wartungslog = list;
   _saveAll(list);
 
-  // UI aktualisieren (falls Funktionen existieren)
   try { if (typeof renderWpLogTable === "function") renderWpLogTable(); } catch {}
   try { if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI(); } catch {}
 }
+
 
 
 // ➕ Fallback-Anzeige für die Techniker-Spalte (für alte/leere Einträge)
