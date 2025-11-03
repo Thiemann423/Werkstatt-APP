@@ -4303,6 +4303,90 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
   setInterval(()=>{ try{ refreshOverdueUI(); }catch(e){} }, 6*60*60*1000);
 })();
 </script>
+<script>
+// === Auto-Befüllung für "Schmierstelle/Aufgabe" aus Wartungsplänen ===
+// Sucht die globale Datenquelle (wartungsplaene/wp/wpData/…)
+// Erwartete Struktur je Maschine: Array von Aufgaben-Namen ODER Array von Objekten mit {name: "..."} / {aufgabe: "..."}.
+(function(){
+  const byId = (id)=>document.getElementById(id);
+  const PLACEHOLDER = "Bitte auswählen";
+
+  function getPlans(){
+    // probiere mehrere mögliche Variablen
+    const wp = window.wartungsplaene
+           || window.wp
+           || window._wp
+           || window._wpData
+           || window.WARTUNGSPLAENE
+           || null;
+    return (wp && typeof wp === "object") ? wp : null;
+  }
+
+  function extractTaskNames(list){
+    if (!Array.isArray(list)) return [];
+    // akzeptiere z. B. ["Schmieren A","Reinigen B"] ODER [{name:"..."},{aufgabe:"..."}]
+    return list.map(x=>{
+      if (typeof x === "string") return x;
+      if (x && typeof x === "object") return (x.name || x.aufgabe || x.title || x.task || "").trim();
+      return "";
+    }).filter(Boolean);
+  }
+
+  function rebuildWpTaskSelectFromPlans(){
+    const sel = byId("wpTaskSelect");
+    const machine = byId("maschine")?.value || "";
+    if (!sel || !machine) return false;
+
+    const plans = getPlans();
+    if (!plans) return false;
+
+    // Suche maschinenseitig tolerant (exakt oder case-insensitiv)
+    const keys = Object.keys(plans);
+    const key = keys.find(k => k === machine)
+            || keys.find(k => k.toLowerCase().trim() === machine.toLowerCase().trim());
+    if (!key) return false;
+
+    const tasks = extractTaskNames(plans[key]?.tasks || plans[key]?.aufgaben || plans[key]);
+    if (!tasks.length) return false;
+
+    // Select neu aufbauen
+    sel.innerHTML = "";
+    sel.add(new Option(PLACEHOLDER, ""));
+    tasks.forEach(t => sel.add(new Option(t, t)));
+    sel.value = "";
+    return true;
+  }
+
+  // Fallback: wenn nichts in Plänen gefunden -> Platzhalter sicherstellen (damit Select nie leer ist)
+  function ensureNotEmpty(){
+    const sel = byId("wpTaskSelect");
+    if (!sel) return;
+    if (!sel.options || sel.options.length === 0){
+      sel.add(new Option(PLACEHOLDER, ""));
+      sel.value = "";
+    }
+  }
+
+  window.addEventListener("load", ()=>{
+    // Beim Laden versuchen zu füllen
+    if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
+
+    // Beim Maschinenwechsel neu füllen
+    byId("maschine")?.addEventListener("change", ()=>{
+      setTimeout(()=>{
+        if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
+      }, 120);
+    });
+
+    // Wenn Wartungs-Dashboard geöffnet wird, auch nochmal versuchen (falls Pläne dann erst da sind)
+    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+      setTimeout(()=>{
+        if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
+      }, 120);
+    });
+  });
+})();
+</script>
 
 
 
