@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -712,42 +713,9 @@ window.addEventListener('load', function () {
 <script>
 /* ========= Wartungs-Log: Speicherung + Anzeige (localStorage) ========= */
 const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
-/* → Anzeigenamen aus Microsoft-Login ableiten */
-// Anzeigename aus User-Objekt oder E-Mail ableiten
-/* 🔧 Robuster Anzeigenamen-Helper */
-function displayNameFromUser(u) {
-  if (!u || typeof u !== "object") u = {};
-  var name = (u.name || "").trim();
-  var email = (u.email || "").trim();
-  var upn = (u.upn || "").trim();
-
-  // 1️⃣ Wenn Name schon gesetzt → fertig
-  if (name) return name;
-
-  // 2️⃣ Falls Email vorhanden → "vorname nachname" bauen
-  var src = email || upn;
-  if (src) {
-    var id = src.split("@")[0];
-    return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  // 3️⃣ Falls nichts → aus DOM oder Cookies raten (MS-Login im Browser)
-  var body = document.body.innerText || "";
-  var match = body.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  if (match && match[0]) {
-    var id2 = match[0].split("@")[0];
-    return id2.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  // 4️⃣ Fallback
-  return "Unbekannt";
-}
 
 
-// E-Mail → schöner Name (Fallback)
-function nameFromEmail(email){
-
-
+/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 /* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 function _saveAll(list){
   try {
@@ -784,38 +752,17 @@ function _loadAll(){
 function saveWpTask() {
   // Datum (YYYY-MM-DD)
   var d = new Date();
-  var todayISO = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  var todayISO = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 
-  // --- Techniker aus Login + Fallbacks ---
+  // MS-User + Formularwert
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
-
-  function _nameFromEmail(email){
-    if (!email) return "";
-    var id = String(email).split("@")[0] || "";
-    return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  var tech      = (typeof displayNameFromUser === "function") ? displayNameFromUser(u) : (u.name || "");
+  var elTech = document.getElementById("techniker1");
+  var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
+  var tech = techFromForm || (u.name || "");
   var techEmail = u.email || "";
-  var techUpn   = u.upn   || "";
+  var techUpn = u.upn || "";
 
-  // Fallback 1: Eingabefeld, wenn Login leer war
-  if (!tech) {
-    var elTech = document.getElementById("techniker1");
-    if (elTech && elTech.value) tech = String(elTech.value).trim();
-  }
-  // Fallback 2: aus einer gefundenen E-Mail ableiten
-  if (!tech) {
-    var mail = techEmail || techUpn;
-    if (!mail) {
-      var m = (document.body.innerText || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-      if (m && m[0]) mail = m[0];
-    }
-    if (mail) tech = _nameFromEmail(mail);
-  }
-  if (!tech || !tech.trim()) tech = "Unbekannt"; // letzte Absicherung
-
-  // --- Form-Felder ---
+  // Felder
   var elMachine  = document.getElementById("maschine");
   var elTask     = document.getElementById("wpTaskSelect");
   var elInterval = document.getElementById("wpIntervalDays");
@@ -845,19 +792,11 @@ function saveWpTask() {
     technicianUpn: techUpn
   };
 
-  // Laden, hinzufügen, speichern
+  // Laden, hinzufügen, speichern (mit iPad-Fallback in _saveAll)
   var list = _loadAll();
   if (!Array.isArray(list)) list = [];
-
-  // DEBUG: prüfe, was wirklich gespeichert wird
-  console.log("WP-DEBUG tech", { u, tech, techEmail, techUpn, entry, listLenBefore: list.length });
-
-  list.push(entry); // <— hier wird jetzt garantiert ein Name mitgespeichert
+  list.push(entry);
   _saveAll(list);
-
-  // sichtbares Feld auf den tatsächlich verwendeten Namen setzen
-  var tf = document.getElementById("techniker1");
-  if (tf) { tf.value = tech; }
 
   // UI aktualisieren
   try {
@@ -867,9 +806,6 @@ function saveWpTask() {
 
   alert("Wartung gespeichert!");
 }
-
-
-
 
 
 
@@ -1051,17 +987,6 @@ function setWpRange(btn) {
 
 /* 🔌 Verdrahten (wenn DOM geladen ist) */
 window.addEventListener("load", function(){
-  // Techniker-Feld aus dem Microsoft-Login füllen & sperren
-  try {
-    var u = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
-    var elTech = document.getElementById("techniker1");
-    if (elTech && u) {
-      elTech.value = displayNameFromUser(u); // Helper muss global definiert sein
-      elTech.readOnly = true;                // nicht manuell überschreibbar
-      elTech.classList.add("readonly");      // optionales Styling
-    }
-  } catch(_) {}
-
   // Speichern aus dem Wartungs-Panel
   var saveBtn = document.getElementById("wpSaveTask");
   if (saveBtn && typeof saveWpTask === "function") {
@@ -1086,24 +1011,15 @@ window.addEventListener("load", function(){
   var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
   for (var i=0; i<ids.length; i++){
     var el = document.getElementById(ids[i]);
-    if (el) el.addEventListener("input", function(){
-      if (typeof loadWpLog==="function") loadWpLog();
-    });
+    if (el) el.addEventListener("input", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
   }
 
-  // ⚙️ Einmaliger Backfill (fehlende Techniker-Namen auffüllen), dann initiales Rendern
-  try {
-    if (typeof wpBackfillTechnicians === "function") wpBackfillTechnicians();
-  } catch(e) { console.warn("Backfill beim Start fehlgeschlagen:", e); }
-
-  // Falls Panel beim Start schon sichtbar ist → rendern
+  // Falls Panel beim Start schon sichtbar ist
   var panel = document.getElementById("wpLogPanel");
   if (panel && panel.style.display !== "none") {
     if (typeof loadWpLog === "function") loadWpLog();
   }
 });
-
-
 </script>
 <!-- ✅ END: Wartungs-Dashboard (Log) + Logik -->
 
