@@ -4092,12 +4092,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(cur);
 
   try {
-    if (typeof wpCheckOverdueAndNotify === "function") {
-      wpCheckOverdueAndNotify({ sendMail:false });
+    if (typeof window.wpCheckOverdueAndNotify === "function") {
+      window.wpCheckOverdueAndNotify({ sendMail:false });
     }
-  } catch {}
-});
-</script>
+  } catch(e) {}
+});                 <!-- Ende: DOMContentLoaded -->
+</script>           <!-- GANZ WICHTIG: Script schließen -->
+
 
 
 <script>
@@ -4569,16 +4570,25 @@ window.restoreOptionsIfEmpty = window.restoreOptionsIfEmpty || restoreOptionsIfE
     docObserver.observe(document.body, { childList: true, subtree: true });
   }
 
-  function onMachineChange(){
-    // Nach Maschinenwechsel bauen andere Skripte evtl. um → kurze Pause, dann sichern/auffüllen
-    setTimeout(()=>{
-      const sel = byId("wpTaskSelect");
-      if (!sel) return;
-      takeSnapshotForMachine(sel);  // pro Maschine speichern
-      restoreOptionsIfEmpty(sel);
-      ensurePlaceholder(sel);
-    }, 150);
-  }
+function onMachineChange(){
+  setTimeout(()=>{
+    const sel = byId("wpTaskSelect");
+    if (!sel) return;
+
+    if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+    if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+    if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+
+    // Wenn danach noch leer: normal aus den Plänen befüllen
+    if ((!sel.options || sel.options.length === 0) &&
+        typeof rebuildWpTaskSelectFromPlans === "function") {
+      if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+        ensureNotEmpty();
+      }
+    }
+  }, 150);
+}
+
 
   window.addEventListener("load", ()=>{
     attachToSelect();
@@ -4590,13 +4600,25 @@ byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
     setTimeout(()=>{
       const sel = byId("wpTaskSelect");
       if (!sel) return;
-      takeSnapshotForMachine(sel);
-      restoreOptionsIfEmpty(sel);
-      ensurePlaceholder(sel);
+   if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+
+// Falls das Select danach noch leer ist -> normal aus den Plänen befüllen
+if ((!sel.options || sel.options.length === 0) &&
+    typeof rebuildWpTaskSelectFromPlans === "function") {
+  if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+    ensureNotEmpty();
+  }
+}
+
     }, 150);
   });
 });                 // Ende: window.addEventListener("load", ...)
-</script>
+})();               // Ende der IIFE
+</script><!-- script schließen -->
+
+
 
 <script>
 /* ===== Overdue-Alarm für Wartung: Badge + Hinweis + optionaler Beep =====
