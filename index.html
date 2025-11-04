@@ -937,73 +937,7 @@ window.wpLogLoad = window.wpLogLoad || loadWpLog;
 
 
 
-  function norm(s){ return String(s || "").toLowerCase(); }
-  function dateInRange(d, a, b){
-    if (!d) return true;
-    if (a && d < a) return false;
-    if (b && d > b) return false;
-    return true;
-  }
 
-  var data = raw.filter(function(e){
-    var date     = e.date || e.dateISO || "";
-    var machine  = e.machine || e.maschine || "";
-    var taskName = e.task || e.taskName || "";
-
-    if (!dateInRange(String(date), from, to)) return false;
-    if (mach && !norm(machine).includes(mach)) return false;
-    if (task && !norm(taskName).includes(task)) return false;
-
-    if (tech){
-      var u = (typeof getSignedInUser === "function") ? getSignedInUser() : {name:"", email:"", upn:""};
-      var haystack = [
-        e.tech, e.techEmail, e.technician, e.technicianEmail, e.technicianUpn,
-        (!e.tech && !e.technician ? u.name : ""),
-        (!e.techEmail && !e.technicianEmail ? u.email : ""),
-        (!e.technicianUpn ? u.upn : "")
-      ].filter(Boolean).map(norm).join(" ");
-      if (!haystack.includes(tech)) return false;
-    }
-    return true;
-  }).sort(function(a,b){
-    return String((b.date||b.dateISO)||"").localeCompare(String((a.date||a.dateISO)||""));
-  });
-
-  // Render
-  tbody.innerHTML = "";
-  if (!data.length) {
-    if (empty) empty.style.display = "block";
-    return;
-  }
-  if (empty) empty.style.display = "none";
-
-  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
-    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-  }); }
-
-  var currentUser = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
-
-  tbody.innerHTML = data.map(function(e){
-    var date     = e.date || e.dateISO || "";
-    var machine  = e.machine || e.maschine || "";
-    var taskName = e.task || e.taskName || "";   // ← zeigt wieder deine „Schmierstelle/Aufgabe“
-    var interval = (e.interval != null ? e.interval : e.intervalDays);
-    var nipCount = (e.nipCount != null ? e.nipCount : e.nipples);
-
-    var techCell = (e.tech && e.tech.trim()) ? e.tech :
-                   (e.technician && e.technician.trim()) ? e.technician :
-                   (currentUser && currentUser.name ? currentUser.name : "–");
-
-    return "<tr>"
-      + "<td>"+esc(date)+"</td>"
-      + "<td>"+esc(machine)+"</td>"
-      + "<td>"+esc(taskName)+"</td>"
-      + "<td>"+esc(interval == null || interval === "" ? "" : interval)+"</td>"
-      + "<td>"+esc(nipCount == null || nipCount === "" ? "" : nipCount)+"</td>"
-      + "<td>"+esc(techCell)+"</td>"
-      + "</tr>";
-  }).join("");
-}
 
 
 
