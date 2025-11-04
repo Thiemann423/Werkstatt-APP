@@ -714,15 +714,35 @@ window.addEventListener('load', function () {
 const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
 /* → Anzeigenamen aus Microsoft-Login ableiten */
 // Anzeigename aus User-Objekt oder E-Mail ableiten
-function displayNameFromUser(u){
-  if (!u) return "";
-  const n = (u.name || u.displayName || "").trim();
-  if (n) return n;
-  const mail = (u.upn || u.email || "").trim();
-  if (!mail) return "";
-  const id = mail.split("@")[0];
-  return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+/* 🔧 Robuster Anzeigenamen-Helper */
+function displayNameFromUser(u) {
+  if (!u || typeof u !== "object") u = {};
+  var name = (u.name || "").trim();
+  var email = (u.email || "").trim();
+  var upn = (u.upn || "").trim();
+
+  // 1️⃣ Wenn Name schon gesetzt → fertig
+  if (name) return name;
+
+  // 2️⃣ Falls Email vorhanden → "vorname nachname" bauen
+  var src = email || upn;
+  if (src) {
+    var id = src.split("@")[0];
+    return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // 3️⃣ Falls nichts → aus DOM oder Cookies raten (MS-Login im Browser)
+  var body = document.body.innerText || "";
+  var match = body.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (match && match[0]) {
+    var id2 = match[0].split("@")[0];
+    return id2.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // 4️⃣ Fallback
+  return "Unbekannt";
 }
+
 
 // E-Mail → schöner Name (Fallback)
 function nameFromEmail(email){
