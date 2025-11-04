@@ -711,23 +711,42 @@ window.addEventListener('load', function () {
 
 <script>
 /* ========= Wartungs-Log: Speicherung + Anzeige (localStorage) ========= */
-const WP_STORAGE_KEY = "wpLog";
+const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
 
+
+/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 /* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 function _saveAll(list){
   try {
     localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || []));
   } catch(e){
-    window.__memLog = (list || []).slice(); // überlebt Reload nicht, verhindert aber „leeres Dashboard“
+    // Fallback: speichere im RAM, damit das Dashboard nicht leer wirkt
+    window.__memLog = (list || []).slice();
   }
 }
-// Robust aus localStorage laden
+
 function _loadAll(){
-  try {
-    var raw = localStorage.getItem("TE15_WARTUNGSLOG");
-    return raw ? JSON.parse(raw) : [];
-  } catch(e){ return []; }
+  // 1) RAM-Fallback zuerst (falls _saveAll() dorthin schreiben musste)
+  if (Array.isArray(window.__memLog)) return window.__memLog.slice();
+
+  // 2) Normalfall: aus localStorage lesen
+  try{
+    const raw = localStorage.getItem(WP_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const data = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch(parseErr){
+      // defekter JSON – zurücksetzen, damit UI wieder funktioniert
+      localStorage.removeItem(WP_STORAGE_KEY);
+      return [];
+    }
+  }catch(e){
+    // 3) Wenn selbst getItem wirft (extremer Privacy-Mode)
+    return Array.isArray(window.__memLog) ? window.__memLog.slice() : [];
+  }
 }
+
 
 function saveWpTask() {
   // Datum (YYYY-MM-DD)
