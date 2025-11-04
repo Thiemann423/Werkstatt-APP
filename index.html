@@ -4097,8 +4097,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   } catch(e) {}
 
-});                 <!-- Ende: DOMContentLoaded -->
-</script>           <!-- Script schließen -->
+});                 // Ende: DOMContentLoaded
+</script>
+
 
 
 
@@ -4458,7 +4459,6 @@ window.todayISO = window.todayISO || function () {
   });
 })();
 
-// === 2) Schutz für leeren Schmierstellen-Select (wpTaskSelect) – robust & pro Maschine ===
 (function(){
   const byId = (id)=>document.getElementById(id);
   const PLACEHOLDER_TEXT = "Bitte auswählen";
@@ -4470,66 +4470,57 @@ window.todayISO = window.todayISO || function () {
   let restoring = false;
 
   function norm(s){ return String(s||"").trim().toLowerCase(); }
+  function getMachineKey(){ return byId("maschine")?.value || "__default__"; }
 
-  function getMachineKey(){
-    return byId("maschine")?.value || "__default__";
-  }
-
- function takeSnapshotForMachine(sel){
-  if (!sel || !sel.options.length) return;
-  const key  = getMachineKey();
-  const snap = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
-  SNAPSHOT_BY_MACHINE.set(key, snap);
-}
-// global verfügbar machen
-window.takeSnapshotForMachine = window.takeSnapshotForMachine || takeSnapshotForMachine;
-
-function ensurePlaceholder(sel){
-  if (!sel) return;
-  const PLACEHOLDER_TEXT = "Bitte auswählen";
-  if (!sel.options.length){
-    sel.add(new Option(PLACEHOLDER_TEXT, ""));
-    sel.value = "";
-    return;
-  }
-  const norm = s => String(s||"").trim().toLowerCase();
-  const first = sel.options[0];
-  if (!first || norm(first.textContent) !== norm(PLACEHOLDER_TEXT)){
-    const hasPH = Array.from(sel.options).some(o => norm(o.textContent) === norm(PLACEHOLDER_TEXT) && o.value === "");
-    if (!hasPH) sel.insertBefore(new Option(PLACEHOLDER_TEXT, ""), sel.firstChild);
-    sel.value = "";
-  }
-}
-// global verfügbar machen
-window.ensurePlaceholder = window.ensurePlaceholder || ensurePlaceholder;
-
-
-function restoreOptionsIfEmpty(sel){
-  if (!sel || restoring) return;
-  if (sel.options.length > 0) return;
-
-  restoring = true;
-  try{
+  /* ---------- Helfer ---------- */
+  function takeSnapshotForMachine(sel){
+    if (!sel || !sel.options.length) return;
     const key  = getMachineKey();
-    const snap = SNAPSHOT_BY_MACHINE.get(key) || SNAPSHOT_BY_MACHINE.get("__default__");
-    if (snap && snap.length){
-      sel.innerHTML = "";
-      snap.forEach(o => sel.add(new Option(o.t, o.v)));
-      ensurePlaceholder(sel);
-    } else {
-      sel.innerHTML = "";
-      ensurePlaceholder(sel);
+    const snap = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
+    SNAPSHOT_BY_MACHINE.set(key, snap);
+  }
+
+  function ensurePlaceholder(sel){
+    if (!sel) return;
+    if (!sel.options.length){
+      sel.add(new Option(PLACEHOLDER_TEXT, ""));
+      sel.value = "";
+      return;
     }
-  } finally { restoring = false; }
-}
-// global verfügbar machen
-window.restoreOptionsIfEmpty = window.restoreOptionsIfEmpty || restoreOptionsIfEmpty;
+    const first = sel.options[0];
+    if (!first || norm(first.textContent) !== norm(PLACEHOLDER_TEXT)){
+      const hasPH = Array.from(sel.options)
+        .some(o => norm(o.textContent) === norm(PLACEHOLDER_TEXT) && o.value === "");
+      if (!hasPH) sel.insertBefore(new Option(PLACEHOLDER_TEXT, ""), sel.firstChild);
+      sel.value = "";
+    }
+  }
+
+  function restoreOptionsIfEmpty(sel){
+    if (!sel || restoring) return;
+    if (sel.options.length > 0) return;
+
+    restoring = true;
+    try{
+      const key  = getMachineKey();
+      const snap = SNAPSHOT_BY_MACHINE.get(key) || SNAPSHOT_BY_MACHINE.get("__default__");
+      sel.innerHTML = "";
+      if (snap && snap.length){
+        snap.forEach(o => sel.add(new Option(o.t, o.v)));
+      }
+      ensurePlaceholder(sel);
+    } finally { restoring = false; }
+  }
+
+  // ⤵️ global verfügbar machen (wichtig für iPad/Safari)
+  window.takeSnapshotForMachine = window.takeSnapshotForMachine || takeSnapshotForMachine;
+  window.restoreOptionsIfEmpty  = window.restoreOptionsIfEmpty  || restoreOptionsIfEmpty;
+  window.ensurePlaceholder      = window.ensurePlaceholder      || ensurePlaceholder;
 
   function attachChildObserver(sel){
     if (!sel) return;
     if (childObserver) childObserver.disconnect();
     childObserver = new MutationObserver(() => {
-      // Wenn geleert wurde → wiederherstellen
       if (!sel.options.length) restoreOptionsIfEmpty(sel);
     });
     childObserver.observe(sel, { childList: true });
@@ -4540,16 +4531,27 @@ window.restoreOptionsIfEmpty = window.restoreOptionsIfEmpty || restoreOptionsIfE
     if (!sel) return false;
     currentSelect = sel;
 
-    // Nach kleinem Delay snappen (falls ein anderes Skript gerade befüllt)
+    // Nach kleinem Delay snappen (falls anderes Skript gerade befüllt)
     setTimeout(()=>{
       // Default-Snapshot einmalig merken
       if (!SNAPSHOT_BY_MACHINE.has("__default__") && sel.options.length){
-        SNAPSHOT_BY_MACHINE.set("__default__", Array.from(sel.options).map(o => ({v:o.value, t:o.textContent})));
+        SNAPSHOT_BY_MACHINE.set(
+          "__default__", Array.from(sel.options).map(o => ({v:o.value, t:o.textContent}))
+        );
       }
 
       takeSnapshotForMachine(sel);
-      restoreOptionsIfEmpty(sel);  // falls leer → wieder befüllen
+      restoreOptionsIfEmpty(sel);       // falls leer → wieder befüllen
       ensurePlaceholder(sel);
+
+      // Fallback: wenn danach noch leer, aus Plänen befüllen
+      if ((!sel.options || sel.options.length === 0) &&
+          typeof rebuildWpTaskSelectFromPlans === "function") {
+        if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+          ensureNotEmpty();
+        }
+      }
+
       attachChildObserver(sel);
     }, 150);
 
@@ -4562,65 +4564,69 @@ window.restoreOptionsIfEmpty = window.restoreOptionsIfEmpty || restoreOptionsIfE
       const sel = byId("wpTaskSelect");
       if (sel && sel !== currentSelect){
         currentSelect = sel;
-        // Bei Ersatz: erneut Snapshot/Fallback setzen
         takeSnapshotForMachine(sel);
         restoreOptionsIfEmpty(sel);
         ensurePlaceholder(sel);
+
+        // Fallback auch hier
+        if ((!sel.options || sel.options.length === 0) &&
+            typeof rebuildWpTaskSelectFromPlans === "function") {
+          if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+            ensureNotEmpty();
+          }
+        }
+
         attachChildObserver(sel);
       }
     });
     docObserver.observe(document.body, { childList: true, subtree: true });
   }
 
-function onMachineChange(){
-  setTimeout(()=>{
-    const sel = byId("wpTaskSelect");
-    if (!sel) return;
+  function onMachineChange(){
+    setTimeout(()=>{
+      const sel = byId("wpTaskSelect");
+      if (!sel) return;
 
-    if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
-    if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
-    if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+      if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+      if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+      if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
 
-    // Wenn danach noch leer: normal aus den Plänen befüllen
-    if ((!sel.options || sel.options.length === 0) &&
-        typeof rebuildWpTaskSelectFromPlans === "function") {
-      if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
-        ensureNotEmpty();
+      if ((!sel.options || sel.options.length === 0) &&
+          typeof rebuildWpTaskSelectFromPlans === "function") {
+        if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+          ensureNotEmpty();
+        }
       }
-    }
-  }, 150);
-}
+    }, 150);
+  }
 
-
+  /* ---------- Wiring ---------- */
   window.addEventListener("load", ()=>{
     attachToSelect();
     watchForReplacement();
 
     byId("maschine")?.addEventListener("change", onMachineChange);
 
-byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-    setTimeout(()=>{
-      const sel = byId("wpTaskSelect");
-      if (!sel) return;
-   if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
-if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
-if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+      setTimeout(()=>{
+        const sel = byId("wpTaskSelect");
+        if (!sel) return;
 
-// Falls das Select danach noch leer ist -> normal aus den Plänen befüllen
-if ((!sel.options || sel.options.length === 0) &&
-    typeof rebuildWpTaskSelectFromPlans === "function") {
-  if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
-    ensureNotEmpty();
-  }
-}
+        if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+        if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+        if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
 
-    }, 150);
+        if ((!sel.options || sel.options.length === 0) &&
+            typeof rebuildWpTaskSelectFromPlans === "function") {
+          if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") {
+            ensureNotEmpty();
+          }
+        }
+      }, 150);
+    });
   });
-});                 // Ende: window.addEventListener("load", ...)
-})();               // Ende der IIFE
-</script><!-- script schließen -->
-
-
+})();
+</script>
 
 <script>
 /* ===== Overdue-Alarm für Wartung: Badge + Hinweis + optionaler Beep =====
