@@ -713,16 +713,24 @@ window.addEventListener('load', function () {
 /* ========= Wartungs-Log: Speicherung + Anzeige (localStorage) ========= */
 const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
 /* → Anzeigenamen aus Microsoft-Login ableiten */
+// Anzeigename aus User-Objekt oder E-Mail ableiten
 function displayNameFromUser(u){
   if (!u) return "";
   const n = (u.name || u.displayName || "").trim();
   if (n) return n;
-  const id = (u.upn || u.email || "").split("@")[0] || "";
-  if (!id) return "";
+  const mail = (u.upn || u.email || "").trim();
+  if (!mail) return "";
+  const id = mail.split("@")[0];
   return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
+// E-Mail → schöner Name (Fallback)
+function nameFromEmail(email){
+  if (!email) return "";
+  const id = String(email).split("@")[0] || "";
+  return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 /* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 function _saveAll(list){
   try {
@@ -761,13 +769,37 @@ function saveWpTask() {
   var d = new Date();
   var todayISO = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 
-  // MS-User (nur aus Login, nicht aus Formular)
+  // --- Techniker aus Login + Fallbacks ---
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
-  var tech      = displayNameFromUser(u);   // nutzt die Helper-Funktion
+
+  // Helper: falls nameFromEmail() global nicht existiert
+  function _nameFromEmail(email){
+    if (!email) return "";
+    var id = String(email).split("@")[0] || "";
+    return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  var tech      = (typeof displayNameFromUser === "function") ? displayNameFromUser(u) : (u.name || "");
   var techEmail = u.email || "";
   var techUpn   = u.upn   || "";
 
-  // Felder
+  // Fallback 1: Eingabefeld, wenn Login leer war
+  if (!tech) {
+    var elTech = document.getElementById("techniker1");
+    if (elTech && elTech.value) tech = String(elTech.value).trim();
+  }
+  // Fallback 2: aus einer gefundenen E-Mail ableiten
+  if (!tech) {
+    var mail = techEmail || techUpn;
+    if (!mail) {
+      var m = (document.body.innerText || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      if (m && m[0]) mail = m[0];
+    }
+    if (mail) tech = _nameFromEmail(mail);
+  }
+  if (!tech) tech = "Unbekannt"; // letzte Absicherung
+
+  // --- Form-Felder ---
   var elMachine  = document.getElementById("maschine");
   var elTask     = document.getElementById("wpTaskSelect");
   var elInterval = document.getElementById("wpIntervalDays");
@@ -797,7 +829,7 @@ function saveWpTask() {
     technicianUpn: techUpn
   };
 
-  // Laden, hinzufügen, speichern (mit iPad-Fallback in _saveAll)
+  // Laden, hinzufügen, speichern
   var list = _loadAll();
   if (!Array.isArray(list)) list = [];
   list.push(entry);
@@ -811,6 +843,7 @@ function saveWpTask() {
 
   alert("Wartung gespeichert!");
 }
+
 
 
 
