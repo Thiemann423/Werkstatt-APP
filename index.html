@@ -4109,30 +4109,33 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 
-// 🔐 Nach Login automatisch Banner + Warnungen aktualisieren
+<script>
+// 🔐 Nach Login automatisch Banner + Warnungen aktualisieren (ohne Optional-Chaining)
 (function hookLogin(){
-  const orig = window.signInAndAcquireToken;
+  var orig = window.signInAndAcquireToken;
   if (typeof orig === "function"){
-    window.signInAndAcquireToken = async function(...args){
-      const r = await orig.apply(this, args);
+    window.signInAndAcquireToken = async function(){
+      var r = await orig.apply(this, arguments);
       try {
-        await wpLoad();
-        wpBuildIndex?.();
-        wpRefreshTaskList?.();
-        wpStatusUpdateForTask?.(wpCurrentTask?.());
-        wpEvalWarning?.();
-
-        // Banner nach Login sofort aktualisieren
-        wpUpdateGlobalBanner?.();
-
-        // Optional: beim Login Mail-Benachrichtigung erlauben
-        wpCheckOverdueAndNotify?.({ sendMail:true });
+        if (typeof window.wpLoad === "function")            { await window.wpLoad(); }
+        if (typeof window.wpBuildIndex === "function")      { window.wpBuildIndex(); }
+        if (typeof window.wpRefreshTaskList === "function"){ window.wpRefreshTaskList(); }
+        if (typeof window.wpCurrentTask === "function" &&
+            typeof window.wpStatusUpdateForTask === "function"){
+              window.wpStatusUpdateForTask(window.wpCurrentTask());
+        }
+        if (typeof window.wpEvalWarning === "function")     { window.wpEvalWarning(); }
+        if (typeof window.wpUpdateGlobalBanner === "function"){ window.wpUpdateGlobalBanner(); }
+        if (typeof window.wpCheckOverdueAndNotify === "function"){
+          window.wpCheckOverdueAndNotify({ sendMail:true });
+        }
       } catch(e){}
       return r;
     };
   }
 })();
 </script>
+
 
 <script>
 
@@ -4478,49 +4481,55 @@ window.todayISO = window.todayISO || function () {
     return byId("maschine")?.value || "__default__";
   }
 
-  function takeSnapshotForMachine(sel){
-    if (!sel || !sel.options.length) return;
-    const key = getMachineKey();
-    const snap = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
-    SNAPSHOT_BY_MACHINE.set(key, snap);
-  }
+ function takeSnapshotForMachine(sel){
+  if (!sel || !sel.options.length) return;
+  const key  = getMachineKey();
+  const snap = Array.from(sel.options).map(o => ({ v:o.value, t:o.textContent }));
+  SNAPSHOT_BY_MACHINE.set(key, snap);
+}
+// global verfügbar machen
+window.takeSnapshotForMachine = window.takeSnapshotForMachine || takeSnapshotForMachine;
 
-  function ensurePlaceholder(sel){
-    if (!sel) return;
-    if (!sel.options.length){
-      sel.add(new Option(PLACEHOLDER_TEXT, ""));
-      sel.value = "";
-      return;
+function ensurePlaceholder(sel){
+  if (!sel) return;
+  const PLACEHOLDER_TEXT = "Bitte auswählen";
+  if (!sel.options.length){
+    sel.add(new Option(PLACEHOLDER_TEXT, ""));
+    sel.value = "";
+    return;
+  }
+  const norm = s => String(s||"").trim().toLowerCase();
+  const first = sel.options[0];
+  if (!first || norm(first.textContent) !== norm(PLACEHOLDER_TEXT)){
+    const hasPH = Array.from(sel.options).some(o => norm(o.textContent) === norm(PLACEHOLDER_TEXT) && o.value === "");
+    if (!hasPH) sel.insertBefore(new Option(PLACEHOLDER_TEXT, ""), sel.firstChild);
+    sel.value = "";
+  }
+}
+// global verfügbar machen
+window.ensurePlaceholder = window.ensurePlaceholder || ensurePlaceholder;
+
+
+function restoreOptionsIfEmpty(sel){
+  if (!sel || restoring) return;
+  if (sel.options.length > 0) return;
+
+  restoring = true;
+  try{
+    const key  = getMachineKey();
+    const snap = SNAPSHOT_BY_MACHINE.get(key) || SNAPSHOT_BY_MACHINE.get("__default__");
+    if (snap && snap.length){
+      sel.innerHTML = "";
+      snap.forEach(o => sel.add(new Option(o.t, o.v)));
+      ensurePlaceholder(sel);
+    } else {
+      sel.innerHTML = "";
+      ensurePlaceholder(sel);
     }
-    const first = sel.options[0];
-    if (!first || norm(first.textContent) !== norm(PLACEHOLDER_TEXT)){
-      // nur hinzufügen, wenn nicht schon vorhanden
-      const hasPH = Array.from(sel.options).some(o => norm(o.textContent) === norm(PLACEHOLDER_TEXT) && o.value === "");
-      if (!hasPH) sel.insertBefore(new Option(PLACEHOLDER_TEXT, ""), sel.firstChild);
-      sel.value = "";
-    }
-  }
-
-  function restoreOptionsIfEmpty(sel){
-    if (!sel || restoring) return;
-    if (sel.options.length > 0) return;
-
-    restoring = true;
-    try{
-      const key = getMachineKey();
-      const snap = SNAPSHOT_BY_MACHINE.get(key) || SNAPSHOT_BY_MACHINE.get("__default__");
-
-      if (snap && snap.length){
-        sel.innerHTML = "";
-        snap.forEach(o => sel.add(new Option(o.t, o.v)));
-        ensurePlaceholder(sel);
-      } else {
-        // Minimal-Variante
-        sel.innerHTML = "";
-        ensurePlaceholder(sel);
-      }
-    } finally { restoring = false; }
-  }
+  } finally { restoring = false; }
+}
+// global verfügbar machen
+window.restoreOptionsIfEmpty = window.restoreOptionsIfEmpty || restoreOptionsIfEmpty;
 
   function attachChildObserver(sel){
     if (!sel) return;
@@ -4963,7 +4972,20 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
   safe(function(){ if (typeof wpRefreshOverdueUI === "function") wpRefreshOverdueUI(); });
 })();
 </script>
+  <script>
+  // Kompatibilität zu älteren Aufrufen
+  window.wpLoad = window.wpLoad || function(){
+    try {
+      if (typeof wpLogLoad === "function") wpLogLoad();
+    } catch(e){}
+  };
 
+  window.wpSave = window.wpSave || function(entry){
+    try {
+      if (typeof wpLogExecution === "function") wpLogExecution(entry);
+    } catch(e){}
+  };
+  </script>
 
 
 
