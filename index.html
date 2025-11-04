@@ -726,10 +726,7 @@ function displayNameFromUser(u){
 
 // E-Mail → schöner Name (Fallback)
 function nameFromEmail(email){
-  if (!email) return "";
-  const id = String(email).split("@")[0] || "";
-  return id.replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
+
 
 /* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
 function _saveAll(list){
@@ -772,7 +769,6 @@ function saveWpTask() {
   // --- Techniker aus Login + Fallbacks ---
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
 
-  // Helper: falls nameFromEmail() global nicht existiert
   function _nameFromEmail(email){
     if (!email) return "";
     var id = String(email).split("@")[0] || "";
@@ -797,7 +793,7 @@ function saveWpTask() {
     }
     if (mail) tech = _nameFromEmail(mail);
   }
-  if (!tech) tech = "Unbekannt"; // letzte Absicherung
+  if (!tech || !tech.trim()) tech = "Unbekannt"; // letzte Absicherung
 
   // --- Form-Felder ---
   var elMachine  = document.getElementById("maschine");
@@ -832,8 +828,16 @@ function saveWpTask() {
   // Laden, hinzufügen, speichern
   var list = _loadAll();
   if (!Array.isArray(list)) list = [];
-  list.push(entry);
+
+  // DEBUG: prüfe, was wirklich gespeichert wird
+  console.log("WP-DEBUG tech", { u, tech, techEmail, techUpn, entry, listLenBefore: list.length });
+
+  list.push(entry); // <— hier wird jetzt garantiert ein Name mitgespeichert
   _saveAll(list);
+
+  // sichtbares Feld auf den tatsächlich verwendeten Namen setzen
+  var tf = document.getElementById("techniker1");
+  if (tf) { tf.value = tech; }
 
   // UI aktualisieren
   try {
@@ -843,6 +847,7 @@ function saveWpTask() {
 
   alert("Wartung gespeichert!");
 }
+
 
 
 
@@ -1061,15 +1066,23 @@ window.addEventListener("load", function(){
   var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
   for (var i=0; i<ids.length; i++){
     var el = document.getElementById(ids[i]);
-    if (el) el.addEventListener("input", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
+    if (el) el.addEventListener("input", function(){
+      if (typeof loadWpLog==="function") loadWpLog();
+    });
   }
 
-  // Falls Panel beim Start schon sichtbar ist
+  // ⚙️ Einmaliger Backfill (fehlende Techniker-Namen auffüllen), dann initiales Rendern
+  try {
+    if (typeof wpBackfillTechnicians === "function") wpBackfillTechnicians();
+  } catch(e) { console.warn("Backfill beim Start fehlgeschlagen:", e); }
+
+  // Falls Panel beim Start schon sichtbar ist → rendern
   var panel = document.getElementById("wpLogPanel");
   if (panel && panel.style.display !== "none") {
     if (typeof loadWpLog === "function") loadWpLog();
   }
 });
+
 
 </script>
 <!-- ✅ END: Wartungs-Dashboard (Log) + Logik -->
