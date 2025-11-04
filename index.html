@@ -3577,26 +3577,29 @@ function wpEnsureMachineKey(name){
 }
 
 /* ---------- Aufgabenliste für gewählte Maschine ---------- */
-function wpRefreshTaskList(){
+function wpRefreshTaskList() {
   const { selTask, selMaschine } = wpEls();
   if (!selTask) return;
 
-  const mRaw  = (selMaschine?.value || '').trim();
+  // iPad-kompatibel: kein ?. mehr
+  const mRaw = ((selMaschine && selMaschine.value) ? selMaschine.value : '').trim();
   const mNorm = wpNorm(mRaw);
 
-  const direct = wartungsplaene[mRaw] || [];
-  const idx    = _wpIdx[mNorm] || [];
-  const tasks  = direct.length ? direct : idx;
+  const direct = (wartungsplaene && wartungsplaene[mRaw]) ? wartungsplaene[mRaw] : [];
+  const idx    = (_wpIdx && _wpIdx[mNorm]) ? _wpIdx[mNorm] : [];
+  const tasks  = (direct.length ? direct : idx) || [];
 
-  selTask.innerHTML = '<option value="">Bitte auswählen</option>' +
-    tasks.map(t => 
-      `<option value="${t.id||''}" data-interval="${t.intervalDays||''}" data-nipples="${t.nipples||''}">
-         ${t.name||''}
+  selTask.innerHTML =
+    '<option value="">Bitte auswählen</option>' +
+    tasks.map(t =>
+      `<option value="${(t && t.id) || ''}" data-interval="${(t && t.intervalDays) || ''}" data-nipples="${(t && t.nipples) || ''}">
+         ${(t && t.name) || ''}
        </option>`
     ).join('');
 
-  wpStatusUpdateForTask(null);
+  if (typeof wpStatusUpdateForTask === 'function') wpStatusUpdateForTask(null);
 }
+
 
 /* ---------- Aktuell gewählten Task bestimmen ---------- */
 function wpCurrentTask(){
@@ -3624,13 +3627,18 @@ function wpStatusUpdateForTask(task){
   };
   if (!task) return clear();
 
+  // interval ermitteln
   let inter = toInt(task.intervalDays, "");
   const lastIso = isIsoDate(task.lastDateISO) ? task.lastDateISO : "";
 
   if (!inter || inter === 0){
     try {
-      inter = wpMailRuleInterval(selMaschine?.value || "", task.name || "") || 28;
-    } catch { inter = 28; }
+      const mVal = (selMaschine && selMaschine.value) ? selMaschine.value : "";
+      const tName = task && task.name ? task.name : "";
+      inter = wpMailRuleInterval(mVal, tName) || 28;
+    } catch (e) {
+      inter = 28;
+    }
   }
 
   if (interval) interval.value = inter;
@@ -3639,8 +3647,11 @@ function wpStatusUpdateForTask(task){
   const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
   if (next) next.value = nextVal;
 
-  // ✅ Schmiernippel übernehmen
-  if (nip) nip.value = task.nipples ?? "";
+  // Schmiernippel übernehmen (kein ??)
+  if (nip) {
+    const n = (task.nipples === null || task.nipples === undefined) ? "" : task.nipples;
+    nip.value = n;
+  }
 
   const st = wpStatus(nextVal || "");
   if (pill) {
@@ -3649,6 +3660,7 @@ function wpStatusUpdateForTask(task){
     pill.style.color = st.fg;
   }
 }
+
 
 /* ---------- Fälligkeiten & Banner ---------- */
 function wpOverdueTasks(machineName){
@@ -3816,19 +3828,31 @@ function wpEvalWarning(){
 }
 
 /* ---------- Recalc ---------- */
-function wpRecalcNext(){
-  const { interval, last, next, pill } = wpEls();
-  const inter   = toInt(interval?.value || 0, 0);
-  const lastIso = isIsoDate(last?.value) ? last.value : "";
-  if (next) next.value = inter > 0 && lastIso ? wpComputeNext(lastIso, inter) : "";
+function wpRecalc() {
+  const { interval, last, next, pill, nip } = wpEls();
 
-  const st = wpStatus(next?.value || "");
-  if (pill){
-    pill.textContent      = st.label;
+  // Werte lesen (ohne Optional Chaining)
+  const inter   = toInt(((interval && interval.value) || 0), 0);
+  const lastIso = (last && isIsoDate(last.value)) ? last.value : "";
+
+  // Nächstes Fälligkeitsdatum bestimmen
+  const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
+  if (next) next.value = nextVal;
+
+  // (Optional) Nippel aus Feld normalisieren – kein Nullish-Coalescing
+  if (nip && typeof nip.value !== "undefined") {
+    nip.value = (nip.value === null || typeof nip.value === "undefined") ? "" : String(nip.value);
+  }
+
+  // Status/Pill aktualisieren
+  const st = wpStatus(nextVal || "");
+  if (pill) {
+    pill.textContent = st.label;
     pill.style.background = st.bg;
-    pill.style.color      = st.fg;
+    pill.style.color = st.fg;
   }
 }
+
 
   /* ---------- Helpers & Warning (einmal global) ---------- */
 function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
