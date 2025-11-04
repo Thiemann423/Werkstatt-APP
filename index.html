@@ -3726,7 +3726,6 @@ function wpUpdateGlobalBanner(){
   const { selMaschine } = wpEls();
   const selected = ((selMaschine && selMaschine.value) ? selMaschine.value : "").trim();
 
-
   // Wenn eine Maschine gewählt ist: bisheriges Verhalten
   if (selected){
     const list = wpOverdueTasks(selected);
@@ -3745,7 +3744,7 @@ function wpUpdateGlobalBanner(){
   }
 
   // Keine Maschine gewählt → global prüfen
-  const all = wpOverdueAll();
+  const all   = wpOverdueAll();
   const total = all.reduce((a, x) => a + x.overdue.length, 0);
 
   if (!total){
@@ -3753,9 +3752,9 @@ function wpUpdateGlobalBanner(){
     return;
   }
 
-  const first = all[0];
+  const first      = all[0];
   const firstNames = first.overdue.map(t => t.name).slice(0,3).join(', ');
-  const rest = total - first.overdue.length;
+  const rest       = total - first.overdue.length;
 
   const msgEl = banner.querySelector('[data-msg]');
   if (msgEl){
@@ -3766,90 +3765,75 @@ function wpUpdateGlobalBanner(){
   }
   banner.style.display = "flex";
 
-// Optional: Wenn der Banner-Button „Wartung öffnen“ existiert,
-// und noch keine Maschine gewählt ist, wähle beim Klick die erste betroffene.
-var openBtn = document.getElementById('wpOpenFromBanner') || (banner && banner.querySelector && banner.querySelector('[data-open]'));
-if (openBtn){
-  openBtn.onclick = function () {
-    try{
-      var els = (typeof wpEls === "function") ? wpEls() : {};
-      var selMaschine = els ? els.selMaschine : null;
+  // Optional: Wenn der Banner-Button „Wartung öffnen“ existiert,
+  // und noch keine Maschine gewählt ist, wähle beim Klick die erste betroffene.
+  var openBtn = document.getElementById('wpOpenFromBanner') ||
+                (banner && banner.querySelector && banner.querySelector('[data-open]'));
 
-      // "first" muss vorher aus deiner Due-Liste kommen; hier robust prüfen:
-      if (selMaschine && !selMaschine.value && first && first.machine){
-        // 1) exakter Name
-        selMaschine.value = first.machine;
+  if (openBtn){
+    openBtn.onclick = function () {
+      try{
+        var els = (typeof wpEls === "function") ? wpEls() : {};
+        var selMaschine = els ? els.selMaschine : null;
 
-        // 2) falls nicht exakt vorhanden: suche per Normalisierung
-        if (selMaschine.value !== first.machine){
-          var norm = typeof wpNorm === "function" ? wpNorm(first.machine) : String(first.machine||"").toLowerCase().trim();
-          var opt = Array.prototype.slice.call(selMaschine.options || []).find(function(o){
-            var ov = (typeof wpNorm === "function" ? wpNorm(o.value) : String(o.value||"").toLowerCase().trim());
-            var ot = (typeof wpNorm === "function" ? wpNorm(o.textContent||"") : String(o.textContent||"").toLowerCase().trim());
-            return ov === norm || ot === norm;
-          });
-          if (opt) selMaschine.value = opt.value;
+        if (selMaschine && !selMaschine.value && first && first.machine){
+          // 1) exakter Name
+          selMaschine.value = first.machine;
+
+          // 2) falls nicht exakt vorhanden: suche per Normalisierung
+          if (selMaschine.value !== first.machine){
+            var norm = (typeof wpNorm === "function") ? wpNorm(first.machine)
+                                                      : String(first.machine||"").toLowerCase().trim();
+            var opt = Array.prototype.slice.call(selMaschine.options || []).find(function(o){
+              var ov = (typeof wpNorm === "function") ? wpNorm(o.value)       : String(o.value||"").toLowerCase().trim();
+              var ot = (typeof wpNorm === "function") ? wpNorm(o.textContent||"") : String(o.textContent||"").toLowerCase().trim();
+              return ov === norm || ot === norm;
+            });
+            if (opt) selMaschine.value = opt.value;
+          }
+
+          // Change-Event feuern
+          try {
+            selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
+          } catch(_){
+            var evt = document.createEvent('HTMLEvents');
+            evt.initEvent('change', true, false);
+            selMaschine.dispatchEvent(evt);
+          }
         }
+      } catch(e){ /* schlucken, UI geht weiter */ }
 
-        // Change-Event feuern
-        try {
-          selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
-        } catch(_){
-          // Fallback für ältere Browser
-          var evt = document.createEvent('HTMLEvents');
-          evt.initEvent('change', true, false);
-          selMaschine.dispatchEvent(evt);
-        }
+      // Panel öffnen
+      var panel = document.getElementById('wartungsplanPanel');
+      if (panel && panel.style) panel.style.display = 'block';
+
+      var headBtn = document.getElementById('wartungToggleHead');
+      if (headBtn) headBtn.textContent = '🛠️ Wartung (zu)';
+
+      // Scrollen – iPad-kompatibel
+      var sec = document.getElementById('wartungsplanSection');
+      if (sec){
+        try { sec.scrollIntoView({ behavior:'smooth', block:'start' }); }
+        catch(_) { sec.scrollIntoView(true); }
       }
-    } catch(e){ /* schlucken, UI geht weiter */ }
-
-    // Panel öffnen (ohne optional chaining)
-    var panel = document.getElementById('wartungsplanPanel');
-    if (panel && panel.style) panel.style.display = 'block';
-
-    var headBtn = document.getElementById('wartungToggleHead');
-    if (headBtn) headBtn.textContent = '🛠️ Wartung (zu)';
-
-    // Scrollen – iPad-kompatibel (Fallback ohne Options-Objekt)
-    var sec = document.getElementById('wartungsplanSection');
-    if (sec){
-      try {
-        sec.scrollIntoView({ behavior:'smooth', block:'start' });
-      } catch(_) {
-        sec.scrollIntoView(true);
-      }
-    }
-  };
-}
-
-
-
-
+    };
+  }
+} // ← hier war die fehlende Klammer!
 
 /* ---------- Recalc ---------- */
 function wpRecalc() {
   const { interval, last, next, pill, nip } = wpEls();
-
-  // Werte lesen (ohne Optional Chaining)
   const inter   = toInt(((interval && interval.value) || 0), 0);
   const lastIso = (last && isIsoDate(last.value)) ? last.value : "";
-
-  // Nächstes Fälligkeitsdatum bestimmen
   const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
   if (next) next.value = nextVal;
 
-  // (Optional) Nippel aus Feld normalisieren – kein Nullish-Coalescing
   if (nip && typeof nip.value !== "undefined") {
     nip.value = (nip.value === null || typeof nip.value === "undefined") ? "" : String(nip.value);
   }
 
-  // Status/Pill aktualisieren
   const st = wpStatus(nextVal || "");
-  if (pill) {
-    pill.textContent = st.label;
-    pill.style.background = st.bg;
-    pill.style.color = st.fg;
-  }
+  if (pill) { pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
 }
 
 
@@ -3918,13 +3902,9 @@ function wpStatusUpdateForTask(task){
 function wpEvalWarning(){
   const { selMaschine, warn } = wpEls();
 
-  const m = ((selMaschine && selMaschine.value) ? selMaschine.value : "").trim();
-
-  const wp = (typeof window !== "undefined" && window.wartungsplaene && typeof window.wartungsplaene === "object")
-    ? window.wartungsplaene
-    : {};
-
-  const tasks = m ? (wp[m] || []) : [];
+  const machine = ((selMaschine && selMaschine.value) ? selMaschine.value : "").trim();
+  const plans   = (window && window.wartungsplaene && typeof window.wartungsplaene === "object") ? window.wartungsplaene : {};
+  const tasks   = machine ? (plans[machine] || []) : [];
 
   let overdue = 0, soon = 0;
   for (let i = 0; i < tasks.length; i++) {
@@ -3933,7 +3913,6 @@ function wpEvalWarning(){
     const last  = (t && isIsoDate(t.lastDateISO)) ? t.lastDateISO : "";
     const next  = wpComputeNext(last, inter);
     const st    = wpStatus(next);
-
     if (st && st.level === "overdue") overdue++;
     else if (st && st.level === "soon") soon++;
   }
@@ -3951,13 +3930,10 @@ function wpEvalWarning(){
     }
   }
 
-  if (typeof wpUpdateGlobalBanner === "function") {
-    try { wpUpdateGlobalBanner(); } catch (e) {}
-  }
-  if (typeof wpCheckOverdueAndNotify === "function") {
-    try { wpCheckOverdueAndNotify({ sendMail: false, machine: m }); } catch (e) {}
-  }
+  if (typeof wpUpdateGlobalBanner === "function") { try { wpUpdateGlobalBanner(); } catch (e) {} }
+  if (typeof wpCheckOverdueAndNotify === "function") { try { wpCheckOverdueAndNotify({ sendMail:false, machine }); } catch (e) {} }
 }
+
 
 
 /* ---------- Ende Fix-Block ---------- */
