@@ -4883,48 +4883,49 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
 <!-- === Auto-Befüllung für "Schmierstelle/Aufgabe" aus Wartungsplänen === -->
 <script>
 (function(){
-  const byId = (id)=>document.getElementById(id);
-  const PLACEHOLDER = "Bitte auswählen";
+  var byId = function(id){ return document.getElementById(id); };
+  var PLACEHOLDER = "Bitte auswählen";
 
   function getPlans(){
-    const wp = window.wartungsplaene || window.wp || window._wp || window._wpData || window.WARTUNGSPLAENE || null;
+    var wp = window.wartungsplaene || window.wp || window._wp || window._wpData || window.WARTUNGSPLAENE || null;
     return (wp && typeof wp === "object") ? wp : null;
   }
 
   function extractTaskNames(list){
     if (!Array.isArray(list)) return [];
-    return list.map(x=>{
+    return list.map(function(x){
       if (typeof x === "string") return x;
-      if (x && typeof x === "object") return (x.name || x.aufgabe || x.title || x.task || "").trim();
+      if (x && typeof x === "object") return String(x.name || x.aufgabe || x.title || x.task || "").trim();
       return "";
     }).filter(Boolean);
   }
 
   function rebuildWpTaskSelectFromPlans(){
-    const sel = byId("wpTaskSelect");
-    const machine = byId("maschine")?.value || "";
+    var sel = byId("wpTaskSelect");
+    var mEl = byId("maschine");
+    var machine = (mEl && mEl.value) ? mEl.value : "";
     if (!sel || !machine) return false;
 
-    const plans = getPlans();
+    var plans = getPlans();
     if (!plans) return false;
 
-    const keys = Object.keys(plans);
-    const key = keys.find(k => k === machine) ||
-                keys.find(k => k.toLowerCase().trim() === machine.toLowerCase().trim());
+    var keys = Object.keys(plans);
+    var key = keys.find(function(k){ return k === machine; }) ||
+              keys.find(function(k){ return k.toLowerCase().trim() === machine.toLowerCase().trim(); });
     if (!key) return false;
 
-    const tasks = extractTaskNames(plans[key]?.tasks || plans[key]?.aufgaben || plans[key]);
+    var tasks = extractTaskNames((plans[key] && (plans[key].tasks || plans[key].aufgaben)) || plans[key]);
     if (!tasks.length) return false;
 
     sel.innerHTML = "";
     sel.add(new Option(PLACEHOLDER, ""));
-    tasks.forEach(t => sel.add(new Option(t, t)));
+    tasks.forEach(function(t){ sel.add(new Option(t, t)); });
     sel.value = "";
     return true;
   }
 
   function ensureNotEmpty(){
-    const sel = byId("wpTaskSelect");
+    var sel = byId("wpTaskSelect");
     if (!sel) return;
     if (!sel.options || sel.options.length === 0){
       sel.add(new Option(PLACEHOLDER, ""));
@@ -4932,34 +4933,43 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
     }
   }
 
-  window.addEventListener("load", ()=>{
+  // iPad-safe ohne ?.addEventListener
+  window.addEventListener("load", function(){
     // Beim Laden versuchen zu füllen
     if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
 
     // Beim Maschinenwechsel neu füllen
-    byId("maschine")?.addEventListener("change", ()=>{
-      setTimeout(()=>{ if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty(); }, 120);
-    });
+    var m = byId("maschine");
+    if (m && m.addEventListener){
+      m.addEventListener("change", function(){
+        setTimeout(function(){
+          if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
+        }, 120);
+      });
+    }
 
     // Beim Öffnen des Dashboards: robust nachfüllen (mit Guards + Fallback)
-    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-      setTimeout(()=>{
-        const sel = byId("wpTaskSelect");
-        if (!sel) return;
+    var tgl = byId("toggleWpLogBtn");
+    if (tgl && tgl.addEventListener){
+      tgl.addEventListener("click", function(){
+        setTimeout(function(){
+          var sel = byId("wpTaskSelect");
+          if (!sel) return;
 
-        if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
-        if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
-        if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+          if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+          if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+          if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
 
-        // Falls noch leer: aus Plänen befüllen
-        if ((!sel.options || sel.options.length === 0) &&
-            typeof rebuildWpTaskSelectFromPlans === "function") {
-          if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") ensureNotEmpty();
-        }
-      }, 150);
-    });
-  }); // Ende: window.addEventListener("load", …)
-})(); // Ende der IIFE
+          // Falls noch leer: aus Plänen befüllen
+          if ((!sel.options || sel.options.length === 0) &&
+              typeof rebuildWpTaskSelectFromPlans === "function") {
+            if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") ensureNotEmpty();
+          }
+        }, 150);
+      });
+    }
+  });
+})();
 </script>
 
 
