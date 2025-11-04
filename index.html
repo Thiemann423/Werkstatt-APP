@@ -3541,8 +3541,9 @@ async function wpLogExecution({dateISO, task, machine, technician=""}){
     machine,
     taskId: task.id || "",
     taskName: task.name || "",
-    intervalDays: task.intervalDays ?? "",
-    nipples: task.nipples ?? "",
+  intervalDays: (task.intervalDays === null || task.intervalDays === undefined) ? "" : task.intervalDays,
+nipples: (task.nipples === null || task.nipples === undefined) ? "" : task.nipples,
+
     technician
   });
   await wpLogSave();
@@ -3603,9 +3604,9 @@ function wpRefreshTaskList() {
 
 /* ---------- Aktuell gewählten Task bestimmen ---------- */
 function wpCurrentTask(){
-  const { selMaschine, selTask } = wpEls();
-  const m  = selMaschine?.value || "";
-  const id = selTask?.value || "";
+const { selMaschine, selTask } = wpEls();
+const m  = (selMaschine && selMaschine.value) ? selMaschine.value : "";
+const id = (selTask && selTask.value) ? selTask.value : "";
   const list = wartungsplaene[m] || _wpIdx[wpNorm(m)] || [];
   return list.find(t => String(t.id) === String(id)) || null;
 }
@@ -3856,7 +3857,11 @@ function wpRecalc() {
 
   /* ---------- Helpers & Warning (einmal global) ---------- */
 function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
-function toInt(v, fallback=""){ const n=parseInt(String(v??'').replace(/[^\d-]/g,''),10); return Number.isFinite(n)?n:fallback; }
+function toInt(v, fallback=""){ 
+  var s = (v === null || v === undefined) ? '' : String(v);
+  var n = parseInt(s.replace(/[^\d-]/g,''),10);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 function wpStatusUpdateForTask(task){
   const { interval, last, next, pill, nip, selMaschine } = wpEls();
