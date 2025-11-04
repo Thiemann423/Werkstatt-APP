@@ -844,6 +844,12 @@ function loadWpLog() {
   var empty = document.getElementById("wpLogEmpty");  // z.B. <tr id="wpLogEmpty"><td colspan="6">Keine Einträge</td></tr>
   if (!tbody) return;
 
+  // kleine Helper
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  var norm = (typeof _wpNorm === "function")
+    ? _wpNorm
+    : function(s){ s = (s==null?"":String(s)); return s.toLowerCase().trim(); };
+
   // 🔧 Filter sicher beziehen
   var from="", to="", mach="", task="", tech="";
   try {
@@ -857,14 +863,9 @@ function loadWpLog() {
     }
   } catch(e) {}
 
-  // Daten laden (localStorage)
+  // Daten laden (localStorage + Fallbacks in _loadAll)
   var raw = _loadAll();
   if (!Array.isArray(raw)) raw = [];
-
-  // Normalizer
-  var norm = (typeof _wpNorm === "function")
-    ? _wpNorm
-    : function(s){ s = (s==null?"":String(s)); return s.toLowerCase().trim(); };
 
   // 🔎 Filtern
   var list = [];
@@ -897,14 +898,14 @@ function loadWpLog() {
     list.push(e);
   }
 
-  // ⬇️ Neueste zuerst
+  // ⬇️ Neueste zuerst (ISO-String-Vergleich)
   list.sort(function(a,b){
     var ad = (a && a.dateISO) ? a.dateISO : "";
     var bd = (b && b.dateISO) ? b.dateISO : "";
     return bd.localeCompare(ad);
   });
 
-  // 🧱 Render
+  // 🧱 Render (mit Escaping)
   var html = "";
   for (var j=0; j<list.length; j++){
     var r = list[j] || {};
@@ -912,29 +913,28 @@ function loadWpLog() {
     var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
 
     html += "<tr>"
-          +   "<td>" + (r.dateISO    || "")   + "</td>"
-          +   "<td>" + (r.machine    || "–")  + "</td>"
-          +   "<td>" + (r.taskName   || "–")  + "</td>"
-          +   "<td>" + inter + "</td>"
-          +   "<td>" + nip   + "</td>"
-          +   "<td>" + (r.technician || "–")  + "</td>"
+          +   "<td>" + esc(r.dateISO    || "")  + "</td>"
+          +   "<td>" + esc(r.machine    || "–") + "</td>"
+          +   "<td>" + esc(r.taskName   || "–") + "</td>"
+          +   "<td>" + esc(inter)              + "</td>"
+          +   "<td>" + esc(nip)                + "</td>"
+          +   "<td>" + esc(r.technician || "–")+ "</td>"
           + "</tr>";
   }
   tbody.innerHTML = html;
 
   // Empty-State ein/aus
   if (empty) {
-    if (list.length) {
-      empty.style.display = "none";
-    } else {
-      // Je nach Markup: "table-row" oder "block"
-      empty.style.display = "table-row";
-    }
+    empty.style.display = list.length ? "none" : "table-row";
   }
 
-  // global aktualisieren, falls an anderer Stelle genutzt
+  // global aktualisieren (kann anderswo genutzt werden)
   window.wartungslog = raw;
 }
+
+// Falls andere Stellen wpLogLoad() aufrufen:
+window.wpLogLoad = window.wpLogLoad || loadWpLog;
+
 
 
   function norm(s){ return String(s || "").toLowerCase(); }
