@@ -757,8 +757,9 @@ function saveWpTask() {
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
   var elTech = document.getElementById("techniker1");
   var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
-  var tech = techFromForm || u.name || "";
+  var tech = techFromForm || (u.name || "");
   var techEmail = u.email || "";
+  var techUpn = u.upn || "";
 
   // Felder
   var elMachine  = document.getElementById("maschine");
@@ -766,7 +767,7 @@ function saveWpTask() {
   var elInterval = document.getElementById("wpIntervalDays");
   var elNip      = document.getElementById("wpNipCount");
 
-  // 🔧 Task-Text robust holen (Anzeigename)
+  // Task-Text robust holen (Anzeigename)
   function getSelectText(sel){
     if (!sel) return "";
     var i = sel.selectedIndex;
@@ -776,32 +777,35 @@ function saveWpTask() {
     }
     return String(sel.value || "").trim();
   }
-
   var taskText = (typeof _getSelectText === "function" ? _getSelectText("wpTaskSelect") : "") || getSelectText(elTask);
 
+  // 🔁 Feldnamen so speichern, wie loadWpLog() sie liest
   var entry = {
-    date     : todayISO,
-    machine  : (elMachine && elMachine.value) || "",
-    task     : taskText,                    // ← jetzt sicher gefüllt
-    interval : (elInterval && elInterval.value) || "",
-    nipCount : (elNip && elNip.value) || "",
-    tech     : tech,
-    techEmail: techEmail
+    dateISO: todayISO,
+    machine: (elMachine && elMachine.value || "").trim(),
+    taskName: taskText,
+    intervalDays: (elInterval && elInterval.value || "").toString().trim(),
+    nipples: (elNip && elNip.value || "").toString().trim(),
+    technician: tech,
+    technicianEmail: techEmail,
+    technicianUpn: techUpn
   };
 
+  // Laden, hinzufügen, speichern (mit iPad-Fallback in _saveAll)
   var list = _loadAll();
+  if (!Array.isArray(list)) list = [];
   list.push(entry);
   _saveAll(list);
 
   // UI aktualisieren
-  var panel = document.getElementById("wpLogPanel");
-  if (panel && panel.style.display !== "none" && typeof loadWpLog === "function") {
-    loadWpLog();
-  }
-  if (typeof window.wpRefreshOverdueUI === "function") { try { window.wpRefreshOverdueUI(); } catch(_){} }
+  try {
+    (window.wpLogLoad || window.loadWpLog || function(){})();
+    if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI();
+  } catch(_) {}
 
   alert("Wartung gespeichert!");
 }
+
 
 
 
