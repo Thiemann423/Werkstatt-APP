@@ -721,12 +721,12 @@ function _saveAll(list){
     window.__memLog = (list || []).slice(); // überlebt Reload nicht, verhindert aber „leeres Dashboard“
   }
 }
+// Robust aus localStorage laden
 function _loadAll(){
   try {
-    var txt = localStorage.getItem(WP_STORAGE_KEY);
-    if (txt) return JSON.parse(txt);
-  } catch(e){}
-  return (window.__memLog || []);
+    var raw = localStorage.getItem("TE15_WARTUNGSLOG");
+    return raw ? JSON.parse(raw) : [];
+  } catch(e){ return []; }
 }
 
 function saveWpTask() {
@@ -821,24 +821,102 @@ function inDateRange(dateStr, from, to) {
 }
 
 function loadWpLog() {
-  var tbody = document.getElementById("wpLogBody");
-  var empty = document.getElementById("wpLogEmpty");
+  var tbody = document.getElementById("wpLogBody");   // <tbody id="wpLogBody">
+  var empty = document.getElementById("wpLogEmpty");  // z.B. <tr id="wpLogEmpty"><td colspan="6">Keine Einträge</td></tr>
   if (!tbody) return;
 
-  // 🔧 Filters sicher beziehen
+  // 🔧 Filter sicher beziehen
   var from="", to="", mach="", task="", tech="";
   try {
     if (typeof getWpFilters === "function") {
       var f = getWpFilters() || {};
-      from = f.from || ""; to = f.to || "";
+      from = f.from || ""; 
+      to   = f.to   || "";
       mach = (f.mach || "").toLowerCase();
       task = (f.task || "").toLowerCase();
       tech = (f.tech || "").toLowerCase();
     }
-  } catch(_) {}
+  } catch(e) {}
 
+  // Daten laden (localStorage)
   var raw = _loadAll();
   if (!Array.isArray(raw)) raw = [];
+
+  // Normalizer
+  var norm = (typeof _wpNorm === "function")
+    ? _wpNorm
+    : function(s){ s = (s==null?"":String(s)); return s.toLowerCase().trim(); };
+
+  // 🔎 Filtern
+  var list = [];
+  for (var i=0; i<raw.length; i++){
+    var e = raw[i] || {};
+    var dateISO = e.dateISO || "";
+
+    if (from && dateISO < from) continue;
+    if (to   && dateISO > to)   continue;
+
+    if (mach){
+      var em = norm(e.machine || "");
+      if (em.indexOf(mach) === -1) continue;
+    }
+    if (task){
+      var et = norm(e.taskName || "");
+      if (et.indexOf(task) === -1) continue;
+    }
+    if (tech){
+      // Techniker-Suche über mehrere Felder + Fallback auf aktuellen User
+      var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
+      var haystack = [
+        e.technician, e.technicianEmail, e.technicianUpn,
+        (!e.technician ? u.name : ""), (!e.technicianEmail ? u.email : ""), (!e.technicianUpn ? u.upn : "")
+      ];
+      var hay = norm(haystack.filter(Boolean).join(" "));
+      if (hay.indexOf(tech) === -1) continue;
+    }
+
+    list.push(e);
+  }
+
+  // ⬇️ Neueste zuerst
+  list.sort(function(a,b){
+    var ad = (a && a.dateISO) ? a.dateISO : "";
+    var bd = (b && b.dateISO) ? b.dateISO : "";
+    return bd.localeCompare(ad);
+  });
+
+  // 🧱 Render
+  var html = "";
+  for (var j=0; j<list.length; j++){
+    var r = list[j] || {};
+    var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
+    var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
+
+    html += "<tr>"
+          +   "<td>" + (r.dateISO    || "")   + "</td>"
+          +   "<td>" + (r.machine    || "–")  + "</td>"
+          +   "<td>" + (r.taskName   || "–")  + "</td>"
+          +   "<td>" + inter + "</td>"
+          +   "<td>" + nip   + "</td>"
+          +   "<td>" + (r.technician || "–")  + "</td>"
+          + "</tr>";
+  }
+  tbody.innerHTML = html;
+
+  // Empty-State ein/aus
+  if (empty) {
+    if (list.length) {
+      empty.style.display = "none";
+    } else {
+      // Je nach Markup: "table-row" oder "block"
+      empty.style.display = "table-row";
+    }
+  }
+
+  // global aktualisieren, falls an anderer Stelle genutzt
+  window.wartungslog = raw;
+}
+
 
   function norm(s){ return String(s || "").toLowerCase(); }
   function dateInRange(d, a, b){
@@ -4405,10 +4483,10 @@ function wpLogLoad(){
   }
 }
 
+// Robust speichern
 function _saveAll(list){
-  localStorage.setItem(window.__WP_LOG_KEY__, JSON.stringify(list || []));
+  try { localStorage.setItem("TE15_WARTUNGSLOG", JSON.stringify(list||[])); } catch(e){}
 }
-
 function wpLogExecution(entry) {
   // Sicherstellen, dass entry ein Objekt ist
   var eSrc = (entry && typeof entry === "object") ? entry : {};
@@ -4534,32 +4612,51 @@ function wpLogApplyFilters(list){
 
 
 function renderWpLogTable(){
-  const body  = _byId("wpLogBody");
-  const empty = _byId("wpLogEmpty");
+  var body  = _byId("wpLogBody");   // <tbody id="wpLogBody">
+  var empty = _byId("wpLogEmpty");  // optional: <tr id="wpLogEmpty">…</tr>
   if (!body) return;
 
-  const rows = wpLogApplyFilters(window.wartungslog || []);
-  body.innerHTML = "";
-  if (!rows.length){
-    if (empty) empty.style.display = "block";
+  // Daten holen + filtern (Guard)
+  var source = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+  var rows   = (typeof wpLogApplyFilters === "function") ? wpLogApplyFilters(source) : source;
+
+  // Empty-State
+  if (!rows || !rows.length){
+    body.innerHTML = "";
+    if (empty) empty.style.display = "table-row"; // oder "block", je nach Markup
     return;
   }
   if (empty) empty.style.display = "none";
 
-const td = (txt)=>`<td style="padding:8px;border-bottom:1px solid #eee;">${txt}</td>`;
+  // kleine TD-Helferfunktion (kein Arrow)
+  function td(txt){
+    return '<td style="padding:8px;border-bottom:1px solid #eee;">' + txt + '</td>';
+  }
 
-body.innerHTML = rows.map(e => `
-  <tr>
-    ${td(_wpFmtISO(e.dateISO))}
-    ${td(e.machine || "–")}
-    ${td(e.taskName || "–")}
-    ${td((e.intervalDays ?? "") === "" ? "–" : e.intervalDays)}
-    ${td((e.nipples ?? "") === "" ? "–" : e.nipples)}
-    ${td(displayTechnicianFor(e))}   <!-- NEU -->
-  </tr>
-`).join("");
+  // Zeilen aufbauen (ohne Arrow, ohne Nullish-Coalescing)
+  var html = "";
+  for (var i=0; i<rows.length; i++){
+    var e = rows[i] || {};
+    var inter = (e.intervalDays !== "" && e.intervalDays != null) ? e.intervalDays : "–";
+    var nip   = (e.nipples      !== "" && e.nipples      != null) ? e.nipples      : "–";
 
+    var tech  = (typeof displayTechnicianFor === "function")
+      ? displayTechnicianFor(e)
+      : (e.technician || "–");
+
+    html += '<tr>'
+          +   td(_wpFmtISO(e.dateISO))
+          +   td(e.machine  || '–')
+          +   td(e.taskName || '–')
+          +   td(inter)
+          +   td(nip)
+          +   td(tech)
+          + '</tr>';
+  }
+
+  body.innerHTML = html;
 }
+
 
 function toggleWpLogPanel(){
   const p = _byId("wpLogPanel");
@@ -4685,24 +4782,43 @@ window.todayISO = window.todayISO || function () {
 }
 
 // bei manuellen Änderungen neu berechnen
-window.addEventListener("load", function(){
-  var intvEl = byId("wpIntervalDays");
-  if (intvEl) intvEl.addEventListener("input", recomputeNextDue);
+// Wartungs-Log: Wiring beim Laden
+window.addEventListener("load", function () {
+  // Zeitraum-Button einmal auslösen (optional)
+  var rangeBtn = document.getElementById("wpLogRangeBtn");
+  if (rangeBtn && typeof setWpRange === "function") setWpRange(rangeBtn);
 
-  var lastEl = byId("wpLastDate");
-  if (lastEl) lastEl.addEventListener("change", recomputeNextDue);
+  // Initial laden
+  if (typeof loadWpLog === "function") loadWpLog();
 
-  // Falls „Heute durchgeführt“ existiert, danach sicher neu rechnen
-  var doneBtn = byId("wpMarkDoneToday");
-  if (doneBtn) {
-    doneBtn.addEventListener("click", function(){
-      setTimeout(recomputeNextDue, 0);
+  // Buttons
+  var reloadBtn = document.getElementById("wpLogReload");
+  if (reloadBtn) reloadBtn.addEventListener("click", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
+
+  var clearBtn = document.getElementById("wpLogClear");
+  if (clearBtn && typeof clearWpFilters === "function")
+    clearBtn.addEventListener("click", function(){ clearWpFilters(); });
+
+  var toggleBtn = document.getElementById("toggleWpLogBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", function(){
+      // nach dem Öffnen kurz warten, dann rendern
+      setTimeout(function(){ if (typeof loadWpLog==="function") loadWpLog(); }, 60);
     });
   }
 
-  // initial (falls Felder schon Werte haben)
-  recomputeNextDue();
+  // Live-Filter
+  var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
+  for (var i=0; i<ids.length; i++){
+    var el = document.getElementById(ids[i]);
+    if (el) el.addEventListener("input", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
+  }
+
+  // Falls Panel beim Start schon offen ist
+  var panel = document.getElementById("wpLogPanel");
+  if (panel && panel.style.display !== "none") { if (typeof loadWpLog==="function") loadWpLog(); }
 });
+
 
 
 (function(){
