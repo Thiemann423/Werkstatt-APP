@@ -3435,22 +3435,40 @@ function wpMailRuleInterval(machineName = "", taskName = "") {
   return 28;                                              // sonst 4 Wochen
 }
 // Intervallfeld (und NextDue/Status) gemäß Regel vorschlagen
-function wpApplyMailRules({ force = false } = {}) {
-  const { selMaschine, selTask, interval, last, next, pill } = wpEls?.() || {};
+function wpApplyMailRules(opts){
+  opts = opts || {};
+  var force = !!opts.force;
+
+  var E = (typeof wpEls === "function") ? wpEls() : {};
+  var selMaschine = E.selMaschine, selTask = E.selTask, interval = E.interval, last = E.last, next = E.next, pill = E.pill;
   if (!interval) return;
-  const machineName =
-    selMaschine?.value || selMaschine?.options?.[selMaschine.selectedIndex]?.text || "";
-  const taskText =
-    selTask?.options?.[selTask.selectedIndex]?.text?.trim() || selTask?.value || "";
-  if (!force && interval.value) return;
-  const days = wpMailRuleInterval(machineName, taskText);
-  interval.value = String(days);
-  if (last && /^\d{4}-\d{2}-\d{2}$/.test(last.value)) {
-    if (next) next.value = wpComputeNext(last.value, days);
+
+  var machineName = "";
+  if (selMaschine) {
+    if (selMaschine.value) machineName = selMaschine.value;
+    else if (selMaschine.options && selMaschine.options[selMaschine.selectedIndex])
+      machineName = selMaschine.options[selMaschine.selectedIndex].text || "";
   }
-  const st = wpStatus(next?.value || "");
+
+  var taskText = "";
+  if (selTask) {
+    if (selTask.options && selTask.options[selTask.selectedIndex])
+      taskText = (selTask.options[selTask.selectedIndex].text || "").trim();
+    if (!taskText && selTask.value) taskText = selTask.value;
+  }
+
+  if (!force && interval.value) return;
+
+  var days = wpMailRuleInterval(machineName, taskText);
+  interval.value = String(days);
+
+  if (last && /^\d{4}-\d{2}-\d{2}$/.test(last.value) && next)
+    next.value = wpComputeNext(last.value, days);
+
+  var st = wpStatus((next && next.value) || "");
   if (pill) { pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
 }
+
 
 // ===============================
 // Laden aus OneDrive
@@ -3481,7 +3499,11 @@ async function wpLoad(){
   // 3) Index bauen & UI anstoßen
   wpBuildIndex();
   console.info("[WP] geladen:", Object.keys(wartungsplaene || {}).length, "Maschinen");
-  try { wpRefreshTaskList?.(); wpStatusUpdateForTask?.(); } catch {}
+ try {
+  if (typeof wpRefreshTaskList     === "function") wpRefreshTaskList();
+  if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
+} catch (e) {}
+
 }
 
 // Speichern (Cache + OneDrive)
@@ -3573,7 +3595,8 @@ function wpEls(){
 function wpEnsureMachineKey(name){
   if (!name) return null;
   const key = Object.keys(wartungsplaene).find(k => wpNorm(k) === wpNorm(name)) || name;
-  wartungsplaene[key] ||= [];
+  if (!wartungsplaene[key]) wartungsplaene[key] = [];
+
   return key;
 }
 
@@ -3699,7 +3722,8 @@ function wpUpdateGlobalBanner(){
   if (!banner) return;
 
   const { selMaschine } = wpEls();
-  const selected = (selMaschine?.value || "").trim();
+  const selected = ((selMaschine && selMaschine.value) ? selMaschine.value : "").trim();
+
 
   // Wenn eine Maschine gewählt ist: bisheriges Verhalten
   if (selected){
@@ -3798,37 +3822,7 @@ if (openBtn){
 
 
 
-function wpEvalWarning(){
-  const { selMaschine, warn } = wpEls();
-  const m = (selMaschine?.value || "").trim();
-  let overdue = [], soon = [];
 
-  if (m){
-    const tasks = wartungsplaene[m] || [];
-    for (const t of tasks){
-      const inter = toInt(t.intervalDays || 0, 0);
-      const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
-      const next  = wpComputeNext(last, inter);
-      const st    = wpStatus(next);
-      if (st.level === "overdue") overdue.push(t);
-      else if (st.level === "soon") soon.push(t);
-    }
-  }
-
-  if (warn){
-    if (overdue.length || soon.length){
-      const parts = [];
-      if (overdue.length) parts.push(`⚠️ <strong>${overdue.length}</strong> überfällige Wartung${overdue.length>1?"en":""}`);
-      if (soon.length)    parts.push(`⏳ <strong>${soon.length}</strong> bald fällige Wartung${soon.length>1?"en":""}`);
-      warn.style.display = "block";
-      warn.innerHTML = parts.join(" • ");
-    } else {
-      warn.style.display = "none";
-      warn.textContent = "";
-    }
-  }
-  try { wpUpdateGlobalBanner?.(); } catch {}
-}
 
 /* ---------- Recalc ---------- */
 function wpRecalc() {
@@ -3922,10 +3916,8 @@ function wpStatusUpdateForTask(task){
 function wpEvalWarning(){
   const { selMaschine, warn } = wpEls();
 
-  // Maschine sicher lesen (ohne Optional Chaining)
   const m = ((selMaschine && selMaschine.value) ? selMaschine.value : "").trim();
 
-  // wartungsplaene sicher referenzieren
   const wp = (typeof window !== "undefined" && window.wartungsplaene && typeof window.wartungsplaene === "object")
     ? window.wartungsplaene
     : {};
@@ -3957,7 +3949,6 @@ function wpEvalWarning(){
     }
   }
 
-  // optionale Aufrufe ohne ?.(), mit Funktions-Guards
   if (typeof wpUpdateGlobalBanner === "function") {
     try { wpUpdateGlobalBanner(); } catch (e) {}
   }
@@ -3965,6 +3956,7 @@ function wpEvalWarning(){
     try { wpCheckOverdueAndNotify({ sendMail: false, machine: m }); } catch (e) {}
   }
 }
+
 
 /* ---------- Ende Fix-Block ---------- */
 function wpSyncPrintSummary(task){
