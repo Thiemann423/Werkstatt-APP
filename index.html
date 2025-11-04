@@ -3376,10 +3376,12 @@ function wpNorm(s){
   return String(s || "")
     .toLowerCase()
     .replace(/ß/g, "ss")
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "") // ä→a, ö→o, ü→u, é→e …
+    // alt: .replace(/\p{Diacritic}/gu, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // diakritische Zeichen entfernen
     .replace(/\s+/g, " ")
     .trim();
 }
+
 
 // Index EINMAL bauen (nutzt wpNorm)
 function wpBuildIndex(){
@@ -4167,13 +4169,13 @@ function setupWartungsplanUI(){
 
 
 /* ---------- Init ---------- */
+
 document.addEventListener("DOMContentLoaded", async function(){
   if (typeof wpLoad    === "function") await wpLoad();
   if (typeof wpLogLoad === "function") await wpLogLoad();
 
   setupWartungsplanUI();
 
-  // sicherheitshalber initial setzen
   if (typeof wpRefreshTaskList     === "function") wpRefreshTaskList();
   const cur = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
   if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(cur);
@@ -4188,6 +4190,7 @@ document.addEventListener("DOMContentLoaded", async function(){
   } catch (e) {}
 });
 </script>
+
 
 
 
@@ -4226,7 +4229,7 @@ document.addEventListener("DOMContentLoaded", async function(){
 // ===== Wartungs-Dashboard (Log) =====
 // *** Selbstversorgender Block: nutzt localStorage und deine bestehenden Felder ***
 
-// Ein global geteilter Key – keine Mehrfach-consts mehr
+// Ein global geteilter Key – ok so
 window.__WP_LOG_KEY__ = window.__WP_LOG_KEY__ || "wpLog";
 
 function _wpNorm(s){ return String(s||"").toLowerCase().trim(); }
@@ -4234,40 +4237,56 @@ function _wpFmtISO(s){ return s || ""; }
 function _byId(id){ return document.getElementById(id); }
 function _toISO(d){
   if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  const dt = d instanceof Date ? d : new Date();
-  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  var dt = (d instanceof Date) ? d : new Date();
+  return dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0") + "-" + String(dt.getDate()).padStart(2,"0");
 }
+
+// sel: Element ODER ID-String
 function _getSelectText(sel){
-  const el = _byId(sel);
+  var el = (typeof sel === "string") ? _byId(sel) : sel;
   if (!el) return "";
-  const opt = el.options?.[el.selectedIndex];
-  return (opt?.textContent || opt?.innerText || el.value || "").trim();
+  var opt = (el.options && el.options[el.selectedIndex]) ? el.options[el.selectedIndex] : null;
+  var txt = opt ? (opt.textContent || opt.innerText || "") : "";
+  return (txt || el.value || "").trim();
 }
-function _collectEntryFromForm({ useTodayIfEmpty = true } = {}) {
-  const todayISO = _toISO(new Date());
-  const dateISO  = _byId("wpLastDate")?.value || (useTodayIfEmpty ? todayISO : "");
+
+// kleines Helferlein zum sicheren Lesen von .value
+function _val(id){
+  var el = _byId(id);
+  return (el && typeof el.value !== "undefined") ? el.value : "";
+}
+
+function _collectEntryFromForm(opts){
+  opts = opts || {};
+  var useTodayIfEmpty = !!opts.useTodayIfEmpty;
+  var todayISO = _toISO(new Date());
+
+  var dateRaw = _val("wpLastDate");
+  var dateISO = dateRaw || (useTodayIfEmpty ? todayISO : "");
 
   // angemeldeten User (Fallback)
-  const u = (typeof getSignedInUser === "function")
-    ? getSignedInUser()
-    : { name: "", email: "" };
+  var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"" };
 
-  // Formularwert hat Vorrang
-  const techFromForm =
-    (_byId("techniker1")?.value || _byId("f_techniker")?.value || "").trim();
+  // Formularwert (Techniker) hat Vorrang
+  var techFromForm = (_val("techniker1") || _val("f_techniker")).trim();
+
+  var inter = parseInt(_val("wpIntervalDays"), 10);
+  if (!Number.isFinite(inter)) inter = "";
+
+  var nip = parseInt(_val("wpNipCount"), 10);
+  if (!Number.isFinite(nip)) nip = "";
 
   return {
     dateISO      : _toISO(dateISO),
-    machine      : _byId("maschine")?.value || "",
-    taskName     : _getSelectText("wpTaskSelect") || _byId("wpTaskSelect")?.value || "",
-    intervalDays : parseInt(_byId("wpIntervalDays")?.value || "", 10) || "",
-    nipples      : parseInt(_byId("wpNipCount")?.value || "", 10) || "",
-
-    // << neu
+    machine      : _val("maschine") || "",
+    taskName     : _getSelectText("wpTaskSelect") || _val("wpTaskSelect") || "",
+    intervalDays : inter,
+    nipples      : nip,
     technician       : techFromForm || u.name || "",
     technicianEmail  : u.email || ""
   };
 }
+
 
 
 
