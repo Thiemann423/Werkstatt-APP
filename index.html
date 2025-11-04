@@ -396,8 +396,8 @@ window.addEventListener('load', function () {
 <script>
 /* ===== Globaler Wartungs-Hinweis ohne geöffnetes Dashboard ===== */
 (function(){
-  // kleine Helfer (nutzt vorhandene, wenn sie da sind)
-  const wpEls = window.wpEls || function(){
+  // kleine Helfer
+  const wpEls  = window.wpEls  || function(){
     return {
       selMaschine: document.getElementById('selMaschine') || document.querySelector('#selMaschine, [name="maschine"], select[data-maschine]')
     };
@@ -419,27 +419,20 @@ window.addEventListener('load', function () {
 
   // Sichere Quelle für fällige/überfällige Einträge
   function getDueList(){
-    // Wenn deine neue computeDueMap() existiert, nutze sie
     if (typeof window.computeDueMap === 'function'){
       const map = window.computeDueMap();
       const out = [];
       for (const [,v] of map){
         if (v.status === 'today' || v.status === 'overdue'){
-          out.push({
-            machine: v.machine || "",
-            task: v.taskName || "",
-            nextDue: v.nextDue || "",
-            status: v.status
-          });
+          out.push({ machine: v.machine||"", task: v.taskName||"", nextDue: v.nextDue||"", status: v.status });
         }
       }
       return out;
     }
-    // Fallback (falls computeDueMap nicht vorhanden ist)
     const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
     const latest = new Map();
     for (const e of list){
-      const key = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
+      const key  = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
       const last = (e.dateISO||"").trim();
       if (!latest.has(key) || (last && last > (latest.get(key).dateISO||""))){
         latest.set(key, e);
@@ -452,9 +445,7 @@ window.addEventListener('load', function () {
       const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
       if (!next) return;
       const status = cmpISO(next, today) < 0 ? 'overdue' : (cmpISO(next, today)===0 ? 'today' : 'ok');
-      if (status !== 'ok'){
-        out.push({ machine: e.machine||"", task: e.taskName||"", nextDue: next, status });
-      }
+      if (status !== 'ok'){ out.push({ machine:e.machine||"", task:e.taskName||"", nextDue:next, status }); }
     });
     return out;
   }
@@ -473,14 +464,12 @@ window.addEventListener('load', function () {
           selMaschine.dispatchEvent(new Event('change', { bubbles:true }));
         }
       }
-      // Wartungs-Panel öffnen (falls vorhanden)
-     // NEU: iPad-kompatibel
-var wartungTab = document.querySelector('[data-wp-panel="wartung"]');
-if (wartungTab) wartungTab.click();
-
-      // Alternativ: dein vorhandener Toggle-Button
-      if (!document.querySelector('[data-wp-panel="wartung"]')) {
-        document.getElementById('toggleWpLogBtn')?.click();
+      // Wartungs-Panel öffnen (iPad-safe)
+      var wartungTab = document.querySelector('[data-wp-panel="wartung"]');
+      if (wartungTab) wartungTab.click();
+      if (!wartungTab) {
+        var tgl = document.getElementById('toggleWpLogBtn');
+        if (tgl) tgl.click();
       }
     }catch(e){ console.warn('wpOpenMachineFromName:', e); }
   }
@@ -503,85 +492,83 @@ if (wartungTab) wartungTab.click();
     if (!on && dot){ dot.remove(); }
   }
 
-// Banner + Alert befüllen (iPad-safe, ohne optional chaining)
-function renderGlobalOverdueUI(due){
-  var banner  = document.getElementById('wpGlobalOverdueBanner');
-  var openBtn = document.getElementById('wpOpenFromBanner');
-  var alertBox= document.getElementById('wpGlobalAlert');
+  // Banner + Alert befüllen
+  function renderGlobalOverdueUI(due){
+    var banner  = document.getElementById('wpGlobalOverdueBanner');
+    var openBtn = document.getElementById('wpOpenFromBanner');
+    var alertBox= document.getElementById('wpGlobalAlert');
 
-  // Banner
-  if (banner){
-    if (due && due.length){
-      var msgEl = banner.querySelector('[data-msg]');
-      if (msgEl){
-        var over = due.filter(function(d){ return d.status === 'overdue'; }).length;
-        var tod  = due.filter(function(d){ return d.status === 'today'; }).length;
-        msgEl.textContent = over
-          ? ('Es gibt ' + over + ' überfällige und ' + tod + ' heute fällige Wartungen.')
-          : ('Es gibt ' + tod + ' heute fällige Wartungen.');
+    // Banner
+    if (banner){
+      if (due && due.length){
+        var msgEl = banner.querySelector('[data-msg]');
+        if (msgEl){
+          var over = due.filter(function(d){ return d.status === 'overdue'; }).length;
+          var tod  = due.filter(function(d){ return d.status === 'today'; }).length;
+          msgEl.textContent = over
+            ? ('Es gibt ' + over + ' überfällige und ' + tod + ' heute fällige Wartungen.')
+            : ('Es gibt ' + tod + ' heute fällige Wartungen.');
+        }
+        banner.style.display = 'flex';
+      } else {
+        banner.style.display = 'none';
       }
-      banner.style.display = 'flex';
-    } else {
-      banner.style.display = 'none';
+    }
+
+    // Button im Banner
+    if (openBtn){
+      openBtn.onclick = function(){
+        if (due && due.length === 1 && due[0] && due[0].machine){
+          if (typeof wpOpenMachineFromName === 'function'){
+            wpOpenMachineFromName(due[0].machine);
+            return;
+          }
+        }
+        var tgl = document.getElementById('toggleWpLogBtn');
+        if (tgl) tgl.click();
+      };
+    }
+
+    // Alert-Liste
+    if (alertBox){
+      if (due && due.length){
+        var items = due.slice(0,8).map(function(d){
+          var label = [d.machine || '', d.task || ''].filter(Boolean).join(' – ');
+          var when  = d.nextDue ? (' (' + d.nextDue + (d.status === 'overdue' ? ' überfällig' : ' heute') + ')') : '';
+          return '<li><button data-goto="' + encodeURIComponent(d.machine || '') + '" ' +
+                 'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
+                 label + when + '</button></li>';
+        }).join('');
+        alertBox.innerHTML = '<strong>⚠️ Wartung fällig:</strong>' +
+                             '<ul style="margin:6px 0 0 18px;list-style:disc;">' + items + '</ul>';
+        alertBox.style.display = 'block';
+
+        var btns = alertBox.querySelectorAll('button[data-goto]');
+        for (var i=0;i<btns.length;i++){
+          btns[i].addEventListener('click', function(){
+            var name = decodeURIComponent(this.getAttribute('data-goto') || '');
+            if (name && typeof wpOpenMachineFromName === 'function') wpOpenMachineFromName(name);
+          });
+        }
+      } else {
+        alertBox.style.display = 'none';
+        alertBox.innerHTML = '';
+      }
     }
   }
 
-  // Button im Banner führt – falls nur 1 Eintrag – direkt dorthin
-  if (openBtn){
-    openBtn.onclick = function(){
-      if (due && due.length === 1 && due[0] && due[0].machine){
-        if (typeof wpOpenMachineFromName === 'function'){
-          wpOpenMachineFromName(due[0].machine);
-          return;
-        }
-      }
-      // Mehrere: Dashboard öffnen (ohne ?.click())
-      var tgl = document.getElementById('toggleWpLogBtn');
-      if (tgl) tgl.click();
-    };
-  }
-
-  // Alert-Liste mit Klick
-  if (alertBox){
-    if (due && due.length){
-      var items = due.slice(0,8).map(function(d){
-        var label = [d.machine || '', d.task || ''].filter(Boolean).join(' – ');
-        var when  = d.nextDue ? (' (' + d.nextDue + (d.status === 'overdue' ? ' überfällig' : ' heute') + ')') : '';
-        return '<li><button data-goto="' + encodeURIComponent(d.machine || '') + '" ' +
-               'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
-               label + when + '</button></li>';
-      }).join('');
-      alertBox.innerHTML = '<strong>⚠️ Wartung fällig:</strong>' +
-                           '<ul style="margin:6px 0 0 18px;list-style:disc;">' + items + '</ul>';
-      alertBox.style.display = 'block';
-
-      var btns = alertBox.querySelectorAll('button[data-goto]');
-      for (var i=0;i<btns.length;i++){
-        btns[i].addEventListener('click', function(ev){
-          var name = decodeURIComponent(this.getAttribute('data-goto') || '');
-          if (name && typeof wpOpenMachineFromName === 'function') wpOpenMachineFromName(name);
-        });
-      }
-  } else {
-    alertBox.style.display = 'none';
-    alertBox.innerHTML = '';
-  }
-} // <-- das schließt renderGlobalOverdueUI vollständig
-
-// Badge am Kopf-Button
-setWartungBadge(due.length > 0);
-
-// Start-Check (ohne Dashboard)
-document.addEventListener('DOMContentLoaded', function(){
-  try {
-    // Logs laden, falls Funktion vorhanden
-    if (typeof window.wpLogLoad === 'function'){ try{ window.wpLogLoad(); }catch(e){} }
-    const due = getDueList();
-    renderGlobalOverdueUI(due);
-  } catch(e) {
-    console.warn('Globaler Wartungs-Check:', e);
-  }
-});
+  // Start-Check (ohne Dashboard)
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      if (typeof window.wpLogLoad === 'function'){ try{ window.wpLogLoad(); }catch(e){} }
+      const due = getDueList();
+      // Badge nur, wenn wir wissen ob etwas fällig ist
+      setWartungBadge(!!(due && due.length));
+      renderGlobalOverdueUI(due);
+    } catch(e) {
+      console.warn('Globaler Wartungs-Check:', e);
+    }
+  });
 })();
 </script>
 
@@ -3938,109 +3925,107 @@ function setupWartungsplanUI(){
   // ── Maschine geändert ─────────────────────────────────────────────
   if (E.selMaschine){
     E.selMaschine.onchange = () => {
-      wpRefreshTaskList();
-      wpStatusUpdateForTask(null);
-      wpEvalWarning?.();
-      wpUpdateGlobalBanner?.();
-      wpSyncPrintSummary?.(null);        // Zusammenfassung leeren
+      if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+      if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
+      if (typeof wpEvalWarning === "function") wpEvalWarning();
+      if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+      if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(null); // Zusammenfassung leeren
     };
   }
 
   // ── Aufgabe geändert ──────────────────────────────────────────────
   if (E.selTask){
     E.selTask.onchange = () => {
-      const t = wpCurrentTask();
-      wpStatusUpdateForTask(t);
+      const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
+      if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
 
       // Intervall nur vorschlagen, wenn im Datensatz noch keins steht
       if (!t || !toInt(t?.intervalDays, "")) {
-        try { wpApplyMailRules({ force:false }); } catch {}
+        try { if (typeof wpApplyMailRules === "function") wpApplyMailRules({ force:false }); } catch {}
       }
 
-      wpUpdateGlobalBanner?.();
-      wpSyncPrintSummary?.(t);           // Zusammenfassung füllen
+      if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+      if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);   // Zusammenfassung füllen
     };
   }
 
-// ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
-E.interval?.addEventListener('input',  wpRecalcNext);
+  // ── Eingaben → Fälligkeit neu berechnen ───────────────────────────
+  E.interval?.addEventListener('input',  ()=>{ if (typeof wpRecalcNext==="function") wpRecalcNext(); });
 
-// NEU: "Zuletzt durchgeführt" akzeptiert dd.mm.jjjj ODER ISO und speichert sofort
-E.last?.addEventListener('change', async () => {
-  const t = wpCurrentTask(); if (!t) return;
-  let v = (E.last.value || "").trim();
+  // NEU: "Zuletzt durchgeführt" akzeptiert dd.mm.jjjj ODER ISO und speichert sofort
+  E.last?.addEventListener('change', async () => {
+    const t = (typeof wpCurrentTask==="function") ? wpCurrentTask() : null;
+    if (!t) return;
+    let v = (E.last.value || "").trim();
 
-  // dd.mm.jjjj -> yyyy-mm-dd
-  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; E.last.value = v; }
+    // dd.mm.jjjj -> yyyy-mm-dd
+    const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; E.last.value = v; }
 
-  // nur gültiges ISO übernehmen
-  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+    // nur gültiges ISO übernehmen
+    t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
 
-  await wpSave();            // persistieren
-  wpRecalcNext?.();          // Next-Datum in das Feld schreiben
-  wpEvalWarning?.();         // Warnungen/Banner aktualisieren
-  wpUpdateGlobalBanner?.();
-  wpSyncPrintSummary?.(t);   // Zusammenfassung unter dem Panel
-});
+    if (typeof wpSave === "function") await wpSave();   // persistieren
+    if (typeof wpRecalcNext === "function") wpRecalcNext();   // Next-Datum in das Feld schreiben
+    if (typeof wpEvalWarning === "function") wpEvalWarning(); // Warnungen/Banner aktualisieren
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t); // Zusammenfassung
+  });
 
+  // (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
+  E.btnAdd?.addEventListener('click', async () => {
+    const m = wpEnsureMachineKey(E.selMaschine?.value);
+    if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
 
-// (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
-E.btnAdd?.addEventListener('click', async () => {
-  const m = wpEnsureMachineKey(E.selMaschine?.value);
-  if (!m){ alert("Bitte zuerst eine Maschine wählen."); return; }
+    const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
+    if (!name) return;
 
-  const name = prompt("Bezeichnung der Wartungsaufgabe (z. B. 'Kette schmieren'):");
-  if (!name) return;
+    const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
 
-  const t = { id: crypto.randomUUID(), name, intervalDays: 30, lastDateISO: "" };
+    // Nippel aus Eingabefeld übernehmen, falls vorhanden
+    const nipVal = toInt(E.nip?.value || "", NaN);
+    if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
 
-  // Nippel aus Eingabefeld übernehmen, falls vorhanden
-  const nipVal = toInt(E.nip?.value || "", NaN);
-  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal;
+    (wartungsplaene[m] ||= []).push(t);
+    if (typeof wpSave === "function") await wpSave();
 
-  (wartungsplaene[m] ||= []).push(t);
-  await wpSave();
+    if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+    if (E.selTask) E.selTask.value = t.id;
 
-  wpRefreshTaskList();
-  if (E.selTask) E.selTask.value = t.id;
+    try { if (typeof wpApplyMailRules === "function") wpApplyMailRules({ force:true }); } catch {}
 
-  try { wpApplyMailRules({ force:true }); } catch {}
+    if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
+    if (typeof wpEvalWarning === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t); // ⇢ neue Aufgabe in die Summary
+  });
 
-  wpStatusUpdateForTask(t);
-  wpEvalWarning?.();
-  wpUpdateGlobalBanner?.();
-  wpSyncPrintSummary?.(t);             // ⇢ neue Aufgabe in die Summary
-});
+  E.btnSave?.addEventListener('click', async () => {
+    const t = (typeof wpCurrentTask==="function") ? wpCurrentTask() : null;
+    if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
 
-E.btnSave?.addEventListener('click', async () => {
-  const t = wpCurrentTask();
-  if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
+    // Intervall übernehmen/validieren
+    let inter = toInt(E.interval?.value || "", NaN);
+    if (!Number.isFinite(inter) || inter < 1) inter = "";
+    t.intervalDays = inter;
 
-  // Intervall übernehmen/validieren
-  let inter = toInt(E.interval?.value || "", NaN);
-  if (!Number.isFinite(inter) || inter < 1) inter = "";
-  t.intervalDays = inter;
+    // Datum normalisieren (dd.mm.jjjj -> ISO) und übernehmen
+    let v = (E.last?.value || "").trim();
+    const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; if (E.last) E.last.value = v; }
+    t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
 
-  // >>> NEU: Datum aus dem Feld normalisieren (dd.mm.jjjj -> ISO) und übernehmen
-  let v = (E.last?.value || "").trim();
-  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (m) { v = `${m[3]}-${m[2]}-${m[1]}`; if (E.last) E.last.value = v; }
-  t.lastDateISO = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+    // Nippelzahl übernehmen (optional)
+    const nipVal = toInt(E.nip?.value || "", NaN);
+    if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
 
-  // Nippelzahl übernehmen (optional)
-  const nipVal = toInt(E.nip?.value || "", NaN);
-  if (Number.isFinite(nipVal) && nipVal >= 0) t.nipples = nipVal; else delete t.nipples;
+    if (typeof wpSave === "function") await wpSave();
 
-  await wpSave();
-
-  wpRecalcNext?.();
-  wpEvalWarning?.();
-  wpUpdateGlobalBanner?.();
-  wpSyncPrintSummary?.(t);
-});
-
-
+    if (typeof wpRecalcNext === "function") wpRecalcNext();
+    if (typeof wpEvalWarning === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
+  });
 
   // ── Löschen ───────────────────────────────────────────────────────
   E.btnDel?.addEventListener('click', async () => {
@@ -4049,64 +4034,70 @@ E.btnSave?.addEventListener('click', async () => {
     if (!confirm("Diese Wartungsaufgabe wirklich löschen?")) return;
 
     wartungsplaene[m] = (wartungsplaene[m]||[]).filter(x => String(x.id) !== String(id));
-    await wpSave();
+    if (typeof wpSave === "function") await wpSave();
 
-    wpRefreshTaskList();
-    wpStatusUpdateForTask(null);
-    wpEvalWarning?.();
-    wpUpdateGlobalBanner?.();
-    wpSyncPrintSummary?.(null);
+    if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+    if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
+    if (typeof wpEvalWarning === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(null);
   });
 
   // (4) ── Heute durchgeführt ────────────────────────────────────────
   E.btnDone?.addEventListener('click', async () => {
-    const t = wpCurrentTask();
+    const t = (typeof wpCurrentTask==="function") ? wpCurrentTask() : null;
     if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
 
     t.lastDateISO = wpTodayISO();
-    await wpSave();
-await wpLogExecutionAndRefresh({
-  dateISO: t.lastDateISO,
-  task: t,
-  machine: E.selMaschine?.value || "",
-  technician: E.selTechniker1?.value || ""
-});
+    if (typeof wpSave === "function") await wpSave();
+    try {
+      if (typeof wpLogExecutionAndRefresh === "function"){
+        await wpLogExecutionAndRefresh({
+          dateISO: t.lastDateISO,
+          task: t,
+          machine: E.selMaschine?.value || "",
+          technician: E.selTechniker1?.value || ""
+        });
+      }
+    } catch {}
 
-
-    wpRecalcNext();
-    wpEvalWarning?.();
-    wpUpdateGlobalBanner?.();
-    wpSyncPrintSummary?.(t);             // ⇢ Summary nach „heute“ aktualisieren
+    if (typeof wpRecalcNext === "function") wpRecalcNext();
+    if (typeof wpEvalWarning === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t); // ⇢ Summary nach „heute“ aktualisieren
   });
 
   // (6) >>> Initial nach dem ersten Füllen ───────────────────────────
-  wpRefreshTaskList();
-  const initTask = wpCurrentTask();
-  wpStatusUpdateForTask(initTask);
-  wpEvalWarning?.();
-  wpUpdateGlobalBanner?.();
-  wpSyncPrintSummary?.(initTask);
+  if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+  const initTask = (typeof wpCurrentTask==="function") ? wpCurrentTask() : null;
+  if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(initTask);
+  if (typeof wpEvalWarning === "function") wpEvalWarning();
+  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(initTask);
 }
 
 /* ---------- Init ---------- */
 document.addEventListener("DOMContentLoaded", async () => {
-  await wpLoad();
-  await wpLogLoad();   // Wartungs-Log aus OneDrive + Cache laden
+  if (typeof wpLoad === "function")     await wpLoad();
+  if (typeof wpLogLoad === "function")  await wpLogLoad();   // Wartungs-Log laden
 
   setupWartungsplanUI();
 
   // Nachträglich sicherstellen, dass alles initial gesetzt ist
-  wpRefreshTaskList();
-  const cur = wpCurrentTask?.() || null;
-  wpStatusUpdateForTask(cur);
-  wpEvalWarning?.();
-  wpUpdateGlobalBanner?.();
-  wpSyncPrintSummary?.(cur);
+  if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
+  const cur = (typeof wpCurrentTask==="function") ? wpCurrentTask() : null;
+  if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(cur);
+  if (typeof wpEvalWarning === "function") wpEvalWarning();
+  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(cur);
 
-  try { wpCheckOverdueAndNotify?.({ sendMail:false }); } catch {}
+  try {
+    if (typeof wpCheckOverdueAndNotify === "function") {
+      wpCheckOverdueAndNotify({ sendMail:false });
+    }
+  } catch {}
 });
-
-
+</script>
 
 
 <script>
@@ -4858,28 +4849,19 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
   setInterval(()=>{ try{ refreshOverdueUI(); }catch(e){} }, 6*60*60*1000);
 })();
 </script>
+<!-- === Auto-Befüllung für "Schmierstelle/Aufgabe" aus Wartungsplänen === -->
 <script>
-// === Auto-Befüllung für "Schmierstelle/Aufgabe" aus Wartungsplänen ===
-// Sucht die globale Datenquelle (wartungsplaene/wp/wpData/…)
-// Erwartete Struktur je Maschine: Array von Aufgaben-Namen ODER Array von Objekten mit {name: "..."} / {aufgabe: "..."}.
 (function(){
   const byId = (id)=>document.getElementById(id);
   const PLACEHOLDER = "Bitte auswählen";
 
   function getPlans(){
-    // probiere mehrere mögliche Variablen
-    const wp = window.wartungsplaene
-           || window.wp
-           || window._wp
-           || window._wpData
-           || window.WARTUNGSPLAENE
-           || null;
+    const wp = window.wartungsplaene || window.wp || window._wp || window._wpData || window.WARTUNGSPLAENE || null;
     return (wp && typeof wp === "object") ? wp : null;
   }
 
   function extractTaskNames(list){
     if (!Array.isArray(list)) return [];
-    // akzeptiere z. B. ["Schmieren A","Reinigen B"] ODER [{name:"..."},{aufgabe:"..."}]
     return list.map(x=>{
       if (typeof x === "string") return x;
       if (x && typeof x === "object") return (x.name || x.aufgabe || x.title || x.task || "").trim();
@@ -4895,16 +4877,14 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
     const plans = getPlans();
     if (!plans) return false;
 
-    // Suche maschinenseitig tolerant (exakt oder case-insensitiv)
     const keys = Object.keys(plans);
-    const key = keys.find(k => k === machine)
-            || keys.find(k => k.toLowerCase().trim() === machine.toLowerCase().trim());
+    const key = keys.find(k => k === machine) ||
+                keys.find(k => k.toLowerCase().trim() === machine.toLowerCase().trim());
     if (!key) return false;
 
     const tasks = extractTaskNames(plans[key]?.tasks || plans[key]?.aufgaben || plans[key]);
     if (!tasks.length) return false;
 
-    // Select neu aufbauen
     sel.innerHTML = "";
     sel.add(new Option(PLACEHOLDER, ""));
     tasks.forEach(t => sel.add(new Option(t, t)));
@@ -4912,7 +4892,6 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
     return true;
   }
 
-  // Fallback: wenn nichts in Plänen gefunden -> Platzhalter sicherstellen (damit Select nie leer ist)
   function ensureNotEmpty(){
     const sel = byId("wpTaskSelect");
     if (!sel) return;
@@ -4928,24 +4907,30 @@ function refreshOverdueUI({ beepOnOverdue = false } = {}) {
 
     // Beim Maschinenwechsel neu füllen
     byId("maschine")?.addEventListener("change", ()=>{
-      setTimeout(()=>{
-        if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty();
-      }, 120);
+      setTimeout(()=>{ if (!rebuildWpTaskSelectFromPlans()) ensureNotEmpty(); }, 120);
     });
 
-    // Wenn Wartungs-Dashboard geöffnet wird, auch nochmal versuchen (falls Pläne dann erst da sind)
-  byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
-    setTimeout(()=>{
-      const sel = byId("wpTaskSelect");
-      if (!sel) return;
-      takeSnapshotForMachine(sel);
-      restoreOptionsIfEmpty(sel);
-      ensurePlaceholder(sel);
-    }, 150);
-  });
-});                 // Ende: window.addEventListener("load", ...)
-})();               // ⬅️ schließt die IIFE
+    // Beim Öffnen des Dashboards: robust nachfüllen (mit Guards + Fallback)
+    byId("toggleWpLogBtn")?.addEventListener("click", ()=>{
+      setTimeout(()=>{
+        const sel = byId("wpTaskSelect");
+        if (!sel) return;
+
+        if (typeof window.takeSnapshotForMachine === "function") window.takeSnapshotForMachine(sel);
+        if (typeof window.restoreOptionsIfEmpty  === "function") window.restoreOptionsIfEmpty(sel);
+        if (typeof window.ensurePlaceholder      === "function") window.ensurePlaceholder(sel);
+
+        // Falls noch leer: aus Plänen befüllen
+        if ((!sel.options || sel.options.length === 0) &&
+            typeof rebuildWpTaskSelectFromPlans === "function") {
+          if (!rebuildWpTaskSelectFromPlans() && typeof ensureNotEmpty === "function") ensureNotEmpty();
+        }
+      }, 150);
+    });
+  }); // Ende: window.addEventListener("load", …)
+})(); // Ende der IIFE
 </script>
+
 
 
   <script>
