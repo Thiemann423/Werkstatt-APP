@@ -1,9 +1,9 @@
-
-
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
+  <!-- MSAL laden (muss vor deinem Cloud-Code stehen) -->
+  <script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
+
   <!-- Build-Version: 1.0.1 - Cache-Bypass -->
   <link href="icon-192.png" rel="apple-touch-icon"/>
   <meta charset="utf-8"/>
@@ -11,7 +11,6 @@
   <title>TE 15 Reparaturauftrag 03</title>
 <style>
   body {
-  
       font-family: Arial, sans-serif;
       margin: 20px;
   }
@@ -109,9 +108,7 @@
   img { max-width:100% !important; height:auto !important; }
 </style>
 
-
-
- <style>
+<style>
   #updateModal {
     display: none;
     position: fixed;
@@ -137,7 +134,6 @@
   }
 </style>
 
-
 <style>
 /* Snapshot: zweispaltig halten */
 /* Snapshot: zweispaltig (Flex statt Grid -> kein Überlapp-Bug in html2canvas) */
@@ -147,20 +143,17 @@
   align-items: flex-start !important;
   padding: 8px 0 !important;
   border-bottom: 1px solid #e9e9e9 !important;
-  gap: 12px !important;               /* moderne Browser; falls kein gap, regelt padding rechts am Label */
+  gap: 12px !important;
 }
-
 .pdf-snapshot .print-label{
   white-space: normal !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   min-width: 0 !important;
-
-  flex: 0 0 38% !important;           /* feste Spaltenbreite links */
+  flex: 0 0 38% !important;
   max-width: 38% !important;
-  padding-right: 12px !important;     /* fallback, wenn gap fehlt */
+  padding-right: 12px !important;
 }
-
 .pdf-snapshot .print-value{
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
@@ -169,32 +162,12 @@
   line-height: 1.4 !important;
   margin-bottom: 6px !important;
   min-width: 0 !important;
-
-  flex: 1 1 62% !important;           /* rechte Spalte füllt */
+  flex: 1 1 62% !important;
   max-width: 62% !important;
 }
-
-
-
-/* Label darf umbrechen */
-.pdf-snapshot .print-label{
-  white-space: normal !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-word !important;
-  min-width: 0 !important;
-}
-
-/* Wert: vollständiger Umbruch + Silbentrennung */
-.pdf-snapshot .print-value{
-  white-space: pre-wrap !important;     /* Zeilenumbrüche erhalten + umbrechen */
-  overflow-wrap: anywhere !important;   /* lange „Wörter“ umbrechen */
-  word-break: break-word !important;
-  hyphens: auto !important;             /* Silbentrennung (de) */
-  line-height: 1.4 !important;          /* etwas mehr Luft */
-  margin-bottom: 6px !important;
-  min-width: 0 !important;
-}
+/* (zweite Definitionen bleiben wie bei dir) */
 </style>
+
 
 
 <style>
@@ -231,6 +204,22 @@ async function loadHtml2PdfIfNeeded(){
     document.head.appendChild(s);
   });
 }
+</script>
+<!-- 🔗 OneDrive/Graph – Config (muss vor deinem App-Code existieren) -->
+<script>
+  const ONEDRIVE_SHARED_LINK =
+    "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten_thiemann_petri-feinkost_de/EkOa1ufucPNDtlfo6B9rxowB7o8nAY4wHK-gcRha74B2AQ?e=gnn1A2";
+  const CLOUD_FILENAME = "wartungslog.json";
+
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
+      authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
+      redirectUri: "https://thiemann423.github.io/Werkstatt-APP/"
+    },
+    cache: { cacheLocation: "localStorage" }
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite", "offline_access"];
 </script>
 
   
@@ -726,27 +715,41 @@ function _saveAll(list){
   }
 }
 
-function _loadAll(){
-  // 1) RAM-Fallback zuerst (falls _saveAll() dorthin schreiben musste)
-  if (Array.isArray(window.__memLog)) return window.__memLog.slice();
+// Optional global, falls noch nicht vorhanden:
+let __cloudEtag = null;
 
-  // 2) Normalfall: aus localStorage lesen
-  try{
-    const raw = localStorage.getItem(WP_STORAGE_KEY);
-    if (!raw) return [];
-    try {
+/* Cloud-first laden, lokaler Cache als Fallback */
+async function _loadAll(){
+  try {
+    // OneDrive-Ordner (aus dem Freigabelink) ansteuern
+    const root = getShareRootEndpoint();                          // nutzt den Konfig-/Helper-Block
+    const { data, etag } = await graphDownloadJsonFromFolder(
+      root,
+      CLOUD_FILENAME                                             // z. B. "wartungslog.json"
+    );
+    __cloudEtag = etag || __cloudEtag;
+
+    // Cloudstand lokal cachen (für schnelle UI / Offline)
+    if (typeof _saveAllLocal === "function") _saveAllLocal(data);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn("Cloud-Load failed, using local cache:", err);
+
+    // === dein bisheriger lokaler Fallback (unverändert) ===
+    if (Array.isArray(window.__memLog)) return window.__memLog.slice();
+    try{
+      const raw = localStorage.getItem(WP_STORAGE_KEY);
+      if (!raw) return [];
       const data = JSON.parse(raw);
       return Array.isArray(data) ? data : [];
-    } catch(parseErr){
-      // defekter JSON – zurücksetzen, damit UI wieder funktioniert
-      localStorage.removeItem(WP_STORAGE_KEY);
-      return [];
+    } catch(e){
+      // defektes JSON oder Storage blockiert
+      try { localStorage.removeItem(WP_STORAGE_KEY); } catch(_){}
+      return Array.isArray(window.__memLog) ? window.__memLog.slice() : [];
     }
-  }catch(e){
-    // 3) Wenn selbst getItem wirft (extremer Privacy-Mode)
-    return Array.isArray(window.__memLog) ? window.__memLog.slice() : [];
   }
 }
+
 
 
 function saveWpTask() {
@@ -4441,28 +4444,62 @@ function wpLogLoad(){
   }
 }
 
-// Robust speichern
-function _saveAll(list){
-  try { localStorage.setItem("TE15_WARTUNGSLOG", JSON.stringify(list||[])); } catch(e){}
+// ===== Cloud-first speichern (mit lokalem Cache + ETag-Merge) =====
+let __cloudEtag = __cloudEtag || null; // falls noch nicht vorhanden
+
+async function _saveAll(list){
+  // 1) lokal sofort cachen, damit UI direkt reagiert
+  try { localStorage.setItem(WP_STORAGE_KEY || "TE15_WARTUNGSLOG", JSON.stringify(list||[])); }
+  catch(e){ window.__memLog = (list||[]).slice(); }
+
+  // 2) in die Cloud schreiben
+  try {
+    const root = getShareRootEndpoint(); // kommt aus dem Graph-Helper
+    const res  = await graphUploadJsonToFolder(root, CLOUD_FILENAME, list, __cloudEtag);
+    __cloudEtag = res.etag || __cloudEtag;
+    return true;
+  } catch (err) {
+    // Parallel-Schreiben? -> zusammenführen und nochmal hochladen
+    if (String(err.message).includes("ETAG_CONFLICT")) {
+      const cloud = await _loadAll(); // lädt aktuellen Cloud-Stand und aktualisiert __cloudEtag
+      const key = e => [
+        e.dateISO || e.date || "",
+        e.machine || "",
+        e.taskName || e.task || "",
+        e.technician || e.tech || ""
+      ].join("§");
+      const map = new Map();
+      [...cloud, ...(list||[])].forEach(e => map.set(key(e), e));
+      const merged = [...map.values()];
+
+      // lokalen Cache aktualisieren
+      try { localStorage.setItem(WP_STORAGE_KEY || "TE15_WARTUNGSLOG", JSON.stringify(merged)); }
+      catch(e){ window.__memLog = merged.slice(); }
+
+      const root = getShareRootEndpoint();
+      const res2 = await graphUploadJsonToFolder(root, CLOUD_FILENAME, merged, __cloudEtag);
+      __cloudEtag = res2.etag || __cloudEtag;
+      return true;
+    }
+    console.warn("Cloud save failed – staying local:", err);
+    return false;
+  }
 }
-function wpLogExecution(entry) {
+
+// ===== Ausführung einer Wartung + Speichern (cloud-first) =====
+async function wpLogExecution(entry) {
   // Sicherstellen, dass entry ein Objekt ist
   var eSrc = (entry && typeof entry === "object") ? entry : {};
 
-  var u = (typeof getSignedInUser === "function")
-    ? getSignedInUser()
-    : { name: "", email: "" };
+  // User (kann leer sein; dein displayNameFromUser-Fallback greift beim Speichern woanders)
+  var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"" };
 
   // Werte absichern
-  var dateISO = _toISO(eSrc.dateISO || new Date());
+  var dateISO = _toISO ? _toISO(eSrc.dateISO || new Date()) : (new Date()).toISOString().slice(0,10);
   var machine = (eSrc.machine ? String(eSrc.machine).trim() : "");
   var taskName = (eSrc.taskName ? String(eSrc.taskName).trim() : "");
-  var intervalDays = (eSrc.intervalDays === "" || eSrc.intervalDays == null)
-    ? ""
-    : Number(eSrc.intervalDays);
-  var nipples = (eSrc.nipples === "" || eSrc.nipples == null)
-    ? ""
-    : Number(eSrc.nipples);
+  var intervalDays = (eSrc.intervalDays === "" || eSrc.intervalDays == null) ? "" : Number(eSrc.intervalDays);
+  var nipples = (eSrc.nipples === "" || eSrc.nipples == null) ? "" : Number(eSrc.nipples);
 
   var technician = (eSrc.technician && String(eSrc.technician).trim())
     ? String(eSrc.technician).trim()
@@ -4472,36 +4509,28 @@ function wpLogExecution(entry) {
     : (u.email || "");
 
   var e = {
-    dateISO      : dateISO,
-    machine      : machine,
-    taskName     : taskName,
-    intervalDays : intervalDays,
-    nipples      : nipples,
-    technician   : technician,
-    technicianEmail : technicianEmail
+    dateISO,
+    machine,
+    taskName,
+    intervalDays,
+    nipples,
+    technician,
+    technicianEmail
   };
 
-  // Wartungslog laden und aktualisieren
-  var list = Array.isArray(window.wartungslog)
-    ? window.wartungslog.slice()
-    : [];
-
+  // Aktuelle Liste cloud-first laden, ergänzen, speichern
+  let list = [];
+  try { list = await _loadAll(); } catch(_) {}
+  if (!Array.isArray(list)) list = [];
   list.push(e);
-  window.wartungslog = list;
 
-  if (typeof _saveAll === "function") {
-    try { _saveAll(list); } catch (err) { console.warn("saveAll failed", err); }
-  }
+  try { await _saveAll(list); } catch (err) { console.warn("saveAll failed", err); }
 
   // UI aktualisieren
-  try {
-    if (typeof renderWpLogTable === "function") renderWpLogTable();
-  } catch (err) {}
-
-  try {
-    if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI();
-  } catch (err) {}
+  try { if (typeof renderWpLogTable === "function") renderWpLogTable(); } catch(_) {}
+  try { if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI(); } catch(_) {}
 }
+
 
 
 
