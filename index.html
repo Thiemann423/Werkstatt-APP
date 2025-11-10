@@ -1934,12 +1934,14 @@ if (typeof maschineSelect !== "undefined" && maschineSelect) {
     if (maschineSelect.value !== "Sonstige") tryAddCustomMaschine();
   });
 }
-if (typeof anlagenteilSelect !== "undefined" && anlagenteilSelect) {
-  anlagenteilSelect.addEventListener("change", function () {
-    if (anlagenteilSelect.value !== "Sonstige") tryAddCustomAnlagenteil();
-  });
-}
+   if (typeof anlagenteilSelect !== "undefined" && anlagenteilSelect) {
+     anlagenteilSelect.addEventListener("change", function () {
+       if (anlagenteilSelect.value !== "Sonstige") tryAddCustomAnlagenteil();
+     });
+   }
+});
 </script>
+
 
 
 
