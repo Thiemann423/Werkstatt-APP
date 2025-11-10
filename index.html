@@ -204,7 +204,7 @@ async function loadHtml2PdfIfNeeded(){
     document.head.appendChild(s);
   });
 }
-
+</script>
 <!-- OneDrive/Graph – Config -->
 <script>
   const ONEDRIVE_SHARED_LINK =
@@ -234,6 +234,9 @@ async function loadHtml2PdfIfNeeded(){
 </script>
 
 <!-- 🔧 Einmaliger Helper-Block -->
+<!-- … dein Config-Block + displayNameFromUser … -->
+
+<!-- 🔧 Einmaliger Helper-Block (IM HEAD!) -->
 <script>
   // Globaler DOM-Helfer (für alle Blöcke verfügbar)
   window.byId = window.byId || function(id){ return document.getElementById(id); };
@@ -246,21 +249,6 @@ async function loadHtml2PdfIfNeeded(){
 </head>
 <body>
 
-
-
-<!-- dein bestehender kleiner Helper-Block -->
-<script>
-  // Globaler DOM-Helfer (für alle Blöcke verfügbar)
-  window.byId = window.byId || function(id){ return document.getElementById(id); };
-
-  // Alte/Neue Funktionsnamen kompatibel halten
-  // (einige Stellen rufen wpRefreshOverdueUI auf, andere refreshOverdueUI)
-  window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
-    try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
-  };
-</script>
-</head>
-<body>
 
   
   <!-- Offscreen-Renderframe nur für den PDF-Export -->
@@ -740,7 +728,8 @@ function _saveAll(list){
 }
 
 // Optional global, falls noch nicht vorhanden:
-let __cloudEtag = null;
+window.__cloudEtag = window.__cloudEtag || null;
+
 
 /* Cloud-first laden, lokaler Cache als Fallback */
 async function _loadAll(){
@@ -785,8 +774,8 @@ async function saveWpTask() {
   // MS-User + Formularwert
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
   var elTech = document.getElementById("techniker1");
-  var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
- var tech = techFromForm || displayNameFromUser(u);
+ var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
+var tech = techFromForm || displayNameFromUser(u);
   var techEmail = u.email || "";
   var techUpn = u.upn || "";
 
@@ -1016,20 +1005,13 @@ function setWpRange(btn) {
 
 /* 🔌 Verdrahten (wenn DOM geladen ist) */
 window.addEventListener("load", function () {
-  // 👤 Techniker 1 automatisch aus Microsoft-Login befüllen & sperren
   try {
     var u = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
     var techEl = document.getElementById("techniker1");
     if (techEl && u) {
       var name = (typeof displayNameFromUser === "function") ? displayNameFromUser(u) : (u.name || "");
-      if (name && !techEl.value) {
-        techEl.value = name;
-      }
-      // Schreibschutz + optionales Styling
-      if (name) {
-        techEl.readOnly = true;
-        if (techEl.classList) techEl.classList.add("readonly");
-      }
+      if (name && !techEl.value) techEl.value = name;
+      if (name) { techEl.readOnly = true; techEl.classList && techEl.classList.add("readonly"); }
     }
   } catch (_) {}
 
@@ -4440,10 +4422,23 @@ function _collectEntryFromForm(opts){
 
 
 
-// *** HIER die beiden Stellen auf window.__WP_LOG_KEY__ umgestellt ***
-function wpLogLoad(){
+// ------------------------------------------------------------------
+// Speicher-Key (falls global überschrieben werden soll):
+const WP_STORAGE_KEY = (typeof window.__WP_LOG_KEY__ !== "undefined" && window.__WP_LOG_KEY__)
+  ? window.__WP_LOG_KEY__
+  : "TE15_WARTUNGSLOG";
+
+// ETag-Cache EINMAL global initialisieren (im <head> reicht – falls hier noch nicht gesetzt):
+window.__cloudEtag = window.__cloudEtag || null;
+// ------------------------------------------------------------------
+
+
+// ✅ CLOUD-first Laden und Normalisieren
+async function wpLogLoad(){
   try{
-    var raw = _loadAll();
+    // immer cloud-first laden
+    let raw = [];
+    try { raw = await _loadAll(); } catch(_) {}
     if (!Array.isArray(raw)) raw = [];
 
     // aktuell angemeldeter User (Fallback für alte/leere Einträge)
@@ -4452,7 +4447,7 @@ function wpLogLoad(){
       : { name:"", email:"", upn:"" };
 
     window.wartungslog = raw.map(function(e){
-      var dateISO = _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : ""));
+      var dateISO = _toISO ? _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : "")) : String(e.dateISO || e.date || "");
       var machine = e.machine ? e.machine : (e.maschine ? e.maschine : "");
       var taskName = e.taskName ? e.taskName : (e.task ? e.task : "");
 
@@ -4466,17 +4461,17 @@ function wpLogLoad(){
 
       // Techniker + Mail/UPN mit Fallbacks (alte Keys: tech/techEmail)
       var technician =
-        (e.technician && String(e.technician).trim()) ? e.technician :
-        (e.tech       && String(e.tech).trim())       ? e.tech       :
-        (u.name || "");
+        (e.technician && String(e.technician).trim()) ? String(e.technician).trim() :
+        (e.tech       && String(e.tech).trim())       ? String(e.tech).trim()       :
+        (typeof displayNameFromUser === "function" ? displayNameFromUser(u) : (u.name || ""));
 
       var technicianEmail =
-        (e.technicianEmail && String(e.technicianEmail).trim()) ? e.technicianEmail :
-        (e.techEmail       && String(e.techEmail).trim())       ? e.techEmail       :
+        (e.technicianEmail && String(e.technicianEmail).trim()) ? String(e.technicianEmail).trim() :
+        (e.techEmail       && String(e.techEmail).trim())       ? String(e.techEmail).trim()       :
         (u.email || "");
 
       var technicianUpn =
-        (e.technicianUpn && String(e.technicianUpn).trim()) ? e.technicianUpn :
+        (e.technicianUpn && String(e.technicianUpn).trim()) ? String(e.technicianUpn).trim() :
         (u.upn || "");
 
       return {
@@ -4496,47 +4491,62 @@ function wpLogLoad(){
   }
 }
 
-// ===== Cloud-first speichern (mit lokalem Cache + ETag-Merge) =====
-let __cloudEtag = __cloudEtag || null; // falls noch nicht vorhanden
 
+// ✅ CLOUD-first Speichern (mit lokalem Cache + ETag-Merge)
 async function _saveAll(list){
+  const payload = Array.isArray(list) ? list : [];
+
   // 1) lokal sofort cachen, damit UI direkt reagiert
-  try { localStorage.setItem(WP_STORAGE_KEY || "TE15_WARTUNGSLOG", JSON.stringify(list||[])); }
-  catch(e){ window.__memLog = (list||[]).slice(); }
+  try {
+    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    window.__memLog = payload.slice();
+  }
 
   // 2) in die Cloud schreiben
   try {
-    const root = getShareRootEndpoint(); // kommt aus dem Graph-Helper
-    const res  = await graphUploadJsonToFolder(root, CLOUD_FILENAME, list, __cloudEtag);
-    __cloudEtag = res.etag || __cloudEtag;
+    const root = await getShareRootEndpoint(); // Graph-Helper (oft async)
+    const res  = await graphUploadJsonToFolder(root, CLOUD_FILENAME, payload, window.__cloudEtag || null);
+    window.__cloudEtag = (res && res.etag) || window.__cloudEtag;
     return true;
   } catch (err) {
     // Parallel-Schreiben? -> zusammenführen und nochmal hochladen
-    if (String(err.message).includes("ETAG_CONFLICT")) {
-      const cloud = await _loadAll(); // lädt aktuellen Cloud-Stand und aktualisiert __cloudEtag
+    if (String(err && err.message || "").includes("ETAG_CONFLICT")) {
+      const cloud = await _loadAll(); // lädt Cloud-Stand und setzt window.__cloudEtag
+
       const key = e => [
         e.dateISO || e.date || "",
         e.machine || "",
         e.taskName || e.task || "",
         e.technician || e.tech || ""
       ].join("§");
+
       const map = new Map();
-      [...cloud, ...(list||[])].forEach(e => map.set(key(e), e));
+      for (const item of [...(cloud || []), ...payload]) map.set(key(item), item);
       const merged = [...map.values()];
 
       // lokalen Cache aktualisieren
-      try { localStorage.setItem(WP_STORAGE_KEY || "TE15_WARTUNGSLOG", JSON.stringify(merged)); }
-      catch(e){ window.__memLog = merged.slice(); }
+      try {
+        localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(merged));
+      } catch (e) {
+        window.__memLog = merged.slice();
+      }
 
-      const root = getShareRootEndpoint();
-      const res2 = await graphUploadJsonToFolder(root, CLOUD_FILENAME, merged, __cloudEtag);
-      __cloudEtag = res2.etag || __cloudEtag;
-      return true;
+      try {
+        const root = await getShareRootEndpoint();
+        const res2 = await graphUploadJsonToFolder(root, CLOUD_FILENAME, merged, window.__cloudEtag || null);
+        window.__cloudEtag = (res2 && res2.etag) || window.__cloudEtag;
+        return true;
+      } catch (err2) {
+        console.warn("Cloud save after merge failed:", err2);
+      }
     }
+
     console.warn("Cloud save failed – staying local:", err);
     return false;
   }
 }
+
 
 // ===== Ausführung einer Wartung + Speichern (cloud-first) =====
 async function wpLogExecution(entry) {
@@ -5074,39 +5084,66 @@ window.addEventListener("load", function(){
     return a === b ? 0 : (a < b ? -1 : 1); // nur YYYY-MM-DD
   }
 
-  // ===== Wartungsberechnung =====
-  // Map je (Maschine||Aufgabe) mit lastDate, intervalDays, nextDue, status
-  function computeDueMap(){
-    try { if (typeof wpLogLoad === "function") wpLogLoad(); } catch(e){}
-    const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
-    const map = new Map();
-
-    list.forEach(e=>{
-      const key  = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
-      const last = (e.dateISO||"").trim();
-      const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
-      const prev = map.get(key);
-
-      if (!prev || (last && last > (prev.lastDate||""))) {
-        const next = (last && intv) ? addDays(last, intv) : "";
-        const today = toISO(new Date());
-        let status = "ok";
-        if (next) {
-          if (cmpISO(next, today) < 0) status = "overdue";
-          else if (cmpISO(next, today) === 0) status = "today";
-        }
-        map.set(key, {
-          machine: e.machine || "",
-          taskName: e.taskName || "",
-          lastDate: last || "",
-          intervalDays: intv || 0,
-          nextDue: next,
-          status
-        });
+// ===== Wartungsberechnung (cloud-ready, async) =====
+async function computeDueMap(){
+  // Stelle sicher, dass window.wartungslog gefüllt ist
+  try {
+    if (typeof wpLogLoad === "function") {
+      const maybePromise = wpLogLoad();
+      if (maybePromise && typeof maybePromise.then === "function") {
+        await maybePromise; // async Variante warten
       }
-    });
-    return map;
+    } else if (typeof _loadAll === "function") {
+      // Fallback: direkt aus Cloud/Cache laden
+      try {
+        const raw = await _loadAll();
+        window.wartungslog = Array.isArray(raw) ? raw : [];
+      } catch { window.wartungslog = []; }
+    }
+  } catch { /* ignorieren, unten mit leerer Liste weiter */ }
+
+  const list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+  const map = new Map();
+
+  // === Deine bestehende Aggregationslogik hier beibehalten ===
+  // Beispiel (falls du so etwas schon hattest):
+  // key = Maschine + '|' + Aufgabe
+  for (const e of list) {
+    const key = (e.machine || "") + "|" + (e.taskName || "");
+    const curr = map.get(key) || {
+      machine: e.machine || "",
+      taskName: e.taskName || "",
+      lastDate: null,
+      intervalDays: e.intervalDays || "",
+      nextDue: null,
+      status: "ok"
+    };
+
+    // lastDate aktualisieren
+    const d = e.dateISO || e.date || "";
+    if (d && (!curr.lastDate || d > curr.lastDate)) curr.lastDate = d;
+
+    // intervalDays konsolidieren (falls leer, behalten)
+    if (e.intervalDays != null && e.intervalDays !== "") curr.intervalDays = e.intervalDays;
+
+    map.set(key, curr);
   }
+
+  // nextDue & status berechnen (falls du das so machst)
+  const today = new Date().toISOString().slice(0,10);
+  for (const [key, row] of map) {
+    if (row.lastDate && row.intervalDays) {
+      const dt = new Date(row.lastDate);
+      dt.setDate(dt.getDate() + Number(row.intervalDays));
+      row.nextDue = dt.toISOString().slice(0,10);
+      row.status = (row.nextDue < today) ? "overdue" : "ok";
+      map.set(key, row);
+    }
+  }
+
+  return map;
+}
+
 
 
 function anyDueOrOverdue(dueMap){
@@ -5191,12 +5228,19 @@ function listDueOrOverdue(dueMap){
     } catch(e) {}
   }
 
-function refreshOverdueUI(opts){
+// ✅ Async Variante – wartet auf computeDueMap()
+async function refreshOverdueUI(opts){
   opts = opts || {};
   var beepOnOverdue = !!opts.beepOnOverdue;
 
-  // computeDueMap absichern
-  var map = (typeof computeDueMap === "function") ? computeDueMap() : new Map();
+  // computeDueMap sicher aufrufen & abwarten
+  var map = new Map();
+  try {
+    if (typeof computeDueMap === "function") {
+      const maybe = computeDueMap();
+      map = (maybe && typeof maybe.then === "function") ? await maybe : (maybe || new Map());
+    }
+  } catch(e){ map = new Map(); }
 
   // todayISO robust holen (alte oder neue Variante)
   function getToday(){
@@ -5206,8 +5250,9 @@ function refreshOverdueUI(opts){
     return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
   }
 
-  // heute/überfällige sammeln
-  var dueList = (typeof listDueOrOverdue === "function") ? listDueOrOverdue(map) : [];
+  // heute/überfällige sammeln (synchron)
+  var dueList = [];
+  try { dueList = (typeof listDueOrOverdue === "function") ? listDueOrOverdue(map) : []; } catch(_) {}
 
   // Badge aktualisieren
   if (typeof updateButtonBadge === "function") {
@@ -5230,7 +5275,7 @@ function refreshOverdueUI(opts){
     try { beep(); } catch(e){}
   }
 
-  // 🔔 Auch globalen Hinweis / Banner außerhalb des Dashboards aktualisieren
+  // 🔔 Globaler Hinweis/Banner außerhalb des Dashboards
   if (typeof renderGlobalOverdueUI === "function") {
     var today = getToday();
     var globalDue = [];
@@ -5248,60 +5293,66 @@ function refreshOverdueUI(opts){
   }
 }
 
-/* ---------- Wiring ---------- */
-window.addEventListener("load", function(){
-  // Initial
-  try { refreshOverdueUI(); } catch(e){}
 
-  // Beim Panel-Öffnen -> Hinweis aktualisieren + optional Beep
-  var btn = byId("toggleWpLogBtn");
-  if (btn) {
-    btn.addEventListener("click", function(){
-      setTimeout(function(){ try { refreshOverdueUI({beepOnOverdue:true}); } catch(e){} }, 60);
+// Beim Panel-Öffnen -> Hinweis aktualisieren + optional Beep
+var btn = byId("toggleWpLogBtn");
+if (btn) {
+  btn.addEventListener("click", function () {
+    setTimeout(async function () {
+      try { await refreshOverdueUI({ beepOnOverdue: true }); } catch (e) {}
+    }, 60);
+  });
+}
+
+// Nach „Speichern“ / „Heute durchgeführt“ aktualisieren
+function safe(id){
+  var el = byId(id);
+  if (el) {
+    el.addEventListener("click", function(){
+      setTimeout(async function(){
+        try { await refreshOverdueUI(); } catch(e){}
+      }, 60);
     });
   }
+}
+safe("wpSaveTask");
+safe("wpMarkDoneToday");
 
-  // Nach „Speichern“ / „Heute durchgeführt“ aktualisieren
-  function safe(id){
-    var el = byId(id);
-    if (el) {
-      el.addEventListener("click", function(){
-        setTimeout(function(){ try { refreshOverdueUI(); } catch(e){} }, 60);
-      });
-    }
-  }
-  safe("wpSaveTask");
-  safe("wpMarkDoneToday");
-
-  // Falls Log-Funktion direkt genutzt wird, nach jedem Schreiben refreshen
-  if (typeof window.wpLogExecution === "function") {
-    (function(){
-      var orig = window.wpLogExecution;
-      window.wpLogExecution = function(entry){
-        var r = orig.apply(this, arguments);
-        try { refreshOverdueUI(); } catch(e){}
-        return r;
-      };
-    })();
-  }
+// Falls Log-Funktion direkt genutzt wird, nach jedem Schreiben refreshen
+if (typeof window.wpLogExecution === "function") {
+  (function () {
+    var orig = window.wpLogExecution;
+    window.wpLogExecution = async function (entry) {
+      var r = await orig.apply(this, arguments);
+      try { await refreshOverdueUI(); } catch (e) {}
+      return r;
+    };
+  })();
+}
 });
 
 // Tastenkürzel: Alt+W toggelt Panel und refresht UI
-window.addEventListener("keydown", function(e){
-  if (e.altKey && (e.key === "w" || e.key === "W")){
+window.addEventListener("keydown", async function (e) {
+  if (e.altKey && (e.key === "w" || e.key === "W")) {
     e.preventDefault();
     var p = byId("wpLogPanel");
-    if (!p){ alert("Hinweis: #wpLogPanel nicht gefunden."); return; }
+    if (!p) { alert("Hinweis: #wpLogPanel nicht gefunden."); return; }
     var open = (p.style.display === "" || p.style.display === "none");
     p.style.display = open ? "block" : "none";
-    try { if (open && typeof wpLogLoad === "function") wpLogLoad(); } catch(err){}
-    try { if (open && typeof renderWpLogTable === "function") renderWpLogTable(); } catch(err){}
-    setTimeout(function(){ try { refreshOverdueUI({beepOnOverdue:true}); } catch(err){} }, 60);
+    try { if (open && typeof wpLogLoad === "function") {
+      const ret = wpLogLoad();
+      if (ret && typeof ret.then === "function") await ret;
+    }} catch (err) {}
+    try { if (open && typeof renderWpLogTable === "function") renderWpLogTable(); } catch (err) {}
+    setTimeout(async function(){ try { await refreshOverdueUI({ beepOnOverdue: true }); } catch (err) {} }, 60);
   }
 });
 
 // Optional: regelmäßige Prüfung, falls Seite lange offen bleibt (alle 6h)
-setInterval(function(){ try { refreshOverdueUI(); } catch(e){} }, 6*60*60*1000);
+setInterval(async function(){
+  try { await refreshOverdueUI(); } catch(e){}
+}, 6 * 60 * 60 * 1000);
+
 
 })();
 </script>
