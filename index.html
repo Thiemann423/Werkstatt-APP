@@ -5149,12 +5149,12 @@ async function computeDueMap(){
   }
 
   // nextDue & status berechnen (falls du das so machst)
-  const today = new Date().toISOString().slice(0,10);
+const today = toISO(new Date());          // lokales YYYY-MM-DD
   for (const [key, row] of map) {
     if (row.lastDate && row.intervalDays) {
       const dt = new Date(row.lastDate);
       dt.setDate(dt.getDate() + Number(row.intervalDays));
-      row.nextDue = dt.toISOString().slice(0,10);
+      row.nextDue = toISO(dt);                  // lokales YYYY-MM-DD
       row.status = (row.nextDue < today) ? "overdue" : "ok";
       map.set(key, row);
     }
