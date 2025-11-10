@@ -4886,7 +4886,7 @@ window.addEventListener("load", function () {
   if (panel && panel.style.display !== "none") { if (typeof loadWpLog==="function") loadWpLog(); }
 });
 
-
+})();   // ← schließt die erste IIFE
 
 (function(){
   const byId = (id)=>document.getElementById(id);
