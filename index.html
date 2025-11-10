@@ -983,8 +983,8 @@ function setWpRange(btn) {
   var from  = new Date(today);
   from.setDate(today.getDate() - days + 1);
 
-  var toStr   = today.toISOString().split("T")[0];
-  var fromStr = from.toISOString().split("T")[0];
+  var toStr   = toISO(today);
+ var fromStr = toISO(from);
 
   var fromEl = document.getElementById("wpLog_from");
   var toEl   = document.getElementById("wpLog_to");
@@ -4737,17 +4737,26 @@ function toggleWpLogPanel(){
 
 function bindWpLogUi(){
   var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
-  for (var i=0;i<ids.length;i++){
+  for (var i=0; i<ids.length; i++){
     var el = _byId(ids[i]);
     if (el) el.addEventListener("input", renderWpLogTable);
   }
 
   var btnReload = _byId("wpLogReload");
-  if (btnReload) btnReload.addEventListener("click", function(){ wpLogLoad(); renderWpLogTable(); });
+  if (btnReload) btnReload.addEventListener("click", function(){
+    // Cloud neu laden + rendern
+    if (typeof wpLogLoad === "function") wpLogLoad();
+    renderWpLogTable();
+  });
 
   var btnClear = _byId("wpLogClear");
   if (btnClear) btnClear.addEventListener("click", function(){
-    for (var i=0;i<ids.length;i++){ var el=_byId(ids[i]); if (el) el.value=""; }
+    for (var i=0; i<ids.length; i++){
+      var el = _byId(ids[i]); if (el) el.value = "";
+    }
+    // optional: Range-Button auf 30 Tage zurücksetzen
+    var rangeBtn = _byId("wpLogRangeBtn");
+    if (rangeBtn) { rangeBtn.dataset.mode = "30"; rangeBtn.textContent = "🗓️ Letzte 30 Tage"; }
     renderWpLogTable();
   });
 
@@ -4755,16 +4764,38 @@ function bindWpLogUi(){
   if (rangeBtn) rangeBtn.addEventListener("click", function(ev){
     var btn   = ev.currentTarget || ev.target;
     var mode  = String((btn && btn.dataset && btn.dataset.mode) || "30");
-    var today = new Date();
-    function toISO(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-    var from = new Date(today);
-    if (mode === "30"){ from.setDate(from.getDate()-30); btn.dataset.mode="90"; btn.textContent="🗓️ Letzte 90 Tage"; }
-    else if (mode === "90"){ from.setDate(from.getDate()-90); btn.dataset.mode="7";  btn.textContent="🗓️ Letzte 7 Tage"; }
-    else { from.setDate(from.getDate()-7);  btn.dataset.mode="30"; btn.textContent="🗓️ Letzte 30 Tage"; }
-    var elFrom=_byId("wpLog_from"); if (elFrom) elFrom.value = toISO(from);
-    var elTo=_byId("wpLog_to"); if (elTo) elTo.value = toISO(today);
+
+    var today = new Date();              // nicht mutieren
+    var from  = new Date(today);         // echte Kopie
+    if (mode === "30"){
+      from.setDate(from.getDate() - 30);
+      btn.dataset.mode = "90";
+      btn.textContent  = "🗓️ Letzte 90 Tage";
+    } else if (mode === "90"){
+      from.setDate(from.getDate() - 90);
+      btn.dataset.mode = "7";
+      btn.textContent  = "🗓️ Letzte 7 Tage";
+    } else {
+      from.setDate(from.getDate() - 7);
+      btn.dataset.mode = "30";
+      btn.textContent  = "🗓️ Letzte 30 Tage";
+    }
+
+    // Zentrale toISO benutzen (keine lokale Hilfsfunktion!)
+    var elFrom = _byId("wpLog_from"); if (elFrom) elFrom.value = toISO(from);
+    var elTo   = _byId("wpLog_to");   if (elTo)   elTo.value   = toISO(today);
+
     renderWpLogTable();
   });
+}
+function toISO(d){
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  var dd  = (d instanceof Date) ? d : new Date(d || Date.now());
+  var m   = String(dd.getMonth()+1).padStart(2,"0");
+  var day = String(dd.getDate()).padStart(2,"0");
+  return dd.getFullYear() + "-" + m + "-" + day;
+}
+
 
   var saveBtn = _byId("wpSaveTask");
   if (saveBtn) saveBtn.addEventListener("click", function(){
@@ -4804,15 +4835,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 (function(){
   const byId = (id)=>document.getElementById(id);
 
-function toISO(d){
-  // wenn schon im Format YYYY-MM-DD, lass so
-  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
 
-  const dd  = (d instanceof Date) ? d : new Date(d || Date.now());
-  const m   = String(dd.getMonth() + 1).padStart(2, "0"); // <- String
-  const day = String(dd.getDate()).padStart(2, "0");      // <- String
-  return `${dd.getFullYear()}-${m}-${day}`;
-}
 
 // Kompatibilität für alten Code
 window.todayISO = window.todayISO || function () {
