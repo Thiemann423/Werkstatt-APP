@@ -3681,11 +3681,7 @@ async function wpSave(){
     await fetch(url, { method:"PUT", headers:{Authorization:`Bearer ${accessToken}`}, body:blob });
   }catch(e){ console.warn("wpSave()", e); }
 }
-// ===== Wartungs-LOG (Historie) ===================================
-const WP_LOG_FILE   = "Wartungslog.json";
-const WP_LOG_CACHE  = "TE15_WARTUNGSLOG";
-// Wird in den gleichen Meta-Ordner geschrieben wie die Wartungspläne
-let wartungslog = [];
+
 
 async function wpLogLoad(){
   // 1) Cache
