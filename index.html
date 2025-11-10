@@ -224,8 +224,20 @@ async function loadHtml2PdfIfNeeded(){
 
   
 
-<!-- ⤵️ HIER EINFÜGEN -->
-  <script>
+<!-- ✅ Anzeigename-Helper: direkt nach dem Config-Block -->
+<script>
+  // Baut aus MS-Login einen schönen Anzeigenamen (Fallback aus E-Mail/UPN)
+  window.displayNameFromUser = function(u){
+    if (!u) return "";
+    if (u.name && u.name.trim()) return u.name.trim();
+    var id = (u.email || u.upn || "").split("@")[0] || "";
+    if (!id) return "";
+    return id.replace(/[._-]+/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+  };
+</script>
+
+<!-- dein bestehender kleiner Helper-Block -->
+<script>
   // Globaler DOM-Helfer (für alle Blöcke verfügbar)
   window.byId = window.byId || function(id){ return document.getElementById(id); };
 
@@ -234,7 +246,7 @@ async function loadHtml2PdfIfNeeded(){
   window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
     try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
   };
-  </script>
+</script>
 </head>
 <body>
 
@@ -762,7 +774,7 @@ async function saveWpTask() {
   var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
   var elTech = document.getElementById("techniker1");
   var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
-  var tech = techFromForm || (u.name || "");
+ var tech = techFromForm || displayNameFromUser(u);
   var techEmail = u.email || "";
   var techUpn = u.upn || "";
 
@@ -991,41 +1003,66 @@ function setWpRange(btn) {
 }
 
 /* 🔌 Verdrahten (wenn DOM geladen ist) */
-window.addEventListener("load", function(){
-  // Speichern aus dem Wartungs-Panel
+window.addEventListener("load", function () {
+  // 👤 Techniker 1 automatisch aus Microsoft-Login befüllen & sperren
+  try {
+    var u = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
+    var techEl = document.getElementById("techniker1");
+    if (techEl && u) {
+      var name = (typeof displayNameFromUser === "function") ? displayNameFromUser(u) : (u.name || "");
+      if (name && !techEl.value) {
+        techEl.value = name;
+      }
+      // Schreibschutz + optionales Styling
+      if (name) {
+        techEl.readOnly = true;
+        if (techEl.classList) techEl.classList.add("readonly");
+      }
+    }
+  } catch (_) {}
+
+  // 💾 Speichern aus dem Wartungs-Panel
   var saveBtn = document.getElementById("wpSaveTask");
   if (saveBtn && typeof saveWpTask === "function") {
-  saveBtn.addEventListener("click", async () => { await saveWpTask(); });
-
+    saveBtn.addEventListener("click", async function () {
+      await saveWpTask();
+    });
   }
 
-  // Wartungs-Log Panel: Buttons
+  // 🔄 Wartungs-Log Panel: Buttons
   var reloadBtn = document.getElementById("wpLogReload");
-  if (reloadBtn) reloadBtn.addEventListener("click", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
+  if (reloadBtn) reloadBtn.addEventListener("click", function () {
+    if (typeof loadWpLog === "function") loadWpLog();
+  });
 
   var clearBtn = document.getElementById("wpLogClear");
-  if (clearBtn) clearBtn.addEventListener("click", function(){ if (typeof clearWpFilters==="function") clearWpFilters(); });
+  if (clearBtn) clearBtn.addEventListener("click", function () {
+    if (typeof clearWpFilters === "function") clearWpFilters();
+  });
 
   var rangeBtn = document.getElementById("wpLogRangeBtn");
   if (rangeBtn) {
-    rangeBtn.addEventListener("click", function(e){
+    rangeBtn.addEventListener("click", function (e) {
       setWpRange(e.currentTarget || rangeBtn);
     });
   }
 
-  // Filterfelder reagieren live
-  var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
-  for (var i=0; i<ids.length; i++){
+  // 🔍 Filterfelder reagieren live
+  var ids = ["wpLog_from", "wpLog_to", "wpLog_machine", "wpLog_task", "wpLog_tech"];
+  for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
-    if (el) el.addEventListener("input", function(){ if (typeof loadWpLog==="function") loadWpLog(); });
+    if (el) el.addEventListener("input", function () {
+      if (typeof loadWpLog === "function") loadWpLog();
+    });
   }
 
-  // Falls Panel beim Start schon sichtbar ist
+  // ▶️ Falls Panel beim Start schon sichtbar ist: direkt laden
   var panel = document.getElementById("wpLogPanel");
   if (panel && panel.style.display !== "none") {
     if (typeof loadWpLog === "function") loadWpLog();
   }
 });
+
 </script>
 <!-- ✅ END: Wartungs-Dashboard (Log) + Logik -->
 
