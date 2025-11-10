@@ -204,6 +204,7 @@ async function loadHtml2PdfIfNeeded(){
     document.head.appendChild(s);
   });
 }
+
 <!-- OneDrive/Graph – Config -->
 <script>
   const ONEDRIVE_SHARED_LINK =
@@ -221,9 +222,8 @@ async function loadHtml2PdfIfNeeded(){
   const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite", "offline_access"];
 </script>
 
-<!-- ✅ HIER: Anzeigenamen-Hilfsfunktion (noch im <head>, vor </head>) -->
+<!-- ✅ Anzeigenamen-Hilfsfunktion (im <head>, vor </head>) -->
 <script>
-  // Aus MS-Login einen schönen Anzeigenamen bauen (Fallback aus E-Mail/UPN)
   function displayNameFromUser(u){
     if (!u) return "";
     if (u.name && u.name.trim()) return u.name.trim();
@@ -233,13 +233,19 @@ async function loadHtml2PdfIfNeeded(){
   }
 </script>
 
-<!-- dein bestehender kleiner Helper-Block -->
+<!-- 🔧 Einmaliger Helper-Block -->
 <script>
+  // Globaler DOM-Helfer (für alle Blöcke verfügbar)
   window.byId = window.byId || function(id){ return document.getElementById(id); };
+
+  // Alte/Neue Funktionsnamen kompatibel halten
   window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
     try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
   };
 </script>
+</head>
+<body>
+
 
 
 <!-- dein bestehender kleiner Helper-Block -->
