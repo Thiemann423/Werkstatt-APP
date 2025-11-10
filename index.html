@@ -5058,10 +5058,11 @@ window.addEventListener("load", function(){
             ensureNotEmpty();
           }
         }
-      }, 150);
+ }, 150);
     });
   }
-});
+});          // ← schließt window.addEventListener("load", …)
+})();        // ← schließt das äußere (function(){ … })();
 </script>
 
 <script>
