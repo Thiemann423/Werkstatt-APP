@@ -4411,14 +4411,18 @@ function _collectEntryFromForm(opts){
 
 
 // ------------------------------------------------------------------
-// Speicher-Key (falls global überschrieben werden soll):
-const WP_STORAGE_KEY = (typeof window.__WP_LOG_KEY__ !== "undefined" && window.__WP_LOG_KEY__)
-  ? window.__WP_LOG_KEY__
-  : "TE15_WARTUNGSLOG";
+// Speicher-Key (optional per window.__WP_LOG_KEY__ überschreibbar)
+const WP_STORAGE_KEY =
+  (typeof window.__WP_LOG_KEY__ === "string" && window.__WP_LOG_KEY__.trim())
+    ? window.__WP_LOG_KEY__.trim()
+    : "TE15_WARTUNGSLOG";
 
-// ETag-Cache EINMAL global initialisieren (im <head> reicht – falls hier noch nicht gesetzt):
-window.__cloudEtag = window.__cloudEtag || null;
+// ETag-Cache einmal global initialisieren
+if (typeof window.__cloudEtag === "undefined") {
+  window.__cloudEtag = null;
+}
 // ------------------------------------------------------------------
+
 
 
 // ✅ CLOUD-first Laden und Normalisieren
