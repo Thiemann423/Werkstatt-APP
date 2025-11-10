@@ -5371,8 +5371,9 @@ window.addEventListener("keydown", async function (e) {
 setInterval(async function(){
   try { await refreshOverdueUI(); } catch(e){}
 }, 6 * 60 * 60 * 1000);
-)();      // schließt die IIFE
+})();               // schließt die IIFE
 </script>
+  
 <!-- === Auto-Befüllung für "Schmierstelle/Aufgabe" aus Wartungsplänen === -->
 <script>
 (function(){
