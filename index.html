@@ -752,7 +752,8 @@ async function _loadAll(){
 
 
 
-function saveWpTask() {
+// ✅ SPEICHERN – cloud-first + async
+async function saveWpTask() {
   // Datum (YYYY-MM-DD)
   var d = new Date();
   var todayISO = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -795,15 +796,16 @@ function saveWpTask() {
     technicianUpn: techUpn
   };
 
-  // Laden, hinzufügen, speichern (mit iPad-Fallback in _saveAll)
-  var list = _loadAll();
+  // Laden, hinzufügen, CLOUD speichern
+  var list = [];
+  try { list = await _loadAll(); } catch(_) {}
   if (!Array.isArray(list)) list = [];
   list.push(entry);
-  _saveAll(list);
+  await _saveAll(list);
 
   // UI aktualisieren
   try {
-    (window.wpLogLoad || window.loadWpLog || function(){})();
+    if (typeof loadWpLog === "function") await loadWpLog();
     if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI();
   } catch(_) {}
 
@@ -813,7 +815,8 @@ function saveWpTask() {
 
 
 
-/* 🔎 Filter einsammeln */
+
+/* 🔎 Filter einsammeln – unverändert */
 function getWpFilters() {
   var fromEl = document.getElementById("wpLog_from");
   var toEl   = document.getElementById("wpLog_to");
@@ -838,8 +841,7 @@ function getWpFilters() {
   return { from: from, to: to, mach: mach, task: task, tech: tech };
 }
 
-
-/* 🧮 Datums-Check */
+/* 🧮 Datums-Check – unverändert */
 function inDateRange(dateStr, from, to) {
   if (!dateStr) return false;
   if (from && dateStr < from) return false;
@@ -847,7 +849,8 @@ function inDateRange(dateStr, from, to) {
   return true;
 }
 
-function loadWpLog() {
+// ✅ LADEN – cloud-first + async
+async function loadWpLog() {
   var tbody = document.getElementById("wpLogBody");   // <tbody id="wpLogBody">
   var empty = document.getElementById("wpLogEmpty");  // z.B. <tr id="wpLogEmpty"><td colspan="6">Keine Einträge</td></tr>
   if (!tbody) return;
@@ -871,8 +874,9 @@ function loadWpLog() {
     }
   } catch(e) {}
 
-  // Daten laden (localStorage + Fallbacks in _loadAll)
-  var raw = _loadAll();
+  // Daten laden (CLOUD-first + Fallback)
+  var raw = [];
+  try { raw = await _loadAll(); } catch(_) {}
   if (!Array.isArray(raw)) raw = [];
 
   // 🔎 Filtern
@@ -932,9 +936,7 @@ function loadWpLog() {
   tbody.innerHTML = html;
 
   // Empty-State ein/aus
-  if (empty) {
-    empty.style.display = list.length ? "none" : "table-row";
-  }
+  if (empty) empty.style.display = list.length ? "none" : "table-row";
 
   // global aktualisieren (kann anderswo genutzt werden)
   window.wartungslog = raw;
@@ -993,7 +995,8 @@ window.addEventListener("load", function(){
   // Speichern aus dem Wartungs-Panel
   var saveBtn = document.getElementById("wpSaveTask");
   if (saveBtn && typeof saveWpTask === "function") {
-    saveBtn.addEventListener("click", function(){ saveWpTask(); });
+  saveBtn.addEventListener("click", async () => { await saveWpTask(); });
+
   }
 
   // Wartungs-Log Panel: Buttons
