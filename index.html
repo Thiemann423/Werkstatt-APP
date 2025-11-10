@@ -716,39 +716,30 @@ window.addEventListener('load', function () {
 const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
 
 
-/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
-/* iPad-sicheres Speichern/Laden (Safari Privatmodus Fallback) */
-function _saveAll(list){
-  try {
-    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || []));
-  } catch(e){
-    // Fallback: speichere im RAM, damit das Dashboard nicht leer wirkt
-    window.__memLog = (list || []).slice();
-  }
-}
 
-// Optional global, falls noch nicht vorhanden:
+
+// optional: einmal initialisieren
 window.__cloudEtag = window.__cloudEtag || null;
 
-
-/* Cloud-first laden, lokaler Cache als Fallback */
+// Cloud-first laden + lokal cachen
 async function _loadAll(){
   try {
     // OneDrive-Ordner (aus dem Freigabelink) ansteuern
-    const root = getShareRootEndpoint();                          // nutzt den Konfig-/Helper-Block
+    const root = getShareRootEndpoint();
     const { data, etag } = await graphDownloadJsonFromFolder(
       root,
-      CLOUD_FILENAME                                             // z. B. "wartungslog.json"
+      CLOUD_FILENAME // z. B. "wartungslog.json"
     );
     __cloudEtag = etag || __cloudEtag;
 
-    // Cloudstand lokal cachen (für schnelle UI / Offline)
-    if (typeof _saveAllLocal === "function") _saveAllLocal(data);
+    // Cloud-Stand lokal cachen (für schnelle UI / Offline)
+    _cacheLocal(Array.isArray(data) ? data : []);
+
     return Array.isArray(data) ? data : [];
   } catch (err) {
     console.warn("Cloud-Load failed, using local cache:", err);
 
-    // === dein bisheriger lokaler Fallback (unverändert) ===
+    // === lokaler Fallback ===
     if (Array.isArray(window.__memLog)) return window.__memLog.slice();
     try{
       const raw = localStorage.getItem(WP_STORAGE_KEY);
@@ -762,6 +753,7 @@ async function _loadAll(){
     }
   }
 }
+
 
 
 
@@ -4488,53 +4480,77 @@ async function wpLogLoad(){
 }
 
 
-// ✅ CLOUD-first Speichern (mit lokalem Cache + ETag-Merge)
+// Helper wie bei _loadAll
+function _cacheLocal(list){
+  try { localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || [])); }
+  catch(_){ window.__memLog = (list || []).slice(); }
+}
+
+window.__cloudEtag = window.__cloudEtag || null;
+
+// robustes Speichern: lokal + Cloud + Konflikt-Merge
 async function _saveAll(list){
   const payload = Array.isArray(list) ? list : [];
 
-  // 1) lokal sofort cachen, damit UI direkt reagiert
-  try {
-    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {
-    window.__memLog = payload.slice();
-  }
+  // 1) sofort lokal cachen (UI bleibt schnell / offlinefähig)
+  _cacheLocal(payload);
 
-  // 2) in die Cloud schreiben
+  // 2) in die Cloud schreiben (mit ETag)
   try {
-    const root = await getShareRootEndpoint(); // Graph-Helper (oft async)
-    const res  = await graphUploadJsonToFolder(root, CLOUD_FILENAME, payload, window.__cloudEtag || null);
+    const root = await getShareRootEndpoint();
+    const res  = await graphUploadJsonToFolder(
+      root,
+      CLOUD_FILENAME,          // z. B. "wartungslog.json"
+      payload,
+      window.__cloudEtag || null
+    );
     window.__cloudEtag = (res && res.etag) || window.__cloudEtag;
     return true;
   } catch (err) {
-    // Parallel-Schreiben? -> zusammenführen und nochmal hochladen
-    if (String(err && err.message || "").includes("ETAG_CONFLICT")) {
-      const cloud = await _loadAll(); // lädt Cloud-Stand und setzt window.__cloudEtag
+    // === gleichzeitiges Speichern? -> ETag-Konflikt erkennen ===
+    const msg  = String((err && (err.code || err.message)) || "");
+    const stat = (err && (err.status || err.statusCode)) || 0;
+    const isEtagConflict = /preconditionfailed|etag|412/.test(msg.toLowerCase()) || stat === 412;
 
-      const key = e => [
-        e.dateISO || e.date || "",
-        e.machine || "",
-        e.taskName || e.task || "",
-        e.technician || e.tech || ""
-      ].join("§");
+    if (isEtagConflict) {
+      // 2a) Cloud-Stand neu laden
+      const cloud = await _loadAll();  // setzt window.__cloudEtag neu
+
+      // 2b) zusammenführen (Schlüssel aus Datum+Maschine+Task+Techniker)
+      const keyOf = e => [
+        (e.dateISO || e.date || "").trim(),
+        (e.machine || "").trim(),
+        (e.taskName || e.task || "").trim(),
+        (e.technician || e.tech || "").trim(),
+        (e.technicianEmail || "").trim()
+      ].join("|");
 
       const map = new Map();
-      for (const item of [...(cloud || []), ...payload]) map.set(key(item), item);
+      for (const item of [].concat(cloud || [], payload)) {
+        const k = keyOf(item);
+        const prev = map.get(k);
+        // bei Kollision das "neuere" Datum bevorzugen
+        if (!prev || String(item.dateISO || item.date || "") > String(prev.dateISO || prev.date || "")) {
+          map.set(k, item);
+        }
+      }
       const merged = [...map.values()];
 
-      // lokalen Cache aktualisieren
-      try {
-        localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(merged));
-      } catch (e) {
-        window.__memLog = merged.slice();
-      }
-
+      // 2c) lokal aktualisieren und erneut hochladen
+      _cacheLocal(merged);
       try {
         const root = await getShareRootEndpoint();
-        const res2 = await graphUploadJsonToFolder(root, CLOUD_FILENAME, merged, window.__cloudEtag || null);
+        const res2 = await graphUploadJsonToFolder(
+          root,
+          CLOUD_FILENAME,
+          merged,
+          window.__cloudEtag || null
+        );
         window.__cloudEtag = (res2 && res2.etag) || window.__cloudEtag;
         return true;
       } catch (err2) {
         console.warn("Cloud save after merge failed:", err2);
+        return false;
       }
     }
 
@@ -4542,6 +4558,7 @@ async function _saveAll(list){
     return false;
   }
 }
+
 
 
 // ===== Ausführung einer Wartung + Speichern (cloud-first) =====
