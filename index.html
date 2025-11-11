@@ -407,10 +407,12 @@ window.addEventListener('load', function () {
   const wpNorm = window.wpNorm || (s => String(s||"").toLowerCase().trim());
 
   function toISO(d){
-    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    const dt = d instanceof Date ? d : new Date();
-    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
-  }
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  var dd  = (d instanceof Date) ? d : new Date(d || Date.now());
+  var m   = String(dd.getMonth()+1).padStart(2,"0");
+  var day = String(dd.getDate()).padStart(2,"0");
+  return dd.getFullYear() + "-" + m + "-" + day;
+}
   function addDays(iso, n){
     if (!iso) return "";
     const d = new Date(iso); if (isNaN(d)) return "";
@@ -4788,13 +4790,7 @@ function bindWpLogUi(){
     renderWpLogTable();
   });
 }
-function toISO(d){
-  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  var dd  = (d instanceof Date) ? d : new Date(d || Date.now());
-  var m   = String(dd.getMonth()+1).padStart(2,"0");
-  var day = String(dd.getDate()).padStart(2,"0");
-  return dd.getFullYear() + "-" + m + "-" + day;
-}
+
 
 
   var saveBtn = _byId("wpSaveTask");
