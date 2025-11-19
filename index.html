@@ -2600,29 +2600,37 @@ window.rebuildDropdownsFromMaster = function () {
   // Draft-Funktionen
   // ====================
 
-  const fieldIds = [
-    "auftrag_id",
-    "bearbeitet_am",
-    "techniker1",
-    "techniker2",
-    "maschinenstillstand",
-    "ausfall_stunden",
-    "ausfall_minuten",
-    "maschine",
-    "sonstige_maschine",
-    "anlagenteil",
-    "sonstige_anlagenteil",
-    "startzeit",
-    "endzeit",
-    "dauer",
-    "abschlussdatum",
-    "fehlerbeschreibung",
-    "reinigung_erforderlich",
-    "reinigungsart_zusatz",
-    "sonstige_reinigungsart_zusatz",
-    "reinigungsart_sonstiges",
-    "ort_datum"
-  ];
+const fieldIds = [
+  "auftrag_id",
+  "bearbeitet_am",
+  "techniker1",
+  "techniker2",
+  "maschinenstillstand",
+  "ausfall_stunden",
+  "ausfall_minuten",
+  "maschine",
+  "sonstige_maschine",
+  "anlagenteil",
+  "sonstige_anlagenteil",
+  "startzeit",
+  "endzeit",
+  "dauer",
+  "abschlussdatum",
+  "fehlerbeschreibung",
+  "reinigung_erforderlich",
+  "reinigungsart_zusatz",
+  "sonstige_reinigungsart_zusatz",
+  "reinigungsart_sonstiges",
+
+  // 🔼 NEU: Provisorium-Felder kommen mit in den Entwurf
+  "provisorium_aktiv",
+  "provisorium_art",
+  "provisorium_von",
+  "provisorium_bis",
+
+  "ort_datum"
+];
+
 
   // ====================
   // OneDrive-Upload (robuster, mit Fehlertext)
@@ -2999,17 +3007,24 @@ doc.close();
     const success = await uploadToOneDrive(filename, pdfBlob);
     if (success) {
       // ---- META-Datei für das Dashboard mitschreiben ----
-      const meta = {
-        auftrags_id:        auftragId,
-        pdfName:            filename,
-        bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
-        techniker1:         selectedText("techniker1"),
-        techniker2:         (selectedText("techniker2") || "").replace(/^–$/, ""),
-        maschine_value:     document.getElementById("maschine")?.value || "",
-        maschine_text:      selectedText("maschine"),
-        anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
-        anlagenteil_text:   selectedText("anlagenteil"),
-      };
+  const meta = {
+    auftrags_id:        auftragId,
+    pdfName:            filename,
+    bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
+    techniker1:         selectedText("techniker1"),
+    techniker2:         (selectedText("techniker2") || "").replace(/^–$/, ""),
+    maschine_value:     document.getElementById("maschine")?.value || "",
+    maschine_text:      selectedText("maschine"),
+    anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
+    anlagenteil_text:   selectedText("anlagenteil"),
+
+    // 🔼 NEU: Provisorium wandert mit in die Meta-Datei
+    provisorium_aktiv:  document.getElementById("provisorium_aktiv")?.value || "",
+    provisorium_art:    document.getElementById("provisorium_art")?.value || "",
+    provisorium_von:    document.getElementById("provisorium_von")?.value || "",
+    provisorium_bis:    document.getElementById("provisorium_bis")?.value || "",
+  };
+
 
       // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
       if (!TARGET_META_ITEM_ID) {
@@ -3177,13 +3192,16 @@ async function loadDraftFromOneDrive(fileName) {
       ensureSelectValue("anlagenteil", draftData.anlagenteil, true);
     }
 
-    // 4) UI-abhängigkeiten aktualisieren (Sonstige-Felder ein-/ausblenden etc.)
-    document.getElementById("maschine")?.dispatchEvent(new Event("change"));
-    document.getElementById("anlagenteil")?.dispatchEvent(new Event("change"));
-    document.getElementById("techniker1")?.dispatchEvent(new Event("change"));
-    document.getElementById("techniker2")?.dispatchEvent(new Event("change"));
+// 4) UI-abhängigkeiten aktualisieren (Sonstige-Felder ein-/ausblenden etc.)
+document.getElementById("maschine")?.dispatchEvent(new Event("change"));
+document.getElementById("anlagenteil")?.dispatchEvent(new Event("change"));
+document.getElementById("techniker1")?.dispatchEvent(new Event("change"));
+document.getElementById("techniker2")?.dispatchEvent(new Event("change"));
+// 🔼 NEU: Provisorium-Panel je nach Auswahl ein-/ausblenden
+document.getElementById("provisorium_aktiv")?.dispatchEvent(new Event("change"));
 
-    alert("✅ Entwurf erfolgreich geladen!");
+alert("✅ Entwurf erfolgreich geladen!");
+
   } catch (err) {
     console.error("Fehler beim Laden:", err);
     alert("❌ Fehler beim Laden des Entwurfs.");
