@@ -1391,7 +1391,51 @@ window.addEventListener("load", function(){
          placeholder="Bitte angeben..."
          style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
+<!-- ⬇️ HIER kommt jetzt der neue Provisorium-Block rein -->
+<div class="section" style="margin-bottom:12px;">
+  <label for="provisorium_aktiv" style="display:block;font-weight:bold;">
+    Provisorium eingebaut?
+  </label>
+  <select id="provisorium_aktiv" name="provisorium_aktiv" style="width:100%;padding:6px;">
+    <option value="">Bitte auswählen</option>
+    <option value="Nein" selected>Nein</option>
+    <option value="Ja">Ja</option>
+  </select>
 
+  <div id="provisorium_details"
+       style="display:none;margin-top:10px;border:1px solid #ddd;padding:10px;border-radius:6px;">
+
+    <div style="margin-bottom:10px;">
+      <label for="provisorium_art" style="font-weight:bold;display:block;">
+        Art des Provisoriums
+      </label>
+      <input id="provisorium_art" name="provisorium_art" type="text"
+             placeholder="z. B. provisorische Leitung, Bypass, Brücke …"
+             style="width:100%;padding:6px;">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label for="provisorium_von" style="font-weight:bold;display:block;">
+          Provisorium gültig von
+        </label>
+        <input id="provisorium_von" name="provisorium_von"
+               type="datetime-local"
+               style="width:100%;padding:6px;">
+      </div>
+      <div>
+        <label for="provisorium_bis" style="font-weight:bold;display:block;">
+          Provisorium gültig bis
+        </label>
+        <input id="provisorium_bis" name="provisorium_bis"
+               type="datetime-local"
+               style="width:100%;padding:6px;">
+      </div>
+    </div>
+
+  </div>
+</div>
+<!-- ⬆️ Ende Provisorium -->
 <!-- ⬇️ HIER EINSETZEN: Wartungsplan-Panel -->
 <div class="section" id="wartungsplanSection" style="margin:16px 0;">
   <div id="wpWarning" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #dc3545;color:#842029;background:#f8d7da;border-radius:6px;">
@@ -1753,41 +1797,73 @@ document.addEventListener("DOMContentLoaded", function () {
   startTimeInput?.addEventListener("input", calculateDuration);
   endTimeInput?.addEventListener("input", calculateDuration);
 
-  // 🟢 "Sonstige"-Felder & Selects
-  const maschineSelect             = document.getElementById("maschine");
-  const sonstigeMaschineInput      = document.getElementById("sonstige_maschine");
-  const labelSonstigeMaschine      = document.getElementById("label-sonstige-maschine");
+// "Sonstige"-Felder & Selects
+const maschineSelect = document.getElementById("maschine");
+const sonstigeMaschineInput = document.getElementById("sonstige_maschine");
+const labelSonstigeMaschine = document.getElementById("label-sonstige-maschine");
 
-  const anlagenteilSelect          = document.getElementById("anlagenteil");
-  const sonstigeAnlagenteilInput   = document.getElementById("sonstige_anlagenteil");
-  const labelSonstigeAnlagenteil   = document.getElementById("label-sonstige-anlagenteil");
+const anlagenteilSelect = document.getElementById("anlagenteil");
+const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
+const labelSonstigeAnlagenteil = document.getElementById("label-sonstige-anlagenteil");
 
-  const reinigungsartSelect        = document.getElementById("reinigungsart_zusatz");
-  const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart_zusatz");
+const reinigungsartSelect = document.getElementById("reinigungsart_zusatz");
+const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
+const labelSonstigeReinigungsart = document.getElementById("label-sonstige_reinigungsart_zusatz");
 
-  function updateMaschineField() {
-    const show = maschineSelect?.value === "Sonstige";
-    if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
-    if (labelSonstigeMaschine)  labelSonstigeMaschine.style.display  = show ? "block" : "none";
+// NEU: Provisorium-Felder
+const provisoriumSelect   = document.getElementById("provisorium_aktiv");
+const provisoriumDetails  = document.getElementById("provisorium_details");
+const provisoriumArtInput = document.getElementById("provisorium_art");
+const provisoriumVonInput = document.getElementById("provisorium_von");
+const provisoriumBisInput = document.getElementById("provisorium_bis");
+
+function updateMaschineField() {
+  const show = maschineSelect.value === "Sonstige";
+  if (sonstigeMaschineInput) sonstigeMaschineInput.style.display = show ? "block" : "none";
+  if (labelSonstigeMaschine) labelSonstigeMaschine.style.display = show ? "block" : "none";
+}
+
+function updateAnlagenteilField() {
+  const show = anlagenteilSelect.value === "Sonstige";
+  if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
+  if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
+}
+
+function updateReinigungsartField() {
+  const show = reinigungsartSelect.value === "Sonstige";
+  if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
+  if (labelSonstigeReinigungsart) labelSonstigeReinigungsart.style.display = show ? "block" : "none";
+}
+
+// NEU: Provisorium anzeigen/verstecken
+function updateProvisoriumField() {
+  if (!provisoriumSelect || !provisoriumDetails) return;
+
+  const show = provisoriumSelect.value === "Ja";
+  provisoriumDetails.style.display = show ? "block" : "none";
+
+  if (!show) {
+    if (provisoriumArtInput) provisoriumArtInput.value = "";
+    if (provisoriumVonInput) provisoriumVonInput.value = "";
+    if (provisoriumBisInput) provisoriumBisInput.value = "";
   }
-  function updateAnlagenteilField() {
-    const show = anlagenteilSelect?.value === "Sonstige";
-    if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
-    if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
-  }
-  function updateReinigungsartField() {
-    const show = reinigungsartSelect?.value === "Sonstiges";
-    if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
-  }
+}
 
-  maschineSelect?.addEventListener("change", updateMaschineField);
-  anlagenteilSelect?.addEventListener("change", updateAnlagenteilField);
-  reinigungsartSelect?.addEventListener("change", updateReinigungsartField);
+maschineSelect.addEventListener("change", updateMaschineField);
+anlagenteilSelect.addEventListener("change", updateAnlagenteilField);
+reinigungsartSelect.addEventListener("change", updateReinigungsartField);
 
-  // initialer Zustand
-  updateMaschineField();
-  updateAnlagenteilField();
-  updateReinigungsartField();
+// NEU
+if (provisoriumSelect) {
+  provisoriumSelect.addEventListener("change", updateProvisoriumField);
+}
+
+// initialer Zustand
+updateMaschineField();
+updateAnlagenteilField();
+updateReinigungsartField();
+updateProvisoriumField();
+
 
   // 🔒 Basis-Optionen (HTML-Defaults) einmalig puffern
   const baseMaschineValues    = maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
