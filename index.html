@@ -227,7 +227,132 @@ async function loadHtml2PdfIfNeeded(){
   };
   const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite", "offline_access"];
 </script>
+<!-- 🔧 Helper für Wartungs-Log: OneDrive JSON laden/speichern -->
+<script>
+  // Liefert den OneDrive-Ordner aus TARGET
+  function getShareRootEndpoint() {
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      throw new Error("OneDrive-Zielordner (TARGET) ist noch nicht initialisiert.");
+    }
+    return {
+      driveId: TARGET.driveId,
+      itemId: TARGET.parentItemId
+    };
+  }
 
+  // JSON-Datei aus dem Ordner laden
+  async function graphDownloadJsonFromFolder(root, filename) {
+    if (!window.accessToken) {
+      throw new Error("Kein Access Token für Graph (bitte zuerst anmelden).");
+    }
+
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${root.driveId}/items/${root.itemId}` +
+      `/children?$select=id,name`;
+
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!listRes.ok) {
+      throw new Error("children list failed: " + listRes.status);
+    }
+
+    const list = await listRes.json();
+    const item = (list.value || []).find(x => x.name === filename);
+
+    // Datei existiert (noch) nicht -> leere Liste zurück
+    if (!item) {
+      return { data: [], etag: null };
+    }
+
+    const fileRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${root.driveId}/items/${item.id}/content`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!fileRes.ok) {
+      throw new Error("download failed: " + fileRes.status);
+    }
+
+    let data = [];
+    try {
+      data = await fileRes.json();
+    } catch (_) {
+      data = [];
+    }
+
+    const etag =
+      fileRes.headers.get("ETag") ||
+      fileRes.headers.get("Etag") ||
+      null;
+
+    return { data, etag };
+  }
+
+  // JSON-Datei im Ordner speichern (mit ETag für Konflikte)
+  async function graphUploadJsonToFolder(root, filename, data, etag) {
+    if (!window.accessToken) {
+      throw new Error("Kein Access Token für Graph (bitte zuerst anmelden).");
+    }
+
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${root.driveId}/items/${root.itemId}` +
+      `/children?$select=id,name`;
+
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!listRes.ok) {
+      throw new Error("children list failed: " + listRes.status);
+    }
+
+    const list = await listRes.json();
+    const item = (list.value || []).find(x => x.name === filename);
+    const itemId = item ? item.id : null;
+
+    const uploadUrl = itemId
+      // bestehende Datei überschreiben
+      ? `https://graph.microsoft.com/v1.0/drives/${root.driveId}/items/${itemId}/content`
+      // neue Datei im Ordner anlegen
+      : `https://graph.microsoft.com/v1.0/drives/${root.driveId}/items/${root.itemId}:/${filename}:/content`;
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    };
+    if (etag) {
+      headers["If-Match"] = etag;
+    }
+
+    const body = JSON.stringify(data || [], null, 2);
+
+    const res = await fetch(uploadUrl, {
+      method: "PUT",
+      headers,
+      body
+    });
+
+    // 412 = ETag-Konflikt (gleichzeitiges Speichern)
+    if (res.status === 412) {
+      const err = new Error("etag_conflict");
+      err.code = "etag_conflict";
+      err.status = 412;
+      throw err;
+    }
+
+    if (!res.ok) {
+      throw new Error("upload failed: " + res.status);
+    }
+
+    let saved = {};
+    try {
+      saved = await res.json();
+    } catch (_) {}
+
+    return {
+      etag: saved.eTag || saved.etag || null
+    };
+  }
+</script>
 
 <!-- ✅ Anzeigenamen-Hilfsfunktion (im <head>, vor </head>) -->
 <script>
@@ -742,11 +867,13 @@ window.addEventListener('load', function () {
 // optional: einmal initialisieren
 window.__cloudEtag = window.__cloudEtag || null;
 
+  
 // Cloud-first laden + lokal cachen
 async function _loadAll(){
   try {
     // OneDrive-Ordner (aus dem Freigabelink) ansteuern
-    const root = getShareRootEndpoint();
+  const root = await getShareRootEndpoint();
+
     const { data, etag } = await graphDownloadJsonFromFolder(
       root,
       CLOUD_FILENAME // z. B. "wartungslog.json"
