@@ -3981,36 +3981,39 @@ function wpStatusUpdateForTask(task){
       pill.style.color = "#000";
     }
   };
-  if (!task) return clear();
 
-// interval + lastDate sicher aus task lesen
-var inter   = toInt((task && task.intervalDays), "");
-var lastIso = (task && isIsoDate(task.lastDateISO)) ? task.lastDateISO : "";
+  // Wenn kein Task gewählt ist → Felder leeren
+  if (!task) { clear(); return; }
 
-// Fallback: Intervall aus Mail-Rule ableiten, sonst 28
-if (!inter || inter === 0) {
-  try {
-    var mVal  = (selMaschine && selMaschine.value) ? selMaschine.value : "";
-    var tName = (task && task.name) ? task.name : "";
-    inter = wpMailRuleInterval(mVal, tName) || 28;
-  } catch (e) {
-    inter = 28;
+  // Intervall aus dem Task lesen
+  let inter = toInt((task && task.intervalDays), null);
+
+  // Falls leer/0: aus Mail-Regeln ableiten, sonst 28 Tage
+  if (inter === null || inter === 0) {
+    try {
+      const mVal  = (selMaschine && selMaschine.value) ? selMaschine.value : "";
+      const tName = (task && task.name) ? task.name : "";
+      inter = wpMailRuleInterval(mVal, tName) || 28;
+    } catch (e) {
+      inter = 28;
+    }
   }
-}
+  if (interval) interval.value = (inter == null ? "" : String(inter));
 
-
-  if (interval) interval.value = inter;
+  // Letztes Datum sicher lesen
+  const lastIso = (task && isIsoDate(task.lastDateISO)) ? task.lastDateISO : "";
   if (last) last.value = lastIso;
 
+  // Nächstes Fälligkeitsdatum berechnen
   const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
   if (next) next.value = nextVal;
 
-  // Schmiernippel übernehmen (kein ??)
-  if (nip) {
-    const n = (task.nipples === null || task.nipples === undefined) ? "" : task.nipples;
-    nip.value = n;
-  }
+  // Schmiernippel übernehmen (ohne ??)
+  let n = task ? task.nipples : undefined;
+  n = (n === null || n === undefined || n === "") ? "" : toInt(n, "");
+  if (nip) nip.value = n;
 
+  // Status/Pill aktualisieren
   const st = wpStatus(nextVal || "");
   if (pill) {
     pill.textContent = st.label;
@@ -4030,7 +4033,8 @@ function wpOverdueTasks(machineName){
     return wpStatus(next).level === "overdue";
   });
 }
-  // Alle Maschinen prüfen und überfällige Aufgaben einsammeln
+
+// Alle Maschinen prüfen und überfällige Aufgaben einsammeln
 function wpOverdueAll(){
   const res = [];
   const wp = window.wartungsplaene || {};
@@ -4148,7 +4152,8 @@ function wpUpdateGlobalBanner(){
       }
     };
   }
-} // ← hier war die fehlende Klammer!
+} // Ende wpUpdateGlobalBanner
+
 
 /* ---------- Recalc ---------- */
 function wpRecalc() {
@@ -4163,71 +4168,23 @@ function wpRecalc() {
   }
 
   const st = wpStatus(nextVal || "");
-  if (pill) { pill.textContent = st.label; pill.style.background = st.bg; pill.style.color = st.fg; }
-}
-
-
-  /* ---------- Helpers & Warning (einmal global) ---------- */
-function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
-function toInt(v, fallback){
-  var s = (v === null || v === undefined) ? '' : String(v);
-  var n = parseInt(s.replace(/[^\d-]/g,''), 10);
-  return Number.isFinite(n) ? n : (fallback === undefined ? "" : fallback);
-}
-
-
-function wpStatusUpdateForTask(task){
-  const { interval, last, next, pill, nip, selMaschine } = wpEls();
-
-  const clear = () => {
-    if (interval) interval.value = "";
-    if (last)     last.value = "";
-    if (next)     next.value = "";
-    if (nip)      nip.value = "";
-    if (pill) {
-      pill.textContent = "–";
-      pill.style.background = "#e9ecef";
-      pill.style.color = "#000";
-    }
-  };
-  if (!task) { clear(); return; }
-
-  // Intervall aus task lesen
-  let inter = toInt((task && task.intervalDays), null);
-
-  // Falls leer/0: aus Mail-Rule ableiten, sonst 28
-  if (inter === null || inter === 0) {
-    try {
-      const mVal  = (selMaschine && selMaschine.value) ? selMaschine.value : "";
-      const tName = (task && task.name) ? task.name : "";
-      inter = wpMailRuleInterval(mVal, tName) || 28;
-    } catch (e) {
-      inter = 28;
-    }
-  }
-  if (interval) interval.value = (inter == null ? "" : String(inter));
-
-  // Letztes Datum sicher lesen
-  const lastIso = (task && isIsoDate(task.lastDateISO)) ? task.lastDateISO : "";
-  if (last) last.value = lastIso;
-
-  // Nächstes Datum berechnen
-  const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
-  if (next) next.value = nextVal;
-
-  // Schmiernippel übernehmen (ohne Nullish-Coalescing)
-  let n = task ? task.nipples : undefined;
-  n = (n === null || n === undefined || n === "") ? "" : toInt(n, "");
-  if (nip) nip.value = n;
-
-  // Status/Pill aktualisieren
-  const st = wpStatus(nextVal || "");
   if (pill) {
     pill.textContent = st.label;
     pill.style.background = st.bg;
     pill.style.color = st.fg;
   }
 }
+
+
+/* ---------- Helpers & Warning (einmal global) ---------- */
+function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
+
+function toInt(v, fallback){
+  var s = (v === null || v === undefined) ? '' : String(v);
+  var n = parseInt(s.replace(/[^\d-]/g,''), 10);
+  return Number.isFinite(n) ? n : (fallback === undefined ? "" : fallback);
+}
+
 
 
 function wpEvalWarning(){
