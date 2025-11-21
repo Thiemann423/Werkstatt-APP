@@ -229,21 +229,30 @@ async function loadHtml2PdfIfNeeded(){
 </script>
 <!-- 🔧 Helper für Wartungs-Log: OneDrive JSON laden/speichern -->
 <script>
-  // Liefert den OneDrive-Ordner aus TARGET
-  function getShareRootEndpoint() {
-    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-      throw new Error("OneDrive-Zielordner (TARGET) ist noch nicht initialisiert.");
+  // OneDrive-Ordner aus dem SHARE-Link ermitteln
+  // (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
+  async function getShareRootEndpoint() {
+    if (!window.accessToken) {
+      throw new Error("Kein Access Token – bitte erst mit Microsoft anmelden.");
     }
+
+    // sorgt dafür, dass TARGET.driveId / TARGET.parentItemId gesetzt sind
+    await resolveShareLinkToFolder();
+
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      throw new Error("TARGET nicht initialisiert.");
+    }
+
     return {
       driveId: TARGET.driveId,
-      itemId: TARGET.parentItemId
+      itemId:  TARGET.parentItemId
     };
   }
 
   // JSON-Datei aus dem Ordner laden
   async function graphDownloadJsonFromFolder(root, filename) {
     if (!window.accessToken) {
-      throw new Error("Kein Access Token für Graph (bitte zuerst anmelden).");
+      throw new Error("Kein Access Token – bitte erst mit Microsoft anmelden.");
     }
 
     const listUrl =
@@ -260,7 +269,7 @@ async function loadHtml2PdfIfNeeded(){
     const list = await listRes.json();
     const item = (list.value || []).find(x => x.name === filename);
 
-    // Datei existiert (noch) nicht -> leere Liste zurück
+    // Datei existiert noch nicht → leere Liste
     if (!item) {
       return { data: [], etag: null };
     }
@@ -291,7 +300,7 @@ async function loadHtml2PdfIfNeeded(){
   // JSON-Datei im Ordner speichern (mit ETag für Konflikte)
   async function graphUploadJsonToFolder(root, filename, data, etag) {
     if (!window.accessToken) {
-      throw new Error("Kein Access Token für Graph (bitte zuerst anmelden).");
+      throw new Error("Kein Access Token – bitte erst mit Microsoft anmelden.");
     }
 
     const listUrl =
