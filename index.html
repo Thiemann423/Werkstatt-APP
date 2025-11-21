@@ -206,9 +206,15 @@ async function loadHtml2PdfIfNeeded(){
 }
 </script>
 <!-- OneDrive/Graph – Config -->
+<!-- OneDrive/Graph – Config -->
 <script>
   const ONEDRIVE_SHARED_LINK =
     "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten_thiemann_petri-feinkost_de/EkOa1ufucPNDtlfo6B9rxowB7o8nAY4wHK-gcRha74B2AQ?e=gnn1A2";
+
+  // ⬅︎ NEU: Wartungspläne-Datei im gleichen Ordner
+  const WP_FILE        = "Wartungsplaene.json";
+
+  // Log-Datei (Wartungs-Dashboard)
   const CLOUD_FILENAME = "wartungslog.json";
 
   const MSAL_CONFIG = {
@@ -221,6 +227,7 @@ async function loadHtml2PdfIfNeeded(){
   };
   const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite", "offline_access"];
 </script>
+
 
 <!-- ✅ Anzeigenamen-Hilfsfunktion (im <head>, vor </head>) -->
 <script>
