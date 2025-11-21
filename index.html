@@ -3787,10 +3787,10 @@ function wpApplyMailRules(opts){
 }
 
 
-// ===============================
-// Laden aus OneDrive
-// ===============================
-const WP_FILE_PATH = "/me/drive/root:/Reparatur-Aufträge/Wartungsplaene.json:/content";
+/* ===============================
+// Laden aus OneDrive (gemeinsamer Ordner)
+// =============================== */
+const WP_FILE = "Wartungsplaene.json";
 const WP_CACHE_KEY = "TE15_WARTUNGSPLAENE";
 
 async function wpLoad(){
@@ -3803,16 +3803,22 @@ async function wpLoad(){
     wartungsplaene = {};
   }
 
-  // 2) OneDrive (nur wenn eingeloggt)
+  // 2) OneDrive: gemeinsamer Meta-Ordner wie beim Dashboard
   try {
-    var token = (typeof window !== "undefined" && window.accessToken) ? window.accessToken : "";
-    if (token) {
-      var r = await fetch("https://graph.microsoft.com/v1.0" + WP_FILE_PATH, {
-        headers: { Authorization: "Bearer " + token }
-      });
+    var token   = (typeof window !== "undefined" && window.accessToken) ? window.accessToken : "";
+    var hasMeta = window.TARGET && window.TARGET.driveId && window.TARGET_META_ITEM_ID;
+
+    if (token && hasMeta) {
+      var url =
+        "https://graph.microsoft.com/v1.0/drives/" +
+        window.TARGET.driveId +
+        "/items/" +
+        window.TARGET_META_ITEM_ID +
+        ":/" + encodeURIComponent(WP_FILE) + ":/content";
+
+      var r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
       if (r && r.ok) {
         try {
-          // r.json() ist ok; falls Fehler, auf text()+JSON.parse zurückfallen
           wartungsplaene = await r.json();
         } catch (eJson) {
           wartungsplaene = JSON.parse(await r.text());
@@ -3833,7 +3839,7 @@ async function wpLoad(){
 
   console.info("[WP] geladen:", Object.keys(wartungsplaene || {}).length, "Maschinen");
 
-  // 4) UI initialisieren (ohne ?.())
+  // 4) UI initialisieren
   try {
     if (typeof wpRefreshTaskList     === "function") wpRefreshTaskList();
     if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
@@ -3841,6 +3847,7 @@ async function wpLoad(){
     console.warn("[WP] init UI failed:", e);
   }
 }
+
 
 
 // Speichern (Cache + OneDrive)
