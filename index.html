@@ -5018,7 +5018,7 @@ window.todayISO = window.todayISO || function () {
 
 
 
- function recomputeNextDue(){
+function recomputeNextDue(){
   var lastEl = byId("wpLastDate");          // Zuletzt durchgeführt
   var intvEl = byId("wpIntervalDays");
   var out    = byId("wpNextDue");
@@ -5034,16 +5034,19 @@ window.todayISO = window.todayISO || function () {
 
   d.setDate(d.getDate() + intv);                      // funktioniert auch bei Intervall = 1
 
-  // toISO-Fallback, falls keine Helper-Funktion existiert
-  if (typeof toISO === "function") {
+  // 🔧 ISO-Datum setzen – zuerst _toISO, dann ggf. toISO, sonst manuell
+  if (typeof _toISO === "function") {
+    out.value = _toISO(d);
+  } else if (typeof toISO === "function") {
     out.value = toISO(d);
   } else {
     out.value =
       d.getFullYear() + "-" +
-      String(d.getMonth()+1).padStart(2,"0") + "-" +
-      String(d.getDate()).padStart(2,"0");
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
   }
 }
+
 
 // bei manuellen Änderungen neu berechnen
 // Wartungs-Log: Wiring beim Laden
@@ -5257,12 +5260,12 @@ window.addEventListener("load", function(){
             ensureNotEmpty();
           }
         }
- }, 150);
+      }, 150);
     });
   }
-});          // ← schließt window.addEventListener("load", …)
-})();        // ← schließt das äußere (function(){ … })();
+});          // nur dieses `});` bleibt
 </script>
+
 
 <script>
 /* ===== Overdue-Alarm für Wartung: Badge + Hinweis + optionaler Beep =====
