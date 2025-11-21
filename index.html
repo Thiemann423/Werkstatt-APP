@@ -231,23 +231,35 @@ async function loadHtml2PdfIfNeeded(){
 <script>
   // OneDrive-Ordner aus dem SHARE-Link ermitteln
   // (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
-  async function getShareRootEndpoint() {
-    if (!window.accessToken) {
-      throw new Error("Kein Access Token – bitte erst mit Microsoft anmelden.");
+ async function getShareRootEndpoint() {
+  // Wenn noch kein Token da ist: versuche zuerst, still ein Token zu holen
+  if (!window.accessToken && typeof window.signInAndAcquireToken === "function") {
+    try {
+      // silent = false -> kein Popup, nur Token holen, falls Account schon bekannt
+      await window.signInAndAcquireToken(false, { rebuild: false });
+    } catch (e) {
+      console.warn("silent token fetch failed:", e);
     }
-
-    // sorgt dafür, dass TARGET.driveId / TARGET.parentItemId gesetzt sind
-    await resolveShareLinkToFolder();
-
-    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-      throw new Error("TARGET nicht initialisiert.");
-    }
-
-    return {
-      driveId: TARGET.driveId,
-      itemId:  TARGET.parentItemId
-    };
   }
+
+  // Wenn immer noch kein Token: jetzt tatsächlich abbrechen
+  if (!window.accessToken) {
+    throw new Error("Kein Access Token – bitte in der App auf 'Microsoft anmelden' klicken.");
+  }
+
+  // sorgt dafür, dass TARGET.driveId / TARGET.parentItemId gesetzt sind
+  await resolveShareLinkToFolder();
+
+  if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    throw new Error("TARGET nicht initialisiert.");
+  }
+
+  return {
+    driveId: TARGET.driveId,
+    itemId:  TARGET.parentItemId
+  };
+}
+
 
   // JSON-Datei aus dem Ordner laden
   async function graphDownloadJsonFromFolder(root, filename) {
