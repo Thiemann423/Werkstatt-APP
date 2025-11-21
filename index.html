@@ -998,8 +998,9 @@ function setWpRange(btn) {
   var from  = new Date(today);
   from.setDate(today.getDate() - days + 1);
 
-  var toStr   = toISO(today);
- var fromStr = toISO(from);
+var toStr  = _toISO(today);
+var fromStr = _toISO(from);
+
 
   var fromEl = document.getElementById("wpLog_from");
   var toEl   = document.getElementById("wpLog_to");
@@ -4919,8 +4920,10 @@ function bindWpLogUi(){
     }
 
     // Zentrale toISO benutzen (keine lokale Hilfsfunktion!)
-    var elFrom = _byId("wpLog_from"); if (elFrom) elFrom.value = toISO(from);
-    var elTo   = _byId("wpLog_to");   if (elTo)   elTo.value   = toISO(today);
+// Zentrale _toISO benutzen
+var elFrom = _byId("wpLog_from"); if (elFrom) elFrom.value = _toISO(from);
+var elTo   = _byId("wpLog_to");   if (elTo)   elTo.value   = _toISO(today);
+
 
     renderWpLogTable();
   });
@@ -4971,9 +4974,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
 
 // Kompatibilität für alten Code
+// Kompatibilität für alten Code
 window.todayISO = window.todayISO || function () {
-  return toISO(new Date());
+  return _toISO(new Date());
 };
+
 
 
 
