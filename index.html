@@ -205,7 +205,7 @@ async function loadHtml2PdfIfNeeded(){
   });
 }
 </script>
-<!-- OneDrive/Graph – Config -->
+
 <!-- OneDrive/Graph – Config -->
 <script>
   const ONEDRIVE_SHARED_LINK =
@@ -3795,13 +3795,11 @@ function wpApplyMailRules(opts){
 }
 
 
-/* ===============================
-// Laden aus OneDrive (gemeinsamer Ordner)
-// =============================== */
-const WP_FILE = "Wartungsplaene.json";
+// const WP_FILE = "Wartungsplaene.json"; // schon weiter oben definiert
 const WP_CACHE_KEY = "TE15_WARTUNGSPLAENE";
 
-async function wpLoad(){
+
+async function wpLoad() {
   // 1) Cache lesen
   try {
     var raw = localStorage.getItem(WP_CACHE_KEY);
