@@ -3412,7 +3412,7 @@ async function loadDashboard(){
   try{
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // PDFs im Hauptordner (bleiben dort)
+    // PDFs im Hauptordner
     const listPdfUrl =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
       `/children?$top=2000&$select=id,name,webUrl,file,folder`;
@@ -3424,7 +3424,7 @@ async function loadDashboard(){
                .map(i => [i.name, i.webUrl])
     );
 
-    // META-Dateien: zuerst Meta-Ordner, sonst Fallback Hauptordner
+    // META-Dateien zuerst im Meta-Ordner suchen
     let metaItems = [];
     if (TARGET_META_ITEM_ID) {
       const listMetaUrl =
@@ -3436,11 +3436,14 @@ async function loadDashboard(){
         metaItems = (data.value || []).filter(i => i.file && i.name.endsWith(META_SUFFIX));
       }
     }
+
+    // Fallback in Hauptordner
     if (!metaItems.length){
       metaItems = mainItems.filter(i => i.file && i.name.endsWith(META_SUFFIX));
     }
 
     const rows = [];
+
     for (const m of metaItems){
       const mres = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
@@ -3452,51 +3455,89 @@ async function loadDashboard(){
       const auftragsId = (meta.auftrags_id || m.name.replace(META_SUFFIX,'')).trim();
       const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
-  rows.push({
-  dateIso:  meta.bearbeitet_am || '',
-  dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
-  tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
-  maschine: meta.maschine_text || meta.maschine_value || '',
-  teil:     meta.anlagenteil_text || meta.anlagenteil_value || '',
+      // --- PROVISORIEN-Status bestimmen ---
+      let provFlag   = 0;
+      let provStatus = "none";
+      let provText   = "";
 
-  // 🔽 NEU: Provisorium (Anzeige = "Ja" oder leer, optional mit Art)
-  provText: meta.provisorium_aktiv === "Ja"
-              ? (meta.provisorium_art || "Ja")
-              : "",
-  provFlag: meta.provisorium_aktiv === "Ja" ? 1 : 0,
+      if (meta.provisorium_aktiv === "Ja") {
+        provFlag = 1;
 
-  id:       auftragsId,
-  url:      pdfMap.get(pdfName) || null
-});
+        const art    = meta.provisorium_art || "";
+        const vonStr = meta.provisorium_von || "";
+        const bisStr = meta.provisorium_bis || "";
 
+        const todayIso = new Date().toISOString().slice(0,10);
+        let statusText = "";
+
+        if (!bisStr) {
+          provStatus = "open"; // aktiv, kein Enddatum
+          statusText = "⚠ aktiv";
+        } else {
+          const bisIso      = bisStr.slice(0,10);
+          const bisDateDisp = new Date(bisStr).toLocaleDateString("de-DE");
+
+          if (bisIso >= todayIso) {
+            provStatus = "active";
+            statusText = "⚠ aktiv bis " + bisDateDisp;
+          } else {
+            provStatus = "done";
+            statusText = "✓ beendet am " + bisDateDisp;
+          }
+        }
+
+        provText = (art ? art + " – " : "") + statusText;
+      }
+
+      rows.push({
+        dateIso:  meta.bearbeitet_am || '',
+        dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
+        tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
+        maschine: meta.maschine_text || meta.maschine_value || '',
+        teil:     meta.anlagenteil_text || meta.anlagenteil_value || '',
+
+        provText,
+        provFlag,
+        provStatus,
+
+        id:  auftragsId,
+        url: pdfMap.get(pdfName) || null
+      });
     }
 
+    // Sortieren nach Datum
     rows.sort((a,b) => (b.dateIso||'').localeCompare(a.dateIso||''));
 
     if (!rows.length){
       tbody.innerHTML = '';
       if (empty) empty.style.display = 'block';
-      // Analytics ausblenden, wenn keine Zeilen
       const dashBox = document.getElementById('dashAnalytics');
       if (dashBox) dashBox.style.display = 'none';
       return;
     }
 
- tbody.innerHTML = rows.map(r => {
-  const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
-  return `<tr>
-    <td data-k="bearbeitet_am" data-iso="${r.dateIso}">${r.dateDisp}</td>
-    <td data-k="techniker">${r.tech}</td>
-    <td data-k="maschine">${r.maschine}</td>
-    <td data-k="anlagenteil">${r.teil}</td>
-    <td data-k="provisorium" data-prov="${r.provFlag}">${r.provText}</td>
-    <td data-k="auftrag_id">${idCell}</td>
-  </tr>`;
-}).join('');
+    // Tabellenzeilen rendern
+    tbody.innerHTML = rows.map(r => {
+      const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
 
+      let rowStyle = "";
+      if (r.provStatus === "open" || r.provStatus === "active") {
+        rowStyle = ' style="background:#fff3cd;"';
+      }
 
-    applyFiltersToDashboard(); // -> triggert auch updateAnalytics()
-  }catch(e){
+      return `<tr${rowStyle}>
+        <td data-k="bearbeitet_am" data-iso="${r.dateIso}">${r.dateDisp}</td>
+        <td data-k="techniker">${r.tech}</td>
+        <td data-k="maschine">${r.maschine}</td>
+        <td data-k="anlagenteil">${r.teil}</td>
+        <td data-k="provisorium" data-prov="${r.provFlag}" data-provstatus="${r.provStatus}">${r.provText}</td>
+        <td data-k="auftrag_id">${idCell}</td>
+      </tr>`;
+    }).join('');
+
+    applyFiltersToDashboard(); // löst auch Analytics & Provisorium-Statistik aus
+
+  } catch(e){
     console.error('Dashboard:', e);
     tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Fehler beim Laden.</td></tr>';
     const dashBox = document.getElementById('dashAnalytics');
@@ -3570,7 +3611,6 @@ function applyFiltersToDashboard(){
   const valTeil   = (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase();
   const valProv   = (document.getElementById('f_provisorium')?.value   || '').trim(); // "", "mit", "ohne"
 
-
   const rows = document.querySelectorAll('#dashTable tbody tr');
   let shown = 0;
 
@@ -3578,30 +3618,30 @@ function applyFiltersToDashboard(){
   const now   = new Date();
   const last30 = new Date(now.getTime() - 30*24*60*60*1000);
 
-rows.forEach(tr => {
-  const cDate = tr.querySelector('[data-k="bearbeitet_am"]');
-  const cTech = tr.querySelector('[data-k="techniker"]');
-  const cMac  = tr.querySelector('[data-k="maschine"]');
-  const cTeil = tr.querySelector('[data-k="anlagenteil"]');
-  const cProv = tr.querySelector('[data-k="provisorium"]');
+  rows.forEach(tr => {
+    const cDate = tr.querySelector('[data-k="bearbeitet_am"]');
+    const cTech = tr.querySelector('[data-k="techniker"]');
+    const cMac  = tr.querySelector('[data-k="maschine"]');
+    const cTeil = tr.querySelector('[data-k="anlagenteil"]');
+    const cProv = tr.querySelector('[data-k="provisorium"]');
 
-  let ok = true;
-
+    let ok = true;
 
     // Textfilter
-  if (valTech && !(cTech?.textContent || '').toLowerCase().includes(valTech)) ok = false;
-  if (valMach && !(cMac ?.textContent || '').toLowerCase().includes(valMach)) ok = false;
-  if (valTeil && !(cTeil?.textContent || '').toLowerCase().includes(valTeil)) ok = false;
+    if (valTech && !(cTech?.textContent || '').toLowerCase().includes(valTech)) ok = false;
+    if (valMach && !(cMac ?.textContent || '').toLowerCase().includes(valMach)) ok = false;
+    if (valTeil && !(cTeil?.textContent || '').toLowerCase().includes(valTeil)) ok = false;
 
-  // 🔽 NEU: Provisorium-Filter
-  if (ok && valProv === 'mit') {
-    const flag = cProv?.dataset.prov || '0';
-    if (flag !== '1') ok = false;
-  }
-  if (ok && valProv === 'ohne') {
-    const flag = cProv?.dataset.prov || '0';
-    if (flag !== '0') ok = false;
-  }
+    // Provisorium-Filter
+    if (ok && valProv === 'mit') {
+      const flag = cProv?.dataset.prov || '0';
+      if (flag !== '1') ok = false;
+    }
+    if (ok && valProv === 'ohne') {
+      const flag = cProv?.dataset.prov || '0';
+      if (flag !== '0') ok = false;
+    }
+
     // Datumsfilter per Eingabefeld (zeigt nur >= ausgewähltem Datum)
     if (ok && valDate) {
       const rowIso = cDate?.dataset.iso || '';
@@ -3624,9 +3664,13 @@ rows.forEach(tr => {
   const empty = document.getElementById('dashEmpty');
   if (empty) empty.style.display = shown ? 'none' : 'block';
 
-  // 🔎 NEU: nach jedem Filter neu berechnen
+  // 🔎 nach jedem Filter neu berechnen
   updateAnalytics();
+  if (typeof updateProvisoriumStats === 'function') {
+    updateProvisoriumStats();
+  }
 }
+
 // ===== /Dashboard =====
 
 </script>
