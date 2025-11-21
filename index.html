@@ -4928,38 +4928,40 @@ function bindWpLogUi(){
 
 
 
-  var saveBtn = _byId("wpSaveTask");
-  if (saveBtn) saveBtn.addEventListener("click", function(){
-    var entry = _collectEntryFromForm({useTodayIfEmpty:true});
-    wpLogExecution(entry);
-    var pnl=_byId("wpLogPanel");
-    if (pnl && pnl.style.display === "block") renderWpLogTable();
-    alert("Wartung gespeichert!");
-  });
+var saveBtn = _byId("wpSaveTask");
+if (saveBtn) saveBtn.addEventListener("click", function(){
+  var entry = _collectEntryFromForm({useTodayIfEmpty:true});
+  wpLogExecution(entry);
+  var pnl=_byId("wpLogPanel");
+  if (pnl && pnl.style.display === "block") renderWpLogTable();
+  alert("Wartung gespeichert!");
+});
 
-  var doneBtn = _byId("wpMarkDoneToday");
-  if (doneBtn) doneBtn.addEventListener("click", function(){
-    var todayISO = _toISO(new Date());
-    var lastEl = _byId("wpLastDate");
-    if (lastEl) lastEl.value = todayISO;
-    var intervalDays = parseInt((_byId("wpIntervalDays") && _byId("wpIntervalDays").value) || "0", 10) || 0;
-    if (intervalDays > 0) {
-      var next = new Date(); next.setDate(next.getDate() + intervalDays);
-      var nextEl = _byId("wpNextDue"); if (nextEl) nextEl.value = _toISO(next);
-    }
-    var entry = _collectEntryFromForm({useTodayIfEmpty:true});
-    wpLogExecution(entry);
-    var pnl=_byId("wpLogPanel");
-    if (pnl && pnl.style.display === "block") renderWpLogTable();
-  });
-}
-
+var doneBtn = _byId("wpMarkDoneToday");
+if (doneBtn) doneBtn.addEventListener("click", function(){
+  var todayISO = _toISO(new Date());
+  var lastEl = _byId("wpLastDate");
+  if (lastEl) lastEl.value = todayISO;
+  var intervalDays = parseInt((_byId("wpIntervalDays") && _byId("wpIntervalDays").value) || "0", 10) || 0;
+  if (intervalDays > 0) {
+    var next = new Date(next);
+    next.setDate(next.getDate() + intervalDays);
+    var nextEl = _byId("wpNextDue"); if (nextEl) nextEl.value = _toISO(next);
+  }
+  var entry = _collectEntryFromForm({useTodayIfEmpty:true});
+  wpLogExecution(entry);
+  var pnl=_byId("wpLogPanel");
+  if (pnl && pnl.style.display === "block") renderWpLogTable();
+});
 
 document.addEventListener("DOMContentLoaded", ()=>{
   try { wpLogLoad(); } catch(e){ console.warn("wpLogLoad:", e); }
   try { bindWpLogUi(); } catch(e){ console.warn("bindWpLogUi:", e); }
-  if (_byId("wpLogPanel") && _byId("wpLogPanel").style.display === "block"){ renderWpLogTable(); }
+  if (_byId("wpLogPanel") && _byId("wpLogPanel").style.display === "block"){
+    renderWpLogTable();
+  }
 });
+
 </script>
 <script>
 // === 1) Fälligkeit immer sauber nachziehen ===
