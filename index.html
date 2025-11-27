@@ -980,12 +980,17 @@ var tech = techFromForm || displayNameFromUser(u);
     technicianUpn: techUpn
   };
 
-  // Laden, hinzufügen, CLOUD speichern
-  var list = [];
-  try { list = await _loadAll(); } catch(_) {}
-  if (!Array.isArray(list)) list = [];
+  // Laden, hinzufügen, CLOUD speichern (ohne erneut aus der Cloud zu lesen)
+  var list = Array.isArray(window.wartungslog)
+    ? window.wartungslog.slice()
+    : [];
+
   list.push(entry);
+
+  // globalen Zustand und Cache aktualisieren
+  window.wartungslog = list;
   await _saveAll(list);
+
 
   // UI aktualisieren
   try {
