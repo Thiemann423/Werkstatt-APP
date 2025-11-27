@@ -229,7 +229,7 @@ async function loadHtml2PdfIfNeeded(){
 </script>
 <!-- 🔧 Helper für Wartungs-Log: OneDrive JSON laden/speichern -->
 <script>
- // OneDrive-Ordner für Wartungslog ermitteln
+// OneDrive-Ordner für Wartungslog ermitteln
 // Nutzt die gleichen Infos wie deine Reparatur-Meta-Daten
 async function getShareRootEndpoint() {
   // 1) Ohne Token keine Cloud-Zugriffe
@@ -266,6 +266,7 @@ async function getShareRootEndpoint() {
     itemId:  itemId
   };
 }
+
 
 
 
@@ -4581,25 +4582,24 @@ document.addEventListener("DOMContentLoaded", async function(){
 
 
 <script>
-// 🔐 Nach Login automatisch Banner + Warnungen aktualisieren (ohne Optional-Chaining)
 (function hookLogin(){
   var orig = window.signInAndAcquireToken;
   if (typeof orig === "function"){
     window.signInAndAcquireToken = async function(){
       var r = await orig.apply(this, arguments);
       try {
-        if (typeof window.wpLoad === "function")    { await window.wpLoad(); }
-        // 👉 NEU: Wartungs-Log aus der Cloud nachladen
-        if (typeof window.wpLogLoad === "function") { await window.wpLogLoad(); }
+        if (typeof window.wpLoad === "function")            { await window.wpLoad(); }
+        if (typeof window.wpLogLoad === "function")         { await window.wpLogLoad(); }
+        if (typeof window.loadWpLog === "function")         { await window.loadWpLog(); }
 
         if (typeof window.wpBuildIndex === "function")      { window.wpBuildIndex(); }
-        if (typeof window.wpRefreshTaskList === "function") { window.wpRefreshTaskList(); }
+        if (typeof window.wpRefreshTaskList === "function"){ window.wpRefreshTaskList(); }
         if (typeof window.wpCurrentTask === "function" &&
             typeof window.wpStatusUpdateForTask === "function"){
-          window.wpStatusUpdateForTask(window.wpCurrentTask());
+              window.wpStatusUpdateForTask(window.wpCurrentTask());
         }
-        if (typeof window.wpEvalWarning === "function")        { window.wpEvalWarning(); }
-        if (typeof window.wpUpdateGlobalBanner === "function") { window.wpUpdateGlobalBanner(); }
+        if (typeof window.wpEvalWarning === "function")     { window.wpEvalWarning(); }
+        if (typeof window.wpUpdateGlobalBanner === "function"){ window.wpUpdateGlobalBanner(); }
         if (typeof window.wpCheckOverdueAndNotify === "function"){
           window.wpCheckOverdueAndNotify({ sendMail:true });
         }
@@ -4608,6 +4608,7 @@ document.addEventListener("DOMContentLoaded", async function(){
     };
   }
 })();
+
 
 </script>
 
