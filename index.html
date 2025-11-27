@@ -4018,52 +4018,7 @@ async function wpSave(){
 }
 
 
-async function wpLogLoad(){
-  // 1) Cache
-  try { wartungslog = JSON.parse(localStorage.getItem(WP_LOG_CACHE) || "[]"); }
-  catch { wartungslog = []; }
 
-  // 2) OneDrive (nur wenn eingeloggt + Meta-Ordner vorhanden)
-  if (window.accessToken && window.TARGET_META_ITEM_ID){
-    try{
-      const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
-      const r = await fetch(url, { headers:{ Authorization:`Bearer ${accessToken}` } });
-      if (r.ok) wartungslog = JSON.parse(await r.text());
-    } catch(e){ console.warn("[WP-LOG] Load failed:", e); }
-  }
-  try { localStorage.setItem(WP_LOG_CACHE, JSON.stringify(wartungslog)); } catch {}
-}
-
-async function wpLogSave(){
-  try { localStorage.setItem(WP_LOG_CACHE, JSON.stringify(wartungslog)); } catch {}
-  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
-  try{
-    const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_LOG_FILE)}:/content`;
-    const blob = new Blob([JSON.stringify(wartungslog, null, 2)], { type:"application/json" });
-    await fetch(url, { method:"PUT", headers:{ Authorization:`Bearer ${accessToken}` }, body: blob });
-  } catch(e){ console.warn("[WP-LOG] Save failed:", e); }
-}
-
-// Eintrag hinzufügen
-async function wpLogExecution({dateISO, task, machine, technician=""}){
-  if (!dateISO || !task) return;
-  // Duplikate vermeiden (gleiches Task+Datum)
-  const exists = wartungslog.some(e => e.taskId === task.id && e.dateISO === dateISO);
-  if (exists) return;
-
-  wartungslog.push({
-    id: crypto.randomUUID(),
-    dateISO,
-    machine,
-    taskId: task.id || "",
-    taskName: task.name || "",
-  intervalDays: (task.intervalDays === null || task.intervalDays === undefined) ? "" : task.intervalDays,
-nipples: (task.nipples === null || task.nipples === undefined) ? "" : task.nipples,
-
-    technician
-  });
-  await wpLogSave();
-}
 
 /* ===== Wartungsplan – UI (final, stabil, inkl. Nippel & Banner) ===== */
 function wpEls(){
@@ -4624,15 +4579,18 @@ document.addEventListener("DOMContentLoaded", async function(){
     window.signInAndAcquireToken = async function(){
       var r = await orig.apply(this, arguments);
       try {
-        if (typeof window.wpLoad === "function")            { await window.wpLoad(); }
+        if (typeof window.wpLoad === "function")    { await window.wpLoad(); }
+        // 👉 NEU: Wartungs-Log aus der Cloud nachladen
+        if (typeof window.wpLogLoad === "function") { await window.wpLogLoad(); }
+
         if (typeof window.wpBuildIndex === "function")      { window.wpBuildIndex(); }
-        if (typeof window.wpRefreshTaskList === "function"){ window.wpRefreshTaskList(); }
+        if (typeof window.wpRefreshTaskList === "function") { window.wpRefreshTaskList(); }
         if (typeof window.wpCurrentTask === "function" &&
             typeof window.wpStatusUpdateForTask === "function"){
-              window.wpStatusUpdateForTask(window.wpCurrentTask());
+          window.wpStatusUpdateForTask(window.wpCurrentTask());
         }
-        if (typeof window.wpEvalWarning === "function")     { window.wpEvalWarning(); }
-        if (typeof window.wpUpdateGlobalBanner === "function"){ window.wpUpdateGlobalBanner(); }
+        if (typeof window.wpEvalWarning === "function")        { window.wpEvalWarning(); }
+        if (typeof window.wpUpdateGlobalBanner === "function") { window.wpUpdateGlobalBanner(); }
         if (typeof window.wpCheckOverdueAndNotify === "function"){
           window.wpCheckOverdueAndNotify({ sendMail:true });
         }
@@ -4641,6 +4599,7 @@ document.addEventListener("DOMContentLoaded", async function(){
     };
   }
 })();
+
 </script>
 
 
