@@ -231,18 +231,9 @@ async function loadHtml2PdfIfNeeded(){
 <script>
   // OneDrive-Ordner aus dem SHARE-Link ermitteln
   // (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
- async function getShareRootEndpoint() {
-  // Wenn noch kein Token da ist: versuche zuerst, still ein Token zu holen
-  if (!window.accessToken && typeof window.signInAndAcquireToken === "function") {
-    try {
-      // silent = false -> kein Popup, nur Token holen, falls Account schon bekannt
-      await window.signInAndAcquireToken(false, { rebuild: false });
-    } catch (e) {
-      console.warn("silent token fetch failed:", e);
-    }
-  }
-
-  // Wenn immer noch kein Token: jetzt tatsächlich abbrechen
+async function getShareRootEndpoint() {
+  // WICHTIG: hier NICHT automatisch einloggen,
+  // sondern nur prüfen, ob schon ein Token da ist.
   if (!window.accessToken) {
     throw new Error("Kein Access Token – bitte in der App auf 'Microsoft anmelden' klicken.");
   }
@@ -259,6 +250,7 @@ async function loadHtml2PdfIfNeeded(){
     itemId:  TARGET.parentItemId
   };
 }
+
 
 
   // JSON-Datei aus dem Ordner laden
