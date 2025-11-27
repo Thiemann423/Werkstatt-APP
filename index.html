@@ -231,9 +231,10 @@ async function loadHtml2PdfIfNeeded(){
 <script>
   // OneDrive-Ordner aus dem SHARE-Link ermitteln
   // (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
+// OneDrive-Ordner aus dem SHARE-Link ermitteln
+// (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
 async function getShareRootEndpoint() {
-  // WICHTIG: hier NICHT automatisch einloggen,
-  // sondern nur prüfen, ob schon ein Token da ist.
+  // HIER KEIN auto-login mehr!
   if (!window.accessToken) {
     throw new Error("Kein Access Token – bitte in der App auf 'Microsoft anmelden' klicken.");
   }
@@ -250,6 +251,7 @@ async function getShareRootEndpoint() {
     itemId:  TARGET.parentItemId
   };
 }
+
 
 
 
