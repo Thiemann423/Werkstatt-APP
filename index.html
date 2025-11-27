@@ -229,26 +229,41 @@ async function loadHtml2PdfIfNeeded(){
 </script>
 <!-- 🔧 Helper für Wartungs-Log: OneDrive JSON laden/speichern -->
 <script>
-  // OneDrive-Ordner aus dem SHARE-Link ermitteln
-  // (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
-// OneDrive-Ordner aus dem SHARE-Link ermitteln
-// (nutzt resolveShareLinkToFolder, das weiter unten definiert ist)
+ // OneDrive-Ordner für Wartungslog ermitteln
+// Nutzt die gleichen Infos wie deine Reparatur-Meta-Daten
 async function getShareRootEndpoint() {
-  // HIER KEIN auto-login mehr!
+  // 1) Ohne Token keine Cloud-Zugriffe
   if (!window.accessToken) {
     throw new Error("Kein Access Token – bitte in der App auf 'Microsoft anmelden' klicken.");
   }
 
-  // sorgt dafür, dass TARGET.driveId / TARGET.parentItemId gesetzt sind
-  await resolveShareLinkToFolder();
-
+  // 2) Falls TARGET noch leer ist, versuche aus dem Cache zu lesen
   if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-    throw new Error("TARGET nicht initialisiert.");
+    try {
+      const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
+      if (cache && cache.driveId && cache.parentItemId) {
+        TARGET.driveId      = cache.driveId;
+        TARGET.parentItemId = cache.parentItemId;
+        window.TARGET       = TARGET;
+      }
+    } catch (e) {
+      console.warn("TARGET_CACHE lesen fehlgeschlagen:", e);
+    }
   }
+
+  // 3) Wenn immer noch nichts da ist: Cloud-Ordner nicht initialisiert
+  if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    throw new Error("TARGET nicht initialisiert – Share-Ordner konnte nicht ermittelt werden.");
+  }
+
+  // 4) Für das Wartungslog bevorzugen wir den Meta-Ordner, falls vorhanden
+  const itemId = (typeof window.TARGET_META_ITEM_ID === "string" && window.TARGET_META_ITEM_ID)
+    ? window.TARGET_META_ITEM_ID
+    : TARGET.parentItemId;
 
   return {
     driveId: TARGET.driveId,
-    itemId:  TARGET.parentItemId
+    itemId:  itemId
   };
 }
 
