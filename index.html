@@ -1037,6 +1037,7 @@ async function _loadAll(){
 
 
 
+
 // ✅ SPEICHERN – cloud-first + async
 async function saveWpTask() {
   // Alle Werte sicher aus dem Formular holen
@@ -4861,7 +4862,7 @@ async function wpLogLoad(){
       ? getSignedInUser()
       : { name:"", email:"", upn:"" };
 
-    // 4) Normalisieren wie bisher
+    // 4) Normalisieren wie bisher (deine Logik)
     window.wartungslog = raw.map(function(e){
       var dateISO = _toISO
         ? _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : ""))
@@ -4878,7 +4879,6 @@ async function wpLogLoad(){
         (e.nipples  !== undefined && e.nipples  !== null) ? e.nipples  :
         (e.nipCount !== undefined && e.nipCount !== null) ? e.nipCount : "";
 
-      // Techniker + Mail/UPN mit Fallbacks (alte Keys: tech/techEmail)
       var technician =
         (e.technician && String(e.technician).trim()) ? String(e.technician).trim() :
         (e.tech       && String(e.tech).trim())       ? String(e.tech).trim()       :
@@ -4914,7 +4914,6 @@ async function wpLogLoad(){
   }
 }
 
-}
 
 // Helper wie bei _loadAll
 function _cacheLocal(list){
