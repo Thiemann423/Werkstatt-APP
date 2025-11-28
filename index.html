@@ -1219,7 +1219,8 @@ async function loadWpLog() {
 }
 
 // Falls andere Stellen wpLogLoad() aufrufen:
-window.wpLogLoad = window.wpLogLoad || loadWpLog;
+window.wpLogLoad = loadWpLog;   // immer unsere neue Version verwenden
+
 
 
 
