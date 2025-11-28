@@ -426,11 +426,13 @@ async function getShareRootEndpoint() {
 <!-- 🔐 Login/Logout Bereich -->
 <div style="margin-bottom: 20px;">
 <button
-  onclick="signInAndAcquireToken(true, { rebuild: true, reloadWp: true })"
+  onclick="signInAndAcquireToken(true, { rebuild: true })"
   class="no-print"
-  style="padding:8px 15px; background:#0078d4; color:white; border:none; border-radius:5px; cursor:pointer;">
+  style="padding:8px 15px; background:#0078d4; color:white; border:none; border-radius:5px; cursor:pointer;"
+>
   Microsoft anmelden
 </button>
+
 
   <button onclick="signOut()" class="no-print"
           style="padding:8px 15px; margin-left:10px; background:#d9534f; color:white; border:none; border-radius:5px; cursor:pointer;">
@@ -2397,59 +2399,80 @@ window.addEventListener('load', function() {
   }
 
 // 3) Login/Token nur per Redirect
-async function signInAndAcquireToken(interactive = false, { rebuild = true } = {}) {
+async function signInAndAcquireToken(
+  interactive = false,
+  { rebuild = true } = {}
+) {
   try {
-    let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    let account =
+      msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
-    // noch kein Account vorhanden → nur bei "interactive = true" einen Redirect starten
+    // noch kein Account -> ggf. interaktiv einloggen
     if (!account && interactive) {
       await msalInstance.loginRedirect({ scopes });
-      return; // nach dem Redirect geht es hier weiter
+      return; // kommt nach Redirect zurück
     }
-
-    // gar kein Account und wir durften nicht interaktiv → Hinweis anzeigen und abbrechen
     if (!account) {
       showLoginHint();
       return;
     }
 
-    // Token versuchen, zuerst silent
+    // Token holen
     try {
       const t = await msalInstance.acquireTokenSilent({ scopes, account });
       accessToken = t.accessToken;
       window.accessToken = accessToken;
     } catch (e) {
-      // Silent hat nicht geklappt → Redirect-Login
       await msalInstance.acquireTokenRedirect({ scopes });
       return;
     }
 
-    // ab hier: wir haben ein gültiges accessToken
-    hideLoginHint();
-
-    // OneDrive-Ziel (TARGET / Wartungsordner) auflösen
+    // OneDrive-Zielordner ermitteln
     try {
       await resolveShareLinkToFolder();
     } catch (e) {
       console.warn("resolveShareLinkToFolder:", e);
     }
 
-    // Stammdaten nur bei Bedarf neu laden
+    hideLoginHint();
+
+    // Reparatur-Stammdaten (wie bisher)
     if (rebuild) {
       try {
         await loadMasterData();
-        if (typeof window.rebuildDropdownsFromMaster === "function") {
-          window.rebuildDropdownsFromMaster();
-        }
+        window.rebuildDropdownsFromMaster?.();
       } catch (e) {
         console.warn("Reload master after sign-in failed:", e);
       }
+    }
+
+    // ➕ NEU: Wartungslog aus der Cloud holen + Tabelle aktualisieren
+    try {
+      if (typeof wpLogLoad === "function") {
+        await wpLogLoad();
+      }
+    } catch (e) {
+      console.warn("wpLogLoad nach Sign-In:", e);
+    }
+
+    try {
+      const panel = document.getElementById("wpLogPanel");
+      if (
+        panel &&
+        panel.style.display === "block" &&
+        typeof renderWpLogTable === "function"
+      ) {
+        renderWpLogTable();
+      }
+    } catch (e) {
+      console.warn("renderWpLogTable nach Sign-In:", e);
     }
   } catch (e) {
     console.error("signInAndAcquireToken:", e);
     showLoginHint();
   }
 }
+
 
 
 
@@ -5112,43 +5135,18 @@ if (doneBtn) doneBtn.addEventListener("click", function(){
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-  // 1) UI fürs Wartungs-Dashboard verdrahten (braucht noch keinen Token)
+  // UI-Events fürs Wartungs-Dashboard verdrahten
   try {
     bindWpLogUi();
   } catch (e) {
     console.warn("bindWpLogUi:", e);
   }
 
-  // 2) Still versuchen, den Benutzer anzumelden und OneDrive-Ziel zu initialisieren
-  signInAndAcquireToken(false, { rebuild: false })
-    .then(async () => {
-      // Wenn wir hier sind, wurde der Login versucht.
-      // Ohne Token macht ein Cloud-Load aber keinen Sinn.
-      if (!window.accessToken) {
-        return;
-      }
-
-      try {
-        // Wartungslog aus der Cloud laden und in window.wartungslog schreiben
-        await wpLogLoad();
-      } catch (e) {
-        console.warn("wpLogLoad nach Sign-In:", e);
-      }
-
-      // 3) Tabelle nur rendern, wenn das Panel schon offen ist
-      try {
-        const panel = _byId("wpLogPanel");
-        if (panel && panel.style.display === "block") {
-          renderWpLogTable();
-        }
-      } catch (e) {
-        console.warn("renderWpLogTable nach Sign-In:", e);
-      }
-    })
-    .catch(err => {
-      console.warn("Init nach DOMContentLoaded fehlgeschlagen:", err);
-    });
+  // still versuchen, den Benutzer anzumelden
+  // -> holt auch OneDrive-Ordner + Wartungslog
+  signInAndAcquireToken(false, { rebuild: true });
 });
+
 
 
 
