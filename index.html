@@ -4793,24 +4793,39 @@ async function wpLogLoad(){
   }
 }
 
-
 // Helper wie bei _loadAll
 function _cacheLocal(list){
-  try { localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(list || [])); }
-  catch(_){ window.__memLog = (list || []).slice(); }
+  var payload = Array.isArray(list) ? list : [];
+  try {
+    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(payload));
+    // zusätzlich zur Sicherheit im Speicher behalten
+    window.__memLog = payload.slice();
+  } catch(_) {
+    // Falls localStorage blockiert ist: wenigstens im RAM merken
+    window.__memLog = payload.slice();
+  }
 }
 
-window.__cloudEtag = window.__cloudEtag || null;
+// ETag-Cache einmal global initialisieren
+if (typeof window.__cloudEtag === "undefined") {
+  window.__cloudEtag = null;
+}
 
-// robustes Speichern: lokal + Cloud + Konflikt-Merge
+// 🔐 robustes Speichern: IMMER erst lokal, dann Cloud (wenn Token vorhanden)
 async function _saveAll(list){
   const payload = Array.isArray(list) ? list : [];
 
-  // 1) sofort lokal cachen (UI bleibt schnell / offlinefähig)
+  // 1) sofort lokal cachen (für UI + Offline)
   _cacheLocal(payload);
+  console.log("[WP] lokal gespeichert:", payload);
 
-  // 2) in die Cloud schreiben (mit ETag)
+  // 2) nur versuchen in die Cloud zu schreiben, wenn ein Access-Token da ist
   try {
+    if (!window.accessToken) {
+      console.warn("[WP] kein Access-Token – nur lokal gespeichert");
+      return false;
+    }
+
     const root = await getShareRootEndpoint();
     const res  = await graphUploadJsonToFolder(
       root,
@@ -4819,60 +4834,15 @@ async function _saveAll(list){
       window.__cloudEtag || null
     );
     window.__cloudEtag = (res && res.etag) || window.__cloudEtag;
+    console.log("[WP] Cloud-Speicher OK");
     return true;
+
   } catch (err) {
-    // === gleichzeitiges Speichern? -> ETag-Konflikt erkennen ===
-    const msg  = String((err && (err.code || err.message)) || "");
-    const stat = (err && (err.status || err.statusCode)) || 0;
-    const isEtagConflict = /preconditionfailed|etag|412/.test(msg.toLowerCase()) || stat === 412;
-
-    if (isEtagConflict) {
-      // 2a) Cloud-Stand neu laden
-      const cloud = await _loadAll();  // setzt window.__cloudEtag neu
-
-      // 2b) zusammenführen (Schlüssel aus Datum+Maschine+Task+Techniker)
-      const keyOf = e => [
-        (e.dateISO || e.date || "").trim(),
-        (e.machine || "").trim(),
-        (e.taskName || e.task || "").trim(),
-        (e.technician || e.tech || "").trim(),
-        (e.technicianEmail || "").trim()
-      ].join("|");
-
-      const map = new Map();
-      for (const item of [].concat(cloud || [], payload)) {
-        const k = keyOf(item);
-        const prev = map.get(k);
-        // bei Kollision das "neuere" Datum bevorzugen
-        if (!prev || String(item.dateISO || item.date || "") > String(prev.dateISO || prev.date || "")) {
-          map.set(k, item);
-        }
-      }
-      const merged = [...map.values()];
-
-      // 2c) lokal aktualisieren und erneut hochladen
-      _cacheLocal(merged);
-      try {
-        const root = await getShareRootEndpoint();
-        const res2 = await graphUploadJsonToFolder(
-          root,
-          CLOUD_FILENAME,
-          merged,
-          window.__cloudEtag || null
-        );
-        window.__cloudEtag = (res2 && res2.etag) || window.__cloudEtag;
-        return true;
-      } catch (err2) {
-        console.warn("Cloud save after merge failed:", err2);
-        return false;
-      }
-    }
-
-    console.warn("Cloud save failed – staying local:", err);
+    console.warn("[WP] Cloud save failed – wir bleiben bei den lokalen Daten:", err);
+    // lokale Daten bleiben bestehen, das reicht für Dashboard + Warnhinweise
     return false;
   }
 }
-
 
 
 // ===== Ausführung einer Wartung + Speichern (cloud-first) =====
@@ -4909,11 +4879,19 @@ async function wpLogExecution(entry) {
 
   // Aktuelle Liste cloud-first laden, ergänzen, speichern
   let list = [];
-  try { list = await _loadAll(); } catch(_) {}
+  try {
+    list = await _loadAll();
+  } catch(_) {
+    list = [];
+  }
   if (!Array.isArray(list)) list = [];
   list.push(e);
 
-  try { await _saveAll(list); } catch (err) { console.warn("saveAll failed", err); }
+  try {
+    await _saveAll(list);
+  } catch (err) {
+    console.warn("[WP] saveAll failed:", err);
+  }
 
   // UI aktualisieren
   try {
@@ -4930,6 +4908,7 @@ async function wpLogExecution(entry) {
     }
   } catch (_) {}
 }
+
 
 
 
