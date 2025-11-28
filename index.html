@@ -5986,6 +5986,23 @@ setInterval(async function(){
     } catch(e){}
   };
   </script>
+<script>
+// Wartungs-Daten beim Seitenstart global bereitstellen
+window.addEventListener("load", async function () {
+  try {
+    if (typeof _loadAll === "function") {
+      const data = await _loadAll();                    // aus Cloud oder localStorage
+      window.wartungslog = Array.isArray(data) ? data.slice() : [];
+      console.log("[WP] wartungslog beim Start gesetzt:", window.wartungslog);
+    } else {
+      console.warn("[WP] _loadAll ist nicht definiert – kann wartungslog nicht initialisieren.");
+    }
+  } catch (e) {
+    console.warn("[WP] Fehler beim Initialisieren von wartungslog:", e);
+    window.wartungslog = [];
+  }
+});
+</script>
 
 
 
