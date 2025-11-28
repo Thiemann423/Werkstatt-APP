@@ -605,72 +605,59 @@ async function getShareRootEndpoint() {
     return a === b ? 0 : a < b ? -1 : 1;
   }
 
-  // Sichere Quelle für fällige/überfällige Einträge
-  async function getDueList() {
-    // 1. Neue Logik: computeDueMap + listDueOrOverdue benutzen, falls vorhanden
-    if (
-      typeof window.computeDueMap === "function" &&
-      typeof window.listDueOrOverdue === "function"
-    ) {
-      try {
-        const map = await window.computeDueMap();
-        const raw = window.listDueOrOverdue(map) || [];
-        // in das Format bringen, das renderGlobalOverdueUI erwartet
-        return raw.map(v => ({
-          machine: v.machine || "",
-          task: v.taskName || v.task || "",
-          nextDue: v.nextDue || "",
-          status: v.status || ""
-        }));
-      } catch (e) {
-        console.warn("getDueList/computeDueMap:", e);
+async function getDueList(){
+  // 1. Neue Logik: computeDueMap benutzen, wenn vorhanden
+  if (typeof window.computeDueMap === 'function'){
+    try {
+      const map = await window.computeDueMap();   // <-- WICHTIG: await!
+      const out = [];
+      for (const [,v] of map){
+        if (v.status === 'today' || v.status === 'overdue'){
+          out.push({
+            machine: v.machine || "",
+            task:    v.taskName || v.task || "",
+            nextDue: v.nextDue || "",
+            status:  v.status
+          });
+        }
       }
+      return out;
+    } catch (e) {
+      console.warn("getDueList/computeDueMap:", e);
     }
-
-    // 2. Fallback: nur mit window.wartungslog arbeiten (lokale Daten)
-    const list = Array.isArray(window.wartungslog)
-      ? window.wartungslog
-      : [];
-    const latest = new Map();
-
-    for (const e of list) {
-      const key =
-        `${(e.machine || "").trim()}||${(e.taskName || "").trim()}`;
-      const last = (e.dateISO || "").trim();
-      if (!latest.has(key) || (last && last > (latest.get(key).dateISO || ""))) {
-        latest.set(key, e);
-      }
-    }
-
-    const today = toISO(new Date());
-    const out = [];
-
-    latest.forEach(e => {
-      const intv =
-        e.intervalDays === "" || e.intervalDays == null
-          ? 0
-          : Number(e.intervalDays);
-      const next =
-        e.dateISO && intv ? addDays(e.dateISO, intv) : "";
-      if (!next) return;
-      const status =
-        cmpISO(next, today) < 0
-          ? "overdue"
-          : cmpISO(next, today) === 0
-          ? "today"
-          : "ok";
-      if (status !== "ok") {
-        out.push({
-          machine: e.machine || "",
-          task: e.taskName || "",
-          nextDue: next,
-          status
-        });
-      }
-    });
-
-    return out;
   }
+
+  // 2. Fallback: nur mit window.wartungslog arbeiten
+  const list   = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+  const latest = new Map();
+  for (const e of list){
+    const key  = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
+    const last = (e.dateISO||"").trim();
+    if (!latest.has(key) || (last && last > (latest.get(key).dateISO||""))){
+      latest.set(key, e);
+    }
+  }
+  const today = toISO(new Date());
+  const out   = [];
+  latest.forEach(e=>{
+    const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
+    const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
+    if (!next) return;
+    const status = cmpISO(next, today) < 0 ? 'overdue'
+                 : cmpISO(next, today) === 0 ? 'today'
+                 : 'ok';
+    if (status !== 'ok'){
+      out.push({
+        machine: e.machine || "",
+        task:    e.taskName || "",
+        nextDue: next,
+        status
+      });
+    }
+  });
+  return out;
+}
+
 
   // Öffnet Dashboard + wählt Maschine
   function wpOpenMachineFromName(name) {
