@@ -223,6 +223,8 @@ async function loadHtml2PdfIfNeeded(){
 // Nutzt die gleichen Infos wie deine Reparatur-Meta-Daten
 // OneDrive-Ordner für Wartungslog ermitteln
 // Nutzt den gleichen Ordner wie die Reparatur-Stammdaten
+// OneDrive-Ordner für Wartungslog ermitteln
+// Nutzt den gleichen Ordner wie die Reparatur-Meta-/Stammdaten
 async function getShareRootEndpoint() {
   // 1) Ohne Token keine Cloud-Zugriffe
   if (!window.accessToken) {
@@ -248,12 +250,13 @@ async function getShareRootEndpoint() {
     throw new Error("TARGET nicht initialisiert – Share-Ordner konnte nicht ermittelt werden.");
   }
 
-  // ❗ WICHTIG: Für das Wartungslog den gleichen Ordner wie die Reparatur-Dateien benutzen
+  // 4) Wartungslog im gleichen Ordner wie die Reparatur-Dateien speichern/laden
   return {
     driveId: TARGET.driveId,
     itemId:  TARGET.parentItemId
   };
 }
+
 
 
 
