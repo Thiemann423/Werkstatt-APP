@@ -992,30 +992,27 @@ async function getDueList(){
 <script>
 // ===== Wartungs-Log: Laden/Speichern (Cloud + lokal) =====
 
-// Schlüssel & Dateiname – wie bisher
-const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
-const CLOUD_FILENAME = "wartungslog.json";
+const WP_WARTUNG_STORAGE_KEY = "TE15_WARTUNGSLOG";
+const WP_WARTUNG_CLOUD_FILENAME = "wartungslog.json";
+
 
 // lokalen Cache aktualisieren (localStorage + RAM)
 function _cacheLocal(list) {
   const payload = Array.isArray(list) ? list : [];
   try {
-    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(WP_WARTUNG_STORAGE_KEY, JSON.stringify(payload));
   } catch (_) {}
   window.__memLog = payload.slice();
 }
 
-// Cloud + lokal laden
 async function _loadAll() {
-  // 1) Cloud nur, wenn ein Access-Token vorhanden ist
   if (window.accessToken) {
     try {
       const root  = await getShareRootEndpoint();
-      const cloud = await graphDownloadJsonFromFolder(root, CLOUD_FILENAME);
+      const cloud = await graphDownloadJsonFromFolder(root, WP_WARTUNG_CLOUD_FILENAME);
       const arr   = Array.isArray(cloud.data) ? cloud.data : [];
-
       window.__cloudEtag = cloud.etag || window.__cloudEtag || null;
-      _cacheLocal(arr);                    // Cloud-Stand lokal merken
+      _cacheLocal(arr);
       console.log("[WP] aus Cloud geladen:", arr);
       return arr;
     } catch (err) {
@@ -1025,7 +1022,7 @@ async function _loadAll() {
 
   // 2) localStorage
   try {
-    const raw = localStorage.getItem(WP_STORAGE_KEY);
+     const raw = localStorage.getItem(WP_WARTUNG_STORAGE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
@@ -1052,15 +1049,11 @@ async function wpLogLoad() {
   return window.wartungslog;
 }
 
-//  Speichern: IMMER zuerst lokal, dann (wenn möglich) in die Cloud
 async function _saveAll(list) {
   const payload = Array.isArray(list) ? list : [];
-
-  // 1) sofort lokal sichern
   _cacheLocal(payload);
   console.log("[WP] lokal gespeichert:", payload);
 
-  // 2) nur versuchen, in die Cloud zu schreiben, wenn ein Token da ist
   if (!window.accessToken) {
     console.warn("[WP] kein Access-Token – nur lokal gespeichert");
     return false;
@@ -1070,7 +1063,7 @@ async function _saveAll(list) {
     const root = await getShareRootEndpoint();
     const res  = await graphUploadJsonToFolder(
       root,
-      CLOUD_FILENAME,
+      WP_WARTUNG_CLOUD_FILENAME,
       payload,
       window.__cloudEtag || null
     );
