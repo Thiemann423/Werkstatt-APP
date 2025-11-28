@@ -221,6 +221,8 @@ async function loadHtml2PdfIfNeeded(){
 <script>
 // OneDrive-Ordner für Wartungslog ermitteln
 // Nutzt die gleichen Infos wie deine Reparatur-Meta-Daten
+// OneDrive-Ordner für Wartungslog ermitteln
+// Nutzt den gleichen Ordner wie die Reparatur-Stammdaten
 async function getShareRootEndpoint() {
   // 1) Ohne Token keine Cloud-Zugriffe
   if (!window.accessToken) {
@@ -246,16 +248,13 @@ async function getShareRootEndpoint() {
     throw new Error("TARGET nicht initialisiert – Share-Ordner konnte nicht ermittelt werden.");
   }
 
-  // 4) Für das Wartungslog bevorzugen wir den Meta-Ordner, falls vorhanden
-  const itemId = (typeof window.TARGET_META_ITEM_ID === "string" && window.TARGET_META_ITEM_ID)
-    ? window.TARGET_META_ITEM_ID
-    : TARGET.parentItemId;
-
+  // ❗ WICHTIG: Für das Wartungslog den gleichen Ordner wie die Reparatur-Dateien benutzen
   return {
     driveId: TARGET.driveId,
-    itemId:  itemId
+    itemId:  TARGET.parentItemId
   };
 }
+
 
 
 
@@ -1006,6 +1005,7 @@ function _cacheLocal(list) {
 }
 
 async function _loadAll() {
+  // 1) Cloud, wenn möglich
   if (window.accessToken) {
     try {
       const root  = await getShareRootEndpoint();
@@ -1022,7 +1022,7 @@ async function _loadAll() {
 
   // 2) localStorage
   try {
-     const raw = localStorage.getItem(WP_WARTUNG_STORAGE_KEY);
+    const raw = localStorage.getItem(WP_WARTUNG_STORAGE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
@@ -1054,10 +1054,7 @@ async function _saveAll(list) {
   _cacheLocal(payload);
   console.log("[WP] lokal gespeichert:", payload);
 
-  if (!window.accessToken) {
-    console.warn("[WP] kein Access-Token – nur lokal gespeichert");
-    return false;
-  }
+  if (!window.accessToken) return false;
 
   try {
     const root = await getShareRootEndpoint();
@@ -1082,6 +1079,7 @@ async function wpLogExecution(entry) {
   all.push(entry);
   await _saveAll(all);
 }
+
 
 
 
