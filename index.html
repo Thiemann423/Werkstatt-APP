@@ -912,39 +912,46 @@ async function getShareRootEndpoint() {
 window.__cloudEtag = window.__cloudEtag || null;
 
   
-// Cloud-first laden + lokal cachen
 async function _loadAll(){
+  // 1. Versuch: Cloud (wenn Token da ist)
   try {
-    // OneDrive-Ordner (aus dem Freigabelink) ansteuern
-  const root = await getShareRootEndpoint();
-
-    const { data, etag } = await graphDownloadJsonFromFolder(
-      root,
-      CLOUD_FILENAME // z. B. "wartungslog.json"
-    );
-    __cloudEtag = etag || __cloudEtag;
-
-    // Cloud-Stand lokal cachen (für schnelle UI / Offline)
-    _cacheLocal(Array.isArray(data) ? data : []);
-
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.warn("Cloud-Load failed, using local cache:", err);
-
-    // === lokaler Fallback ===
-    if (Array.isArray(window.__memLog)) return window.__memLog.slice();
-    try{
-      const raw = localStorage.getItem(WP_STORAGE_KEY);
-      if (!raw) return [];
-      const data = JSON.parse(raw);
-      return Array.isArray(data) ? data : [];
-    } catch(e){
-      // defektes JSON oder Storage blockiert
-      try { localStorage.removeItem(WP_STORAGE_KEY); } catch(_){}
-      return Array.isArray(window.__memLog) ? window.__memLog.slice() : [];
+    if (window.accessToken) {
+      const root = await getShareRootEndpoint();
+      const cloud = await graphDownloadJsonFromFolder(root, CLOUD_FILENAME);
+      if (Array.isArray(cloud.data)) {
+        window.__cloudEtag = cloud.etag || null;
+        _cacheLocal(cloud.data);
+        console.log("[WP] Cloud geladen");
+        return cloud.data;
+      }
     }
+  } catch (err) {
+    console.warn("[WP] Cloud-Load failed:", err);
   }
+
+  // 2. Versuch: lokale gespeicherte Daten
+  try {
+    const raw = localStorage.getItem(WP_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        console.log("[WP] lokale Daten geladen");
+        return parsed;
+      }
+    }
+  } catch(_) {}
+
+  // 3. Versuch: Daten im RAM (fallback)
+  if (Array.isArray(window.__memLog)) {
+    console.log("[WP] memLog geladen");
+    return window.__memLog.slice();
+  }
+
+  // 4. Nichts da
+  console.log("[WP] kein Log gefunden – gebe [] zurück");
+  return [];
 }
+
 
 
 
