@@ -513,44 +513,52 @@ async function getShareRootEndpoint() {
   if (!window.__toggleWpLogPanel) {
     window.__toggleWpLogPanel = function () {
       var p = document.getElementById('wpLogPanel');
-      if (!p) { alert('Hinweis: #wpLogPanel nicht gefunden.'); return; }
+      if (!p) {
+        alert('Hinweis: #wpLogPanel nicht gefunden.');
+        return;
+      }
+
       var willOpen = (p.style.display === '' || p.style.display === 'none');
       p.style.display = willOpen ? 'block' : 'none';
 
       // ARIA aktualisieren
       var btn = document.getElementById('toggleWpLogBtn');
-      if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      if (btn) {
+        btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      }
 
-// Beim Öffnen Daten laden
-if (willOpen) {
-  // 1. Alte Logik: Daten in window.wartungslog laden (für alte Helfer)
-  if (typeof wpLogLoad === "function") {
-    try { wpLogLoad(); } catch (e) { console.warn("wpLogLoad:", e); }
-  }
+      // Beim Öffnen Daten laden
+      if (willOpen) {
+        // 1. Alte Logik: Daten in window.wartungslog laden (für alte Helfer)
+        if (typeof wpLogLoad === "function") {
+          try { wpLogLoad(); } catch (e) { console.warn("wpLogLoad:", e); }
+        }
 
-  // 2. Neue Logik: direkt aus der Cloud laden und Tabelle bauen
-  if (typeof loadWpLog === "function") {
-    try { loadWpLog(); } catch (e) { console.warn("loadWpLog:", e); }
-  } else if (typeof renderWpLogTable === "function") {
-    // Fallback, falls loadWpLog einmal nicht existiert
-    try { renderWpLogTable(); } catch (e) { console.warn("renderWpLogTable:", e); }
-  }
-}
+        // 2. Neue Logik: direkt aus der Cloud laden und Tabelle bauen
+        if (typeof loadWpLog === "function") {
+          try { loadWpLog(); } catch (e) { console.warn("loadWpLog:", e); }
+        } else if (typeof renderWpLogTable === "function") {
+          // Fallback, falls loadWpLog einmal nicht existiert
+          try { renderWpLogTable(); } catch (e) { console.warn("renderWpLogTable:", e); }
+        }
+      }
+    }; // <-- Funktion schließen
+  }   // <-- if(!window.__toggleWpLogPanel) schließen
 
-
-// Button sicher aktivieren + Zusatzlistener
-window.addEventListener('load', function () {
-  var btn = document.getElementById('toggleWpLogBtn');
-  var panel = document.getElementById('wpLogPanel');
-  if (btn) {
-    btn.removeAttribute('disabled');
-    btn.setAttribute('aria-controls', 'wpLogPanel');
-    btn.setAttribute('aria-expanded', (panel && panel.style.display === 'block') ? 'true' : 'false');
-    // ❌ diese Zeile bitte raus:
-    // btn.addEventListener('click', window.__toggleWpLogPanel);
-  }
-});
-
+  // Button sicher aktivieren + Zusatzlistener
+  window.addEventListener('load', function () {
+    var btn   = document.getElementById('toggleWpLogBtn');
+    var panel = document.getElementById('wpLogPanel');
+    if (btn) {
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-controls', 'wpLogPanel');
+      btn.setAttribute(
+        'aria-expanded',
+        (panel && panel.style.display === 'block') ? 'true' : 'false'
+      );
+      // kein zusätzlicher click-Listener nötig, der Button hat schon ein inline onclick
+    }
+  });
 
   // Tastaturkürzel: Alt+W
   window.addEventListener('keydown', function (e) {
@@ -561,6 +569,7 @@ window.addEventListener('load', function () {
   });
 })();
 </script>
+
 
 <script>
 /* ===== Globaler Wartungs-Hinweis ohne geöffnetes Dashboard ===== */
