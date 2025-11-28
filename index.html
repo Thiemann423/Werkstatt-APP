@@ -928,68 +928,28 @@ async function _loadAll(){
 
 // ✅ SPEICHERN – cloud-first + async
 async function saveWpTask() {
-  // Datum (YYYY-MM-DD)
-  var d = new Date();
-  var todayISO = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  // Alle Werte sicher aus dem Formular holen
+  var entry = (typeof _collectEntryFromForm === "function")
+    ? _collectEntryFromForm({ useTodayIfEmpty: true })
+    : {};
 
-  // MS-User + Formularwert
-  var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
-  var elTech = document.getElementById("techniker1");
- var techFromForm = (elTech && elTech.value ? elTech.value : "").trim();
-var tech = techFromForm || displayNameFromUser(u);
-  var techEmail = u.email || "";
-  var techUpn = u.upn || "";
-
-  // Felder
-  var elMachine  = document.getElementById("maschine");
-  var elTask     = document.getElementById("wpTaskSelect");
-  var elInterval = document.getElementById("wpIntervalDays");
-  var elNip      = document.getElementById("wpNipCount");
-
-  // Task-Text robust holen (Anzeigename)
-  function getSelectText(sel){
-    if (!sel) return "";
-    var i = sel.selectedIndex;
-    if (i >= 0 && sel.options && sel.options[i]) {
-      var t = sel.options[i].text || sel.options[i].label || sel.value;
-      return String(t || "").trim();
-    }
-    return String(sel.value || "").trim();
+  // In die Cloud schreiben (lädt selbst vorher alle alten Einträge)
+  if (typeof wpLogExecution === "function") {
+    await wpLogExecution(entry);
   }
-  var taskText = (typeof _getSelectText === "function" ? _getSelectText("wpTaskSelect") : "") || getSelectText(elTask);
 
-  // 🔁 Feldnamen so speichern, wie loadWpLog() sie liest
-  var entry = {
-    dateISO: todayISO,
-    machine: (elMachine && elMachine.value || "").trim(),
-    taskName: taskText,
-    intervalDays: (elInterval && elInterval.value || "").toString().trim(),
-    nipples: (elNip && elNip.value || "").toString().trim(),
-    technician: tech,
-    technicianEmail: techEmail,
-    technicianUpn: techUpn
-  };
-
-  // Laden, hinzufügen, CLOUD speichern (ohne erneut aus der Cloud zu lesen)
-  var list = Array.isArray(window.wartungslog)
-    ? window.wartungslog.slice()
-    : [];
-
-  list.push(entry);
-
-  // globalen Zustand und Cache aktualisieren
-  window.wartungslog = list;
-  await _saveAll(list);
-
-
-  // UI aktualisieren
+  // Danach Tabelle neu laden
   try {
-    if (typeof loadWpLog === "function") await loadWpLog();
-    if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI();
-  } catch(_) {}
+    if (typeof loadWpLog === "function") {
+      await loadWpLog();
+    }
+  } catch (e) {
+    console.warn("loadWpLog nach saveWpTask fehlgeschlagen:", e);
+  }
 
   alert("Wartung gespeichert!");
 }
+
 
 
 
@@ -4899,9 +4859,21 @@ async function wpLogExecution(entry) {
   try { await _saveAll(list); } catch (err) { console.warn("saveAll failed", err); }
 
   // UI aktualisieren
-  try { if (typeof renderWpLogTable === "function") renderWpLogTable(); } catch(_) {}
-  try { if (typeof window.wpRefreshOverdueUI === "function") window.wpRefreshOverdueUI(); } catch(_) {}
+  try {
+    if (typeof loadWpLog === "function") {
+      await loadWpLog();          // Dashboard-Tabelle direkt neu aufbauen
+    } else if (typeof renderWpLogTable === "function") {
+      renderWpLogTable();         // Fallback für ganz alten Code
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof window.wpRefreshOverdueUI === "function") {
+      window.wpRefreshOverdueUI();
+    }
+  } catch (_) {}
 }
+
 
 
 
