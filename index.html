@@ -425,10 +425,13 @@ async function getShareRootEndpoint() {
 
 <!-- 🔐 Login/Logout Bereich -->
 <div style="margin-bottom: 20px;">
-  <button onclick="signInAndAcquireToken(true)" class="no-print"
-          style="padding:8px 15px; background:#0078d4; color:white; border:none; border-radius:5px; cursor:pointer;">
-    Microsoft anmelden
-  </button>
+<button
+  onclick="signInAndAcquireToken(true, { rebuild: true, reloadWp: true })"
+  class="no-print"
+  style="padding:8px 15px; background:#0078d4; color:white; border:none; border-radius:5px; cursor:pointer;">
+  Microsoft anmelden
+</button>
+
   <button onclick="signOut()" class="no-print"
           style="padding:8px 15px; margin-left:10px; background:#d9534f; color:white; border:none; border-radius:5px; cursor:pointer;">
     Abmelden / Konto wechseln
@@ -516,13 +519,22 @@ async function getShareRootEndpoint() {
       var btn = document.getElementById('toggleWpLogBtn');
       if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
 
-      // Beim Öffnen Daten laden
-      if (willOpen) {
-        if (typeof wpLogLoad === 'function') { try { wpLogLoad(); } catch(e) {} }
-        if (typeof renderWpLogTable === 'function') { try { renderWpLogTable(); } catch(e) {} }
-      }
-    };
+// Beim Öffnen Daten laden
+if (willOpen) {
+  // 1. Alte Logik: Daten in window.wartungslog laden (für alte Helfer)
+  if (typeof wpLogLoad === "function") {
+    try { wpLogLoad(); } catch (e) { console.warn("wpLogLoad:", e); }
   }
+
+  // 2. Neue Logik: direkt aus der Cloud laden und Tabelle bauen
+  if (typeof loadWpLog === "function") {
+    try { loadWpLog(); } catch (e) { console.warn("loadWpLog:", e); }
+  } else if (typeof renderWpLogTable === "function") {
+    // Fallback, falls loadWpLog einmal nicht existiert
+    try { renderWpLogTable(); } catch (e) { console.warn("renderWpLogTable:", e); }
+  }
+}
+
 
 // Button sicher aktivieren + Zusatzlistener
 window.addEventListener('load', function () {
@@ -2384,49 +2396,62 @@ window.addEventListener('load', function() {
     }));
   }
 
-  // 3) Login/Token nur per Redirect
-  async function signInAndAcquireToken(interactive = false, { rebuild = true } = {}) {
-    try {
-      let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+// 3) Login/Token nur per Redirect
+async function signInAndAcquireToken(interactive = false, { rebuild = true } = {}) {
+  try {
+    let account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
-      if (!account && interactive) {
-        await msalInstance.loginRedirect({ scopes });
-        return; // kommt nach Redirect zurück
-      }
-      if (!account) {
-        showLoginHint();
-        return;
-      }
-
-      try {
-        const t = await msalInstance.acquireTokenSilent({ scopes, account });
-        accessToken = t.accessToken;
-        window.accessToken = accessToken;
-      } catch (e) {
-        await msalInstance.acquireTokenRedirect({ scopes });
-        return;
-      }
-
-      try {
-        await resolveShareLinkToFolder();
-      } catch (e) {
-        console.warn("resolveShareLinkToFolder:", e);
-      }
-      hideLoginHint();
-
-      if (rebuild) {
-        try {
-          await loadMasterData();
-          window.rebuildDropdownsFromMaster?.();
-        } catch (e) {
-          console.warn("Reload master after sign-in failed:", e);
-        }
-      }
-    } catch (e) {
-      console.error("signInAndAcquireToken:", e);
-      showLoginHint();
+    // noch kein Account vorhanden → nur bei "interactive = true" einen Redirect starten
+    if (!account && interactive) {
+      await msalInstance.loginRedirect({ scopes });
+      return; // nach dem Redirect geht es hier weiter
     }
+
+    // gar kein Account und wir durften nicht interaktiv → Hinweis anzeigen und abbrechen
+    if (!account) {
+      showLoginHint();
+      return;
+    }
+
+    // Token versuchen, zuerst silent
+    try {
+      const t = await msalInstance.acquireTokenSilent({ scopes, account });
+      accessToken = t.accessToken;
+      window.accessToken = accessToken;
+    } catch (e) {
+      // Silent hat nicht geklappt → Redirect-Login
+      await msalInstance.acquireTokenRedirect({ scopes });
+      return;
+    }
+
+    // ab hier: wir haben ein gültiges accessToken
+    hideLoginHint();
+
+    // OneDrive-Ziel (TARGET / Wartungsordner) auflösen
+    try {
+      await resolveShareLinkToFolder();
+    } catch (e) {
+      console.warn("resolveShareLinkToFolder:", e);
+    }
+
+    // Stammdaten nur bei Bedarf neu laden
+    if (rebuild) {
+      try {
+        await loadMasterData();
+        if (typeof window.rebuildDropdownsFromMaster === "function") {
+          window.rebuildDropdownsFromMaster();
+        }
+      } catch (e) {
+        console.warn("Reload master after sign-in failed:", e);
+      }
+    }
+  } catch (e) {
+    console.error("signInAndAcquireToken:", e);
+    showLoginHint();
   }
+}
+
+
 
   async function signOut() {
     try {
@@ -5086,14 +5111,46 @@ if (doneBtn) doneBtn.addEventListener("click", function(){
   if (pnl && pnl.style.display === "block") renderWpLogTable();
 });
 
-
-document.addEventListener("DOMContentLoaded", ()=>{
-  try { wpLogLoad(); } catch(e){ console.warn("wpLogLoad:", e); }
-  try { bindWpLogUi(); } catch(e){ console.warn("bindWpLogUi:", e); }
-  if (_byId("wpLogPanel") && _byId("wpLogPanel").style.display === "block"){
-    renderWpLogTable();
+document.addEventListener("DOMContentLoaded", () => {
+  // 1) UI fürs Wartungs-Dashboard verdrahten (braucht noch keinen Token)
+  try {
+    bindWpLogUi();
+  } catch (e) {
+    console.warn("bindWpLogUi:", e);
   }
+
+  // 2) Still versuchen, den Benutzer anzumelden und OneDrive-Ziel zu initialisieren
+  signInAndAcquireToken(false, { rebuild: false })
+    .then(async () => {
+      // Wenn wir hier sind, wurde der Login versucht.
+      // Ohne Token macht ein Cloud-Load aber keinen Sinn.
+      if (!window.accessToken) {
+        return;
+      }
+
+      try {
+        // Wartungslog aus der Cloud laden und in window.wartungslog schreiben
+        await wpLogLoad();
+      } catch (e) {
+        console.warn("wpLogLoad nach Sign-In:", e);
+      }
+
+      // 3) Tabelle nur rendern, wenn das Panel schon offen ist
+      try {
+        const panel = _byId("wpLogPanel");
+        if (panel && panel.style.display === "block") {
+          renderWpLogTable();
+        }
+      } catch (e) {
+        console.warn("renderWpLogTable nach Sign-In:", e);
+      }
+    })
+    .catch(err => {
+      console.warn("Init nach DOMContentLoaded fehlgeschlagen:", err);
+    });
 });
+
+
 
 </script>
 <script>
