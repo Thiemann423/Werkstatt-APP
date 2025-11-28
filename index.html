@@ -5096,20 +5096,24 @@ if (saveBtn) saveBtn.addEventListener("click", function(){
 
 var doneBtn = _byId("wpMarkDoneToday");
 if (doneBtn) doneBtn.addEventListener("click", function(){
+  // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
   var todayISO = _toISO(new Date());
   var lastEl = _byId("wpLastDate");
   if (lastEl) lastEl.value = todayISO;
-  var intervalDays = parseInt((_byId("wpIntervalDays") && _byId("wpIntervalDays").value) || "0", 10) || 0;
-  if (intervalDays > 0) {
-    var next = new Date(next);
-    next.setDate(next.getDate() + intervalDays);
-    var nextEl = _byId("wpNextDue"); if (nextEl) nextEl.value = _toISO(next);
+
+  // Fälligkeit sauber über die neue Logik berechnen
+  if (typeof recomputeNextDue === "function") {
+    recomputeNextDue();
   }
+
+  // Eintrag wie bisher ins Log schreiben (lokale Logik)
   var entry = _collectEntryFromForm({useTodayIfEmpty:true});
   wpLogExecution(entry);
+
   var pnl=_byId("wpLogPanel");
   if (pnl && pnl.style.display === "block") renderWpLogTable();
 });
+
 
 document.addEventListener("DOMContentLoaded", ()=>{
   try { wpLogLoad(); } catch(e){ console.warn("wpLogLoad:", e); }
