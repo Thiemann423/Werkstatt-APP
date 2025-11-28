@@ -983,87 +983,112 @@ async function getDueList(){
   <div id="wpLogEmpty" style="display:none;padding:8px;color:#666;">Keine Einträge gefunden.</div>
 </div>
 
+
+
+
+
+
+
 <script>
+// ===== Wartungs-Log: Laden/Speichern (Cloud + lokal) =====
 
+// Schlüssel & Dateiname – wie bisher
+const WP_STORAGE_KEY = "TE15_WARTUNGSLOG";
+const CLOUD_FILENAME = "wartungslog.json";
 
-
-
-
-// optional: einmal initialisieren
-window.__cloudEtag = window.__cloudEtag || null;
-
-  
-async function _loadAll(){
-  // 1. Versuch: Cloud (wenn Token da ist)
+// lokalen Cache aktualisieren (localStorage + RAM)
+function _cacheLocal(list) {
+  const payload = Array.isArray(list) ? list : [];
   try {
-    if (window.accessToken) {
-      const root = await getShareRootEndpoint();
+    localStorage.setItem(WP_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_) {}
+  window.__memLog = payload.slice();
+}
+
+// Cloud + lokal laden
+async function _loadAll() {
+  // 1) Cloud nur, wenn ein Access-Token vorhanden ist
+  if (window.accessToken) {
+    try {
+      const root  = await getShareRootEndpoint();
       const cloud = await graphDownloadJsonFromFolder(root, CLOUD_FILENAME);
-      if (Array.isArray(cloud.data)) {
-        window.__cloudEtag = cloud.etag || null;
-        _cacheLocal(cloud.data);
-        console.log("[WP] Cloud geladen");
-        return cloud.data;
-      }
+      const arr   = Array.isArray(cloud.data) ? cloud.data : [];
+
+      window.__cloudEtag = cloud.etag || window.__cloudEtag || null;
+      _cacheLocal(arr);                    // Cloud-Stand lokal merken
+      console.log("[WP] aus Cloud geladen:", arr);
+      return arr;
+    } catch (err) {
+      console.warn("[WP] Cloud-Load fehlgeschlagen, nutze lokalen Cache:", err);
     }
-  } catch (err) {
-    console.warn("[WP] Cloud-Load failed:", err);
   }
 
-  // 2. Versuch: lokale gespeicherte Daten
+  // 2) localStorage
   try {
     const raw = localStorage.getItem(WP_STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        console.log("[WP] lokale Daten geladen");
-        return parsed;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        console.log("[WP] aus localStorage geladen:", arr);
+        return arr;
       }
     }
-  } catch(_) {}
+  } catch (_) {}
 
-  // 3. Versuch: Daten im RAM (fallback)
+  // 3) RAM-Fallback
   if (Array.isArray(window.__memLog)) {
-    console.log("[WP] memLog geladen");
+    console.log("[WP] aus RAM-Fallback geladen:", window.__memLog);
     return window.__memLog.slice();
   }
 
-  // 4. Nichts da
-  console.log("[WP] kein Log gefunden – gebe [] zurück");
+  console.log("[WP] noch keine Wartungsdaten gespeichert");
   return [];
 }
 
-
-
-
-
-
-// ✅ SPEICHERN – cloud-first + async
-async function saveWpTask() {
-  // Alle Werte sicher aus dem Formular holen
-  var entry = (typeof _collectEntryFromForm === "function")
-    ? _collectEntryFromForm({ useTodayIfEmpty: true })
-    : {};
-
-  // In die Cloud schreiben (lädt selbst vorher alle alten Einträge)
-  if (typeof wpLogExecution === "function") {
-    await wpLogExecution(entry);
-  }
-
-  // Danach Tabelle neu laden
-  try {
-    if (typeof loadWpLog === "function") {
-      await loadWpLog();
-    }
-  } catch (e) {
-    console.warn("loadWpLog nach saveWpTask fehlgeschlagen:", e);
-  }
-
-  alert("Wartung gespeichert!");
+// Für andere Stellen: kompletten Log laden + global ablegen
+async function wpLogLoad() {
+  const raw = await _loadAll();
+  window.wartungslog = Array.isArray(raw) ? raw.slice() : [];
+  return window.wartungslog;
 }
 
+//  Speichern: IMMER zuerst lokal, dann (wenn möglich) in die Cloud
+async function _saveAll(list) {
+  const payload = Array.isArray(list) ? list : [];
 
+  // 1) sofort lokal sichern
+  _cacheLocal(payload);
+  console.log("[WP] lokal gespeichert:", payload);
 
+  // 2) nur versuchen, in die Cloud zu schreiben, wenn ein Token da ist
+  if (!window.accessToken) {
+    console.warn("[WP] kein Access-Token – nur lokal gespeichert");
+    return false;
+  }
+
+  try {
+    const root = await getShareRootEndpoint();
+    const res  = await graphUploadJsonToFolder(
+      root,
+      CLOUD_FILENAME,
+      payload,
+      window.__cloudEtag || null
+    );
+    window.__cloudEtag = (res && res.etag) || window.__cloudEtag || null;
+    console.log("[WP] Cloud-Speicher OK");
+    return true;
+  } catch (err) {
+    console.warn("[WP] Cloud-Save fehlgeschlagen, lokale Daten bleiben erhalten:", err);
+    return false;
+  }
+}
+
+// Wird von saveWpTask() aufgerufen
+async function wpLogExecution(entry) {
+  const all = await _loadAll();
+  all.push(entry);
+  await _saveAll(all);
+}
 
 
 
