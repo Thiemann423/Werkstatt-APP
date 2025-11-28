@@ -208,27 +208,17 @@ async function loadHtml2PdfIfNeeded(){
 
 <!-- OneDrive/Graph – Config -->
 <script>
+  // Freigegebener OneDrive-Ordner (Reparatur + Wartung)
   const ONEDRIVE_SHARED_LINK =
     "https://petrifeinkost-my.sharepoint.com/:f:/g/personal/merten_thiemann_petri-feinkost_de/EkOa1ufucPNDtlfo6B9rxowB7o8nAY4wHK-gcRha74B2AQ?e=gnn1A2";
 
-  // ⬅︎ NEU: Wartungspläne-Datei im gleichen Ordner
-  const WP_FILE        = "Wartungsplaene.json";
+  // Wartungspläne-Datei im gleichen Ordner
+  const WP_FILE = "Wartungsplaene.json";
 
   // Log-Datei (Wartungs-Dashboard)
   const CLOUD_FILENAME = "wartungslog.json";
-
-  const MSAL_CONFIG = {
-    auth: {
-      clientId: "800b6d33-1917-4b4f-abf4-162094f8c862",
-      authority: "https://login.microsoftonline.com/f54f53bb-d0ff-4b78-bcf4-4aeeeb924428",
-      redirectUri: "https://thiemann423.github.io/Werkstatt-APP/"
-    },
-    cache: { cacheLocation: "localStorage" }
-  };
-  const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite", "offline_access"];
 </script>
-<!-- 🔧 Helper für Wartungs-Log: OneDrive JSON laden/speichern -->
-<script>
+
 // OneDrive-Ordner für Wartungslog ermitteln
 // Nutzt die gleichen Infos wie deine Reparatur-Meta-Daten
 async function getShareRootEndpoint() {
