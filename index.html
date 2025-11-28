@@ -4823,22 +4823,51 @@ if (typeof window.__cloudEtag === "undefined") {
 
 
 
-// ✅ CLOUD-first Laden und Normalisieren
+// ✅ SICHERES Laden: Cloud ODER lokal, danach normalisieren
 async function wpLogLoad(){
-  try{
-    // immer cloud-first laden
+  try {
     let raw = [];
-    try { raw = await _loadAll(); } catch(_) {}
+
+    // 1) Wenn KEIN Access-Token vorhanden ist → direkt lokal laden
+    if (!window.accessToken) {
+      try {
+        const loc = localStorage.getItem(WP_STORAGE_KEY);
+        raw = loc ? JSON.parse(loc) : [];
+        console.warn("[WP] Kein Token – lokale Wartungsdaten geladen (wpLogLoad)", raw);
+      } catch(e) {
+        console.warn("[WP] Fehler beim lokalen Laden ohne Token:", e);
+        raw = [];
+      }
+    } else {
+      // 2) MIT Token: Cloud-first über _loadAll()
+      try {
+        raw = await _loadAll();   // versucht Cloud, fällt bei Bedarf auf local zurück
+      } catch(e){
+        console.warn("[WP] _loadAll Fehler, fallback auf localStorage:", e);
+        try {
+          const loc = localStorage.getItem(WP_STORAGE_KEY);
+          raw = loc ? JSON.parse(loc) : [];
+        } catch(e2){
+          console.warn("[WP] zusätzlicher localStorage-Fehler:", e2);
+          raw = [];
+        }
+      }
+    }
+
     if (!Array.isArray(raw)) raw = [];
 
-    // aktuell angemeldeter User (Fallback für alte/leere Einträge)
+    // 3) aktuell angemeldeter User (Fallback für alte/leere Einträge)
     var u = (typeof getSignedInUser === "function")
       ? getSignedInUser()
       : { name:"", email:"", upn:"" };
 
+    // 4) Normalisieren wie bisher
     window.wartungslog = raw.map(function(e){
-      var dateISO = _toISO ? _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : "")) : String(e.dateISO || e.date || "");
-      var machine = e.machine ? e.machine : (e.maschine ? e.maschine : "");
+      var dateISO = _toISO
+        ? _toISO(e.dateISO ? e.dateISO : (e.date ? e.date : ""))
+        : String(e.dateISO || e.date || "");
+
+      var machine  = e.machine ? e.machine : (e.maschine ? e.maschine : "");
       var taskName = e.taskName ? e.taskName : (e.task ? e.task : "");
 
       var intervalDays =
@@ -4865,20 +4894,26 @@ async function wpLogLoad(){
         (u.upn || "");
 
       return {
-        dateISO      : dateISO,
-        machine      : machine,
-        taskName     : taskName,
-        intervalDays : (intervalDays === "" ? "" : Number(intervalDays)),
-        nipples      : (nipples === "" ? "" : Number(nipples)),
-        technician   : technician,
+        dateISO        : dateISO,
+        machine        : machine,
+        taskName       : taskName,
+        intervalDays   : (intervalDays === "" ? "" : Number(intervalDays)),
+        nipples        : (nipples === "" ? "" : Number(nipples)),
+        technician     : technician,
         technicianEmail: technicianEmail,
         technicianUpn  : technicianUpn
       };
     });
+
+    return window.wartungslog;
+
   } catch(e){
-    console.warn("wpLogLoad:", e);
+    console.warn("wpLogLoad (gesamt):", e);
     window.wartungslog = [];
+    return [];
   }
+}
+
 }
 
 // Helper wie bei _loadAll
