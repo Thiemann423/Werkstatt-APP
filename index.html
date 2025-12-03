@@ -5789,10 +5789,11 @@ setInterval(async function(){
 (function(){
   function safe(fn){ try{ fn && fn(); }catch(e){} }
 
-  // 1) Log aus Storage (mit iPad/Privatmodus-Fallback) in den RAM laden
+  // 1) Log aus Storage in den RAM laden – async-Variante NICHT hier aufrufen
   if (!Array.isArray(window.wartungslog)) {
-    window.wartungslog = (typeof _loadAll === "function") ? _loadAll() : [];
+    window.wartungslog = [];
   }
+
 
   // 2) Alte/neue Feldnamen mappen (falls Funktion vorhanden)
   safe(function(){ if (typeof wpLogLoad === "function") wpLogLoad(); });
