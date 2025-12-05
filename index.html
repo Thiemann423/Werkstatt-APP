@@ -4174,7 +4174,8 @@ function wpRefreshTaskList() {
   selTask.innerHTML =
     '<option value="">Bitte auswählen</option>' +
     tasks.map(t =>
-   `<option value="${(t && t.id) || ''}" data-interval="${(t && t.intervalDays) || ''}" data-nipples="${(t && t.nipples) || ''}">
+`<option value="${(t && t.id) || ''}" data-interval="${(t && t.intervalDays) || ''}" data-nipples="${(t && t.nipples) || ''}">
+
          ${(t && t.name) || ''}
        </option>`
     ).join('');
