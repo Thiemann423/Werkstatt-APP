@@ -2087,83 +2087,81 @@ document.addEventListener("DOMContentLoaded", function () {
       let s = new Date(0,0,0,sh,sm), e = new Date(0,0,0,eh,em);
       let diff = e - s; if (diff < 0) diff += 24*60*60*1000;
       const mins = Math.floor(diff/60000), h = Math.floor(mins/60), m = mins%60;
-      durationInput.value = (h?`${h} h `:"") + (m?`${m} min`:(h?"" :"0 min"));
+      if (durationInput) {
+        durationInput.value = (h ? `${h} h ` : "") + (m ? `${m} min` : (h ? "" : "0 min"));
+      }
     }
   }
   startTimeInput?.addEventListener("input", calculateDuration);
   endTimeInput?.addEventListener("input", calculateDuration);
 
-// "Sonstige"-Felder & Selects
-const maschineSelect = document.getElementById("maschine");
-const sonstigeMaschineInput = document.getElementById("sonstige_maschine");
-const labelSonstigeMaschine = document.getElementById("label-sonstige-maschine");
+  // "Sonstige"-Felder & Selects
+  const maschineSelect           = document.getElementById("maschine");
+  const sonstigeMaschineInput    = document.getElementById("sonstige_maschine");
+  const labelSonstigeMaschine    = document.getElementById("label-sonstige-maschine");
 
-const anlagenteilSelect = document.getElementById("anlagenteil");
-const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
-const labelSonstigeAnlagenteil = document.getElementById("label-sonstige-anlagenteil");
+  const anlagenteilSelect        = document.getElementById("anlagenteil");
+  const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
+  const labelSonstigeAnlagenteil = document.getElementById("label-sonstige-anlagenteil");
 
-const reinigungsartSelect = document.getElementById("reinigungsart_zusatz");
-const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
-const labelSonstigeReinigungsart = document.getElementById("label-sonstige_reinigungsart_zusatz");
+  const reinigungsartSelect      = document.getElementById("reinigungsart_zusatz");
+  const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
+  const labelSonstigeReinigungsart  = document.getElementById("label-sonstige_reinigungsart_zusatz");
 
-// NEU: Provisorium-Felder
-const provisoriumSelect   = document.getElementById("provisorium_aktiv");
-const provisoriumDetails  = document.getElementById("provisorium_details");
-const provisoriumArtInput = document.getElementById("provisorium_art");
-const provisoriumVonInput = document.getElementById("provisorium_von");
-const provisoriumBisInput = document.getElementById("provisorium_bis");
+  // NEU: Provisorium-Felder
+  const provisoriumSelect   = document.getElementById("provisorium_aktiv");
+  const provisoriumDetails  = document.getElementById("provisorium_details");
+  const provisoriumArtInput = document.getElementById("provisorium_art");
+  const provisoriumVonInput = document.getElementById("provisorium_von");
+  const provisoriumBisInput = document.getElementById("provisorium_bis");
 
-function updateMaschineField() {
-  const show = maschineSelect.value === "Sonstige";
-  if (sonstigeMaschineInput) sonstigeMaschineInput.style.display = show ? "block" : "none";
-  if (labelSonstigeMaschine) labelSonstigeMaschine.style.display = show ? "block" : "none";
-}
-
-function updateAnlagenteilField() {
-  const show = anlagenteilSelect.value === "Sonstige";
-  if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
-  if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
-}
-
-function updateReinigungsartField() {
-  const show = reinigungsartSelect.value === "Sonstige";
-  if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
-  if (labelSonstigeReinigungsart) labelSonstigeReinigungsart.style.display = show ? "block" : "none";
-}
-
-// NEU: Provisorium anzeigen/verstecken
-function updateProvisoriumField() {
-  if (!provisoriumSelect || !provisoriumDetails) return;
-
-  const show = provisoriumSelect.value === "Ja";
-  provisoriumDetails.style.display = show ? "block" : "none";
-
-  if (!show) {
-    if (provisoriumArtInput) provisoriumArtInput.value = "";
-    if (provisoriumVonInput) provisoriumVonInput.value = "";
-    if (provisoriumBisInput) provisoriumBisInput.value = "";
+  function updateMaschineField() {
+    const show = maschineSelect && maschineSelect.value === "Sonstige";
+    if (sonstigeMaschineInput) sonstigeMaschineInput.style.display = show ? "block" : "none";
+    if (labelSonstigeMaschine) labelSonstigeMaschine.style.display   = show ? "block" : "none";
   }
-}
 
-maschineSelect.addEventListener("change", updateMaschineField);
-anlagenteilSelect.addEventListener("change", updateAnlagenteilField);
-reinigungsartSelect.addEventListener("change", updateReinigungsartField);
+  function updateAnlagenteilField() {
+    const show = anlagenteilSelect && anlagenteilSelect.value === "Sonstige";
+    if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
+    if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display   = show ? "block" : "none";
+  }
 
-// NEU
-if (provisoriumSelect) {
-  provisoriumSelect.addEventListener("change", updateProvisoriumField);
-}
+  function updateReinigungsartField() {
+    const show = reinigungsartSelect && reinigungsartSelect.value === "Sonstige";
+    if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
+    if (labelSonstigeReinigungsart) labelSonstigeReinigungsart.style.display   = show ? "block" : "none";
+  }
 
-// initialer Zustand
-updateMaschineField();
-updateAnlagenteilField();
-updateReinigungsartField();
-updateProvisoriumField();
+  // Provisorium anzeigen/verstecken
+  function updateProvisoriumField() {
+    if (!provisoriumSelect || !provisoriumDetails) return;
+    const show = provisoriumSelect.value === "Ja";
+    provisoriumDetails.style.display = show ? "block" : "none";
 
+    if (!show) {
+      if (provisoriumArtInput) provisoriumArtInput.value = "";
+      if (provisoriumVonInput) provisoriumVonInput.value = "";
+      if (provisoriumBisInput) provisoriumBisInput.value = "";
+    }
+  }
+
+  maschineSelect?.addEventListener("change", updateMaschineField);
+  anlagenteilSelect?.addEventListener("change", updateAnlagenteilField);
+  reinigungsartSelect?.addEventListener("change", updateReinigungsartField);
+  provisoriumSelect?.addEventListener("change", updateProvisoriumField);
+
+  // initialer Zustand
+  updateMaschineField();
+  updateAnlagenteilField();
+  updateReinigungsartField();
+  updateProvisoriumField();
 
   // 🔒 Basis-Optionen (HTML-Defaults) einmalig puffern
-  const baseMaschineValues    = maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
-  const baseAnlagenteilValues = anlagenteilSelect ? Array.from(anlagenteilSelect.options).map(o => o.value) : [];
+  const baseMaschineValues =
+    maschineSelect ? Array.from(maschineSelect.options).map(o => o.value) : [];
+  const baseAnlagenteilValues =
+    anlagenteilSelect ? Array.from(anlagenteilSelect.options).map(o => o.value) : [];
 
   function pruneToBase(selectEl, baseValues) {
     if (!selectEl) return;
@@ -2173,148 +2171,123 @@ updateProvisoriumField();
     if (!baseValues.includes(selectEl.value)) selectEl.value = ""; // ungültige Auswahl zurücksetzen
   }
 
-function rebuildDropdownsFromMaster() {
-  const maschineSelect    = document.getElementById("maschine");
-  const anlagenteilSelect = document.getElementById("anlagenteil");
+  function rebuildDropdownsFromMaster() {
+    const selM = document.getElementById("maschine");
+    const selA = document.getElementById("anlagenteil");
 
-  // aktuelle Auswahl sichern (Value + sichtbarer Text)
-  const keep = (sel) => sel ? {
-    value: sel.value,
-    text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
-  } : null;
+    // aktuelle Auswahl sichern (Value + sichtbarer Text)
+    const keep = (sel) => sel ? {
+      value: sel.value,
+      text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
+    } : null;
 
-  const keepMaschine    = keep(maschineSelect);
-  const keepAnlagenteil = keep(anlagenteilSelect);
+    const keepMaschine    = keep(selM);
+    const keepAnlagenteil = keep(selA);
 
-  // Helper: Auswahl nach dem Neuaufbau wiederherstellen
-  const restore = (sel, kept) => {
-    if (!sel || !kept) return;
-    if ([...sel.options].some(o => o.value === kept.value)) {
-      sel.value = kept.value;
-      return;
+    const restore = (sel, kept) => {
+      if (!sel || !kept) return;
+      if ([...sel.options].some(o => o.value === kept.value)) {
+        sel.value = kept.value;
+        return;
+      }
+      const byText = [...sel.options].find(o =>
+        (o.textContent || o.innerText).trim() === kept.text
+      );
+      if (byText) sel.value = byText.value;
+    };
+
+    // Maschine
+    if (selM) {
+      pruneToBase(selM, baseMaschineValues);
+      (masterData.maschinen || []).forEach(n =>
+        addOptionUnique(selM, n, { autoselect: false })
+      );
+      sortSelectOptions(selM, ["", "Sonstige"]);
+      restore(selM, keepMaschine);
     }
-    const byText = [...sel.options].find(o =>
-      (o.textContent || o.innerText).trim() === kept.text
+
+    // Anlagenteil
+    if (selA) {
+      pruneToBase(selA, baseAnlagenteilValues);
+      (masterData.anlagenteile || []).forEach(n =>
+        addOptionUnique(selA, n, { autoselect: false })
+      );
+      sortSelectOptions(selA, ["", "Sonstige"]);
+      restore(selA, keepAnlagenteil);
+    }
+
+    updateMaschineField();
+    updateAnlagenteilField();
+  }
+
+  // global verfügbar
+  window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
+
+  // Stammdaten laden und danach Dropdowns neu aufbauen
+  loadMasterData().then(rebuildDropdownsFromMaster);
+
+  // 📝 "Sonstige"-Werte dauerhaft übernehmen
+  function tryAddCustomMaschine() {
+    if (!sonstigeMaschineInput || !maschineSelect) return;
+    const val = (sonstigeMaschineInput.value || "").trim();
+    if (!val) return;
+
+    // 1) ins Dropdown
+    addOptionUnique(maschineSelect, val, { autoselect: true });
+
+    // 2) in masterData
+    if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
+    const exists = masterData.maschinen.some(
+      x => String(x || "").toLowerCase() === val.toLowerCase()
     );
-    if (byText) sel.value = byText.value;
-  };
+    if (!exists) {
+      masterData.maschinen.push(val);
+      masterData.maschinen.sort((a,b) =>
+        a.localeCompare(b,"de",{sensitivity:"base"})
+      );
+      if (typeof saveMasterData === "function") saveMasterData();
+    }
 
-  // Maschine
-  if (maschineSelect) {
-    // Basisoptionen (aus HTML) behalten, dynamische entfernen
-    pruneToBase(maschineSelect, baseMaschineValues);
+    // 3) Textfeld leeren & ausblenden
+    sonstigeMaschineInput.value = "";
+    updateMaschineField();
+  }
 
-    // Stammdaten anhängen (ohne Autoselect)
-    (masterData.maschinen || []).forEach(n =>
-      addOptionUnique(maschineSelect, n, { autoselect: false })
+  function tryAddCustomAnlagenteil() {
+    if (!sonstigeAnlagenteilInput || !anlagenteilSelect) return;
+    const val = (sonstigeAnlagenteilInput.value || "").trim();
+    if (!val) return;
+
+    addOptionUnique(anlagenteilSelect, val, { autoselect: true });
+
+    if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
+    const exists = masterData.anlagenteile.some(
+      x => String(x || "").toLowerCase() === val.toLowerCase()
     );
+    if (!exists) {
+      masterData.anlagenteile.push(val);
+      masterData.anlagenteile.sort((a,b) =>
+        a.localeCompare(b,"de",{sensitivity:"base"})
+      );
+      if (typeof saveMasterData === "function") saveMasterData();
+    }
 
-    // Sortieren, "" und "Sonstige" oben lassen
-    sortSelectOptions(maschineSelect, ["", "Sonstige"]);
-
-    // Auswahl wiederherstellen
-    restore(maschineSelect, keepMaschine);
+    sonstigeAnlagenteilInput.value = "";
+    updateAnlagenteilField();
   }
 
-  // Anlagenteil
-  if (anlagenteilSelect) {
-    pruneToBase(anlagenteilSelect, baseAnlagenteilValues);
-
-    (masterData.anlagenteile || []).forEach(n =>
-      addOptionUnique(anlagenteilSelect, n, { autoselect: false })
-    );
-
-    sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
-
-    restore(anlagenteilSelect, keepAnlagenteil);
+  // Eingabe übernehmen bei Verlassen der Felder
+  if (sonstigeMaschineInput) {
+    sonstigeMaschineInput.addEventListener("blur", tryAddCustomMaschine);
+  }
+  if (sonstigeAnlagenteilInput) {
+    sonstigeAnlagenteilInput.addEventListener("blur", tryAddCustomAnlagenteil);
   }
 
-  // Abhängige "Sonstige"-Eingabefelder korrekt ein-/ausblenden
-  updateMaschineField?.();
-  updateAnlagenteilField?.();
-}
-
-// global verfügbar lassen
-window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
-
-// Initial: Stammdaten laden und erst dann neu aufbauen
-loadMasterData().then(rebuildDropdownsFromMaster);
-
-
-// ⬇️ Einmal VOR den beiden Funktionen einfügen
-const norm = (s) => String(s ?? '').trim();
-
-function tryAddCustomMaschine() {
-  var input  = (typeof sonstigeMaschineInput !== "undefined") ? sonstigeMaschineInput : null;
-  var select = (typeof maschineSelect        !== "undefined") ? maschineSelect        : null;
-
-  var val = (typeof norm === "function")
-    ? norm((input && input.value) ? input.value : "")
-    : ((input && input.value) ? String(input.value).trim() : "");
-
-  if (!val || !select) return;
-
-  // Option hinzufügen (unique) und auswählen
-  if (typeof addOptionUnique === "function") addOptionUnique(select, val, { autoselect: true });
-
-  // Stammliste sicherstellen
-  if (typeof masterData !== "object" || !masterData) window.masterData = masterData = {};
-  if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
-
-  var exists = masterData.maschinen.some(function (x) {
-    return String(x || "").toLowerCase() === val.toLowerCase();
-  });
-  if (!exists) {
-    masterData.maschinen.push(val);
-    if (typeof saveMasterData === "function") saveMasterData();
-  }
-}
-
-function tryAddCustomAnlagenteil() {
-  var input  = (typeof sonstigeAnlagenteilInput !== "undefined") ? sonstigeAnlagenteilInput : null;
-  var select = (typeof anlagenteilSelect        !== "undefined") ? anlagenteilSelect        : null;
-
-  var val = (typeof norm === "function")
-    ? norm((input && input.value) ? input.value : "")
-    : ((input && input.value) ? String(input.value).trim() : "");
-
-  if (!val || !select) return;
-
-  if (typeof addOptionUnique === "function") addOptionUnique(select, val, { autoselect: true });
-
-  if (typeof masterData !== "object" || !masterData) window.masterData = masterData = {};
-  if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
-
-  var exists = masterData.anlagenteile.some(function (x) {
-    return String(x || "").toLowerCase() === val.toLowerCase();
-  });
-  if (!exists) {
-    masterData.anlagenteile.push(val);
-    if (typeof saveMasterData === "function") saveMasterData();
-  }
-}
-
-// Eingabe übernehmen bei Verlassen der Felder …
-if (typeof sonstigeMaschineInput !== "undefined" && sonstigeMaschineInput) {
-  sonstigeMaschineInput.addEventListener("blur", tryAddCustomMaschine);
-}
-if (typeof sonstigeAnlagenteilInput !== "undefined" && sonstigeAnlagenteilInput) {
-  sonstigeAnlagenteilInput.addEventListener("blur", tryAddCustomAnlagenteil);
-}
-
-// … und wenn von „Sonstige“ weg gewechselt wird
-if (typeof maschineSelect !== "undefined" && maschineSelect) {
-  maschineSelect.addEventListener("change", function () {
-    if (maschineSelect.value !== "Sonstige") tryAddCustomMaschine();
-  });
-}
-   if (typeof anlagenteilSelect !== "undefined" && anlagenteilSelect) {
-     anlagenteilSelect.addEventListener("change", function () {
-       if (anlagenteilSelect.value !== "Sonstige") tryAddCustomAnlagenteil();
-     });
-   }
+  // KEINE extra change-Listener mehr, die tryAddCustom* erneut aufrufen
 });
 </script>
+
 
 
 
@@ -2989,6 +2962,33 @@ const fieldIds = [
 
   "ort_datum"
 ];
+function addOptionSorted(select, value, autoSelect = true) {
+  value = value.trim();
+  if (!value) return;
+
+  const exists = Array.from(select.options)
+    .some(o => o.value.toLowerCase() === value.toLowerCase());
+
+  if (exists) {
+    if (autoSelect) select.value = value;
+    return;
+  }
+
+  const opt = new Option(value, value);
+
+  const opts = Array.from(select.options);
+  const insertBefore = opts.find(o =>
+    o.value.localeCompare(value, "de", { sensitivity: "base" }) > 0
+  );
+
+  if (insertBefore) {
+    select.insertBefore(opt, insertBefore);
+  } else {
+    select.appendChild(opt);
+  }
+
+  if (autoSelect) select.value = value;
+}
 
 
   // ====================
