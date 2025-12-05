@@ -1076,48 +1076,7 @@ async function _saveAll(list) {
   }
 }
 
-// Wird von saveWpTask() aufgerufen
-async function wpLogExecution(entry) {
-  const all = await _loadAll();
-  all.push(entry);
-  await _saveAll(all);
-}
 
-
-
-
-/* 🔎 Filter einsammeln – unverändert */
-function getWpFilters() {
-  var fromEl = document.getElementById("wpLog_from");
-  var toEl   = document.getElementById("wpLog_to");
-  var mEl    = document.getElementById("wpLog_machine");
-  var tEl    = document.getElementById("wpLog_task");
-  var techEl = document.getElementById("wpLog_tech");
-
-  function val(el){
-    return (el && typeof el.value !== "undefined") ? String(el.value) : "";
-  }
-  function norm(s){
-    s = (s == null) ? "" : String(s);
-    return s.trim().toLowerCase();
-  }
-
-  var from = val(fromEl);
-  var to   = val(toEl);
-  var mach = norm(val(mEl));
-  var task = norm(val(tEl));
-  var tech = norm(val(techEl));
-
-  return { from: from, to: to, mach: mach, task: task, tech: tech };
-}
-
-/* 🧮 Datums-Check – unverändert */
-function inDateRange(dateStr, from, to) {
-  if (!dateStr) return false;
-  if (from && dateStr < from) return false;
-  if (to && dateStr > to) return false;
-  return true;
-}
 
 // ✅ LADEN – cloud-first + async
 async function loadWpLog() {
@@ -4663,18 +4622,21 @@ if (E.btnDone) E.btnDone.addEventListener('click', async function(){
   const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
   if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
 
-  t.lastDateISO = wpTodayISO();
-  if (typeof wpSave === "function") await wpSave();
-  try {
-    if (typeof wpLogExecutionAndRefresh === "function"){
-      await wpLogExecutionAndRefresh({
-        dateISO: t.lastDateISO,
-        task: t,
-        machine: (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
-        technician: (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
-      });
-    }
-  } catch (e) {}
+t.lastDateISO = wpTodayISO();
+if (typeof wpSave === "function") await wpSave();
+try {
+  if (typeof wpLogExecution === "function"){
+    await wpLogExecution({
+      dateISO      : t.lastDateISO,
+      machine      : (E.selMaschine  && E.selMaschine.value)  ? E.selMaschine.value  : "",
+      taskName     : t.name,
+      intervalDays : t.intervalDays,
+      nipples      : t.nipples,
+      technician   : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
+    });
+  }
+} catch (e) {}
+
 
   if (typeof wpRecalc           === "function") wpRecalc();
   if (typeof wpEvalWarning      === "function") wpEvalWarning();
@@ -4824,66 +4786,102 @@ function _collectEntryFromForm(opts){
 
 // ===== Ausführung einer Wartung + Speichern (cloud-first) =====
 async function wpLogExecution(entry) {
-  // Sicherstellen, dass entry ein Objekt ist
-  var eSrc = (entry && typeof entry === "object") ? entry : {};
+  // 1) Eingabe absichern
+  var src = (entry && typeof entry === "object") ? entry : {};
 
-  // User (kann leer sein; dein displayNameFromUser-Fallback greift beim Speichern woanders)
-  var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"" };
+  // aktuell angemeldeter User (Fallback)
+  var u = (typeof getSignedInUser === "function")
+    ? getSignedInUser()
+    : { name: "", email: "", upn: "" };
 
-  // Werte absichern
-  var dateISO = _toISO ? _toISO(eSrc.dateISO || new Date()) : (new Date()).toISOString().slice(0,10);
-  var machine = (eSrc.machine ? String(eSrc.machine).trim() : "");
-  var taskName = (eSrc.taskName ? String(eSrc.taskName).trim() : "");
-  var intervalDays = (eSrc.intervalDays === "" || eSrc.intervalDays == null) ? "" : Number(eSrc.intervalDays);
-  var nipples = (eSrc.nipples === "" || eSrc.nipples == null) ? "" : Number(eSrc.nipples);
+  // 2) Felder normalisieren
+  var dateISO;
+  try {
+    // wenn _toISO da ist, benutzen (kann Date oder String ab)
+    if (typeof _toISO === "function") {
+      dateISO = _toISO(src.dateISO || new Date());
+    } else {
+      var d = src.dateISO ? new Date(src.dateISO) : new Date();
+      dateISO = d.toISOString().slice(0, 10);
+    }
+  } catch (_) {
+    dateISO = (new Date()).toISOString().slice(0, 10);
+  }
 
-  var technician = (eSrc.technician && String(eSrc.technician).trim())
-    ? String(eSrc.technician).trim()
+  var machine      = src.machine   ? String(src.machine).trim()   : "";
+  var taskName     = src.taskName  ? String(src.taskName).trim()  : "";
+  var intervalDays = (src.intervalDays === "" || src.intervalDays == null)
+    ? ""
+    : Number(src.intervalDays);
+  var nipples      = (src.nipples === "" || src.nipples == null)
+    ? ""
+    : Number(src.nipples);
+
+  var technician = (src.technician && String(src.technician).trim())
+    ? String(src.technician).trim()
     : (u.name || "");
-  var technicianEmail = (eSrc.technicianEmail)
-    ? String(eSrc.technicianEmail)
+
+  var technicianEmail = (src.technicianEmail && String(src.technicianEmail).trim())
+    ? String(src.technicianEmail).trim()
     : (u.email || "");
 
+  var technicianUpn = (src.technicianUpn && String(src.technicianUpn).trim())
+    ? String(src.technicianUpn).trim()
+    : (u.upn || "");
+
+  // 3) finaler Eintrag
   var e = {
-    dateISO,
-    machine,
-    taskName,
-    intervalDays,
-    nipples,
-    technician,
-    technicianEmail
+    dateISO        : dateISO,
+    machine        : machine,
+    taskName       : taskName,
+    intervalDays   : intervalDays,
+    nipples        : nipples,
+    technician     : technician,
+    technicianEmail: technicianEmail,
+    technicianUpn  : technicianUpn
   };
 
-  // Aktuelle Liste cloud-first laden, ergänzen, speichern
+  // 4) Bisherige Liste laden (Cloud → local → RAM)
   let list = [];
   try {
     list = await _loadAll();
-  } catch(_) {
+  } catch (_) {
     list = [];
   }
   if (!Array.isArray(list)) list = [];
+
   list.push(e);
 
+  // 5) Speichern (lokal + Cloud)
   try {
     await _saveAll(list);
   } catch (err) {
     console.warn("[WP] saveAll failed:", err);
   }
 
-  // UI aktualisieren
+  // globale Kopie aktualisieren
+  window.wartungslog = list.slice();
+
+  // 6) UI aktualisieren
   try {
     if (typeof loadWpLog === "function") {
-      await loadWpLog();          // Dashboard-Tabelle direkt neu aufbauen
+      await loadWpLog();              // neue Variante: Tabelle selber neu bauen
     } else if (typeof renderWpLogTable === "function") {
-      renderWpLogTable();         // Fallback für ganz alten Code
+      renderWpLogTable();             // Fallback, falls du noch die alte Render-Funktion hast
     }
-  } catch (_) {}
+  } catch (e) {
+    console.warn("[WP] Fehler beim Refresh des Wartungs-Logs:", e);
+  }
 
   try {
     if (typeof window.wpRefreshOverdueUI === "function") {
-      window.wpRefreshOverdueUI();
+      window.wpRefreshOverdueUI();    // Badge / Overdue-Banner
     }
-  } catch (_) {}
+  } catch (e) {
+    console.warn("[WP] Fehler beim Overdue-Refresh:", e);
+  }
+
+  return e;
 }
 
 
