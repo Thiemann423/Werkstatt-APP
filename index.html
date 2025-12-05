@@ -506,6 +506,15 @@ async function getShareRootEndpoint() {
   style="padding:8px 12px;border:0;border-radius:6px;background:#0f6cbd;color:#fff;cursor:pointer;margin-left:6px;">
   🧰 Wartungs-Dashboard
 </button>
+  <!-- 📝 NEU: Entwürfe-Dashboard -->
+  <button
+    type="button"
+    id="toggleDraftDashBtn"
+    title="Reparatur-Entwürfe anzeigen"
+    style="padding:8px 12px;border:0;border-radius:6px;background:#0f6cbd;color:#fff;cursor:pointer;margin-left:6px;">
+    📝 Entwürfe-Dashboard
+  </button>
+</div>
 
 
 <script>
@@ -858,14 +867,15 @@ async function getDueList(){
       <input type="text" id="f_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
     </div>
   </div>
-<div style="margin-top:8px;">
-  <label for="f_provisorium">Provisorium</label>
-  <select id="f_provisorium" style="width:100%;padding:6px;max-width:240px;">
-    <option value="">Alle</option>
-    <option value="mit">Nur mit Provisorium</option>
-    <option value="ohne">Nur ohne Provisorium</option>
-  </select>
-</div>
+
+  <div style="margin-top:8px;">
+    <label for="f_provisorium">Provisorium</label>
+    <select id="f_provisorium" style="width:100%;padding:6px;max-width:240px;">
+      <option value="">Alle</option>
+      <option value="mit">Nur mit Provisorium</option>
+      <option value="ohne">Nur ohne Provisorium</option>
+    </select>
+  </div>
 
   <div style="margin:10px 0;">
     <button type="button" id="dashReload"
@@ -885,20 +895,17 @@ async function getDueList(){
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
     <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
       <!-- Sticky-Header bleibt innerhalb des Panels -->
-     <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-  <tr>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
-
-    <!-- 🔽 NEU -->
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Provisorium</th>
-
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
-  </tr>
-</thead>
-
+      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+          <!-- 🔽 NEU -->
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Provisorium</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
+        </tr>
+      </thead>
       <tbody id="dashboardBody"></tbody>
     </table>
   </div>
@@ -920,6 +927,79 @@ async function getDueList(){
     </div>
   </div>
 </div>
+
+
+<!-- ============================== -->
+<!-- 📝 Entwürfe-Dashboard-Panel   -->
+<!-- ============================== -->
+<div id="draftDashPanel"
+     class="no-print"
+     style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
+    <div>
+      <label for="df_bearbeitet_am">Bearbeitet am</label>
+      <input type="date" id="df_bearbeitet_am" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="df_techniker">Techniker</label>
+      <input type="text" id="df_techniker" placeholder="z. B. Merker" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="df_maschine">Maschine</label>
+      <input type="text" id="df_maschine" placeholder="z. B. Multivac" style="width:100%;padding:6px;">
+    </div>
+    <div>
+      <label for="df_anlagenteil">Anlagenteil</label>
+      <input type="text" id="df_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
+    </div>
+  </div>
+
+  <div style="margin-top:8px;">
+    <label for="df_provisorium">Provisorium</label>
+    <select id="df_provisorium" style="width:100%;padding:6px;max-width:240px;">
+      <option value="">Alle</option>
+      <option value="mit">Nur mit Provisorium</option>
+      <option value="ohne">Nur ohne Provisorium</option>
+    </select>
+  </div>
+
+  <div style="margin:10px 0;">
+    <button type="button" id="draftDashReload"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#e5e5e5;cursor:pointer;">
+      🔄 Neu laden
+    </button>
+    <button type="button" id="draftDashClear"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
+      ❌ Filter löschen
+    </button>
+    <button type="button" id="draftDashRangeBtn" data-mode="30"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+      🗓️ Letzte 30 Tage
+    </button>
+  </div>
+
+  <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
+    <table id="draftDashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Provisorium</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID (Entwurf)</th>
+        </tr>
+      </thead>
+      <tbody id="draftDashboardBody"></tbody>
+    </table>
+  </div>
+
+  <div id="draftDashEmpty" style="display:none;padding:8px;color:#666;">
+    Keine Entwürfe gefunden.
+  </div>
+</div>
+
 
 <!-- ✅ BEGIN: Wartungs-Dashboard (Log) + Logik -->
 <!-- ===== Wartungs-Dashboard (Log) ===== -->
@@ -984,6 +1064,7 @@ async function getDueList(){
 
   <div id="wpLogEmpty" style="display:none;padding:8px;color:#666;">Keine Einträge gefunden.</div>
 </div>
+
 
 
 
@@ -3404,11 +3485,25 @@ async function saveDraftToOneDrive() {
 
 
 // 📥 ENTWURF LADEN
-// 📥 ENTWURF LADEN
-async function loadDraftFromOneDrive(fileName) {
-  if (!accessToken) { alert("Bitte zuerst anmelden."); return; }
+async function loadDraftFromOneDrive(fileName, fileId = null) {
+  // 🔁 Merker für späteres Löschen / Wiederverwenden
+  if (fileName) {
+    window.currentDraftFileName = fileName;
+  }
+  // fileId nur überschreiben, wenn sie mitgegeben wurde
+  if (fileId !== null) {
+    window.currentDraftFileId = fileId;
+  }
+
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
   await resolveShareLinkToFolder();
-  if (!TARGET.driveId || !TARGET.parentItemId) { alert("Zielordner nicht initialisiert."); return; }
+  if (!TARGET.driveId || !TARGET.parentItemId) {
+    alert("Zielordner nicht initialisiert.");
+    return;
+  }
 
   const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
   const url =
@@ -3423,8 +3518,9 @@ async function loadDraftFromOneDrive(fileName) {
       (o.value || o.textContent).trim().toLowerCase() === String(value).trim().toLowerCase()
     );
     if (!exists) {
-      if (typeof addOptionUnique === "function") addOptionUnique(sel, String(value), { autoselect });
-      else {
+      if (typeof addOptionUnique === "function") {
+        addOptionUnique(sel, String(value), { autoselect });
+      } else {
         sel.add(new Option(String(value), String(value)));
         if (autoselect) sel.value = String(value);
       }
@@ -3434,8 +3530,14 @@ async function loadDraftFromOneDrive(fileName) {
   }
 
   try {
-    const res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) { alert("⚠️ Fehler beim Laden des Entwurfs."); return; }
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) {
+      alert("⚠️ Fehler beim Laden des Entwurfs.");
+      return;
+    }
 
     const draftData = await res.json();
 
@@ -3470,21 +3572,21 @@ async function loadDraftFromOneDrive(fileName) {
       ensureSelectValue("anlagenteil", draftData.anlagenteil, true);
     }
 
-// 4) UI-abhängigkeiten aktualisieren (Sonstige-Felder ein-/ausblenden etc.)
-document.getElementById("maschine")?.dispatchEvent(new Event("change"));
-document.getElementById("anlagenteil")?.dispatchEvent(new Event("change"));
-document.getElementById("techniker1")?.dispatchEvent(new Event("change"));
-document.getElementById("techniker2")?.dispatchEvent(new Event("change"));
-// 🔼 NEU: Provisorium-Panel je nach Auswahl ein-/ausblenden
-document.getElementById("provisorium_aktiv")?.dispatchEvent(new Event("change"));
+    // 4) UI-Abhängigkeiten aktualisieren (Sonstige-Felder, Provisorium usw.)
+    document.getElementById("maschine")?.dispatchEvent(new Event("change"));
+    document.getElementById("anlagenteil")?.dispatchEvent(new Event("change"));
+    document.getElementById("techniker1")?.dispatchEvent(new Event("change"));
+    document.getElementById("techniker2")?.dispatchEvent(new Event("change"));
+    // Provisorium-Panel je nach Auswahl ein-/ausblenden
+    document.getElementById("provisorium_aktiv")?.dispatchEvent(new Event("change"));
 
-alert("✅ Entwurf erfolgreich geladen!");
-
+    alert("✅ Entwurf erfolgreich geladen!");
   } catch (err) {
     console.error("Fehler beim Laden:", err);
     alert("❌ Fehler beim Laden des Entwurfs.");
   }
 }
+
 
 
 
@@ -3593,6 +3695,9 @@ const META_SUFFIX = '.meta.json';
 window.showAllOrders = false;
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ==============================
+  // 📊 Normales Reparatur-Dashboard
+  // ==============================
   const panel    = document.getElementById('dashPanel');
   const toggle   = document.getElementById('toggleDashBtn');
   const reload   = document.getElementById('dashReload');
@@ -3607,15 +3712,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   reload?.addEventListener('click', loadDashboard);
 
-clearBtn?.addEventListener('click', () => {
-  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
+  clearBtn?.addEventListener('click', () => {
+    ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    window.showAllOrders = false;
+    if (rangeBtn){ rangeBtn.dataset.mode = '30'; rangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
+    applyFiltersToDashboard();
   });
-  window.showAllOrders = false;
-  if (rangeBtn){ rangeBtn.dataset.mode = '30'; rangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
-  applyFiltersToDashboard();
-});
-
 
   rangeBtn?.addEventListener('click', () => {
     const mode = rangeBtn.dataset.mode || '30';
@@ -3632,14 +3736,69 @@ clearBtn?.addEventListener('click', () => {
     applyFiltersToDashboard();
   });
 
-['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
-  document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
-});
+  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
+  });
 
-// 🔽 NEU: Select reagiert auf change
-document.getElementById('f_provisorium')?.addEventListener('change', applyFiltersToDashboard);
+  // Select reagiert auf change
+  document.getElementById('f_provisorium')?.addEventListener('change', applyFiltersToDashboard);
 
-  // 🛠️ Wartung-Button im Kopf (öffnet/schließt den Wartungsbereich)
+
+  // ==============================
+  // 📝 Entwürfe-Dashboard
+  // ==============================
+  const draftPanel    = document.getElementById('draftDashPanel');
+  const draftToggle   = document.getElementById('toggleDraftDashBtn');
+  const draftReload   = document.getElementById('draftDashReload');
+  const draftClearBtn = document.getElementById('draftDashClear');
+  const draftRangeBtn = document.getElementById('draftDashRangeBtn');
+
+  // Panel auf/zu
+  draftToggle?.addEventListener('click', () => {
+    const show = draftPanel.style.display === 'none' || !draftPanel.style.display;
+    draftPanel.style.display = show ? 'block' : 'none';
+    if (show) loadDraftDashboard();       // <- liest Entwürfe aus OneDrive
+  });
+
+  // Reload
+  draftReload?.addEventListener('click', loadDraftDashboard);
+
+  // Filter löschen
+  draftClearBtn?.addEventListener('click', () => {
+    ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil','df_provisorium'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    window.showAllDrafts = false;
+    if (draftRangeBtn){ draftRangeBtn.dataset.mode = '30'; draftRangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
+    applyFiltersToDraftDashboard();
+  });
+
+  // Letzte 30 Tage / alle Entwürfe
+  draftRangeBtn?.addEventListener('click', () => {
+    const mode = draftRangeBtn.dataset.mode || '30';
+    if (mode === '30') {
+      window.showAllDrafts = true;
+      draftRangeBtn.dataset.mode = 'all';
+      draftRangeBtn.textContent  = '🗓️ Alle Entwürfe';
+      const d = document.getElementById('df_bearbeitet_am'); if (d) d.value = '';
+    } else {
+      window.showAllDrafts = false;
+      draftRangeBtn.dataset.mode = '30';
+      draftRangeBtn.textContent  = '🗓️ Letzte 30 Tage';
+    }
+    applyFiltersToDraftDashboard();
+  });
+
+  // Filter-Inputs der Entwürfe
+  ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', applyFiltersToDraftDashboard);
+  });
+  document.getElementById('df_provisorium')?.addEventListener('change', applyFiltersToDraftDashboard);
+
+
+  // ==============================
+  // 🛠️ Wartungsbereich im Kopf
+  // ==============================
   const wartungHeadBtn = document.getElementById('wartungToggleHead');
   if (wartungHeadBtn) {
     wartungHeadBtn.addEventListener('click', () => {
@@ -3660,6 +3819,7 @@ document.getElementById('f_provisorium')?.addEventListener('change', applyFilter
     });
   }
 });
+
 
 
 
@@ -3939,6 +4099,254 @@ function applyFiltersToDashboard(){
 // ===== /Dashboard =====
 
 </script>
+
+  <script>
+// ==========================================
+// 📝 Entwürfe-Dashboard – Daten & Filter
+// ==========================================
+
+// false = nur letzte 30 Tage, true = alle
+window.showAllDrafts = false;
+// Merker für Datei → Item-ID (wichtig, damit später löschen klappt)
+window.draftFileIndex = {};
+
+// Entwürfe laden
+async function loadDraftDashboard() {
+  await signInAndAcquireToken(true);
+  await resolveShareLinkToFolder();
+
+  const tbody = document.querySelector('#draftDashTable tbody');
+  const empty = document.getElementById('draftDashEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Lade…</td></tr>';
+  if (empty) empty.style.display = 'none';
+
+  try {
+    if (!TARGET.driveId || !TARGET.parentItemId) {
+      throw new Error('TARGET nicht initialisiert');
+    }
+
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const parentId = TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
+
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${parentId}` +
+      `/children?$top=2000&$select=id,name,file`;
+    const res = await fetch(listUrl, { headers });
+    if (!res.ok) throw new Error('Liste der Entwürfe konnte nicht geladen werden');
+    const items = (await res.json()).value || [];
+
+    const draftFiles = items.filter(i => i.file && i.name.endsWith('.json'));
+
+    const rows = [];
+    window.draftFileIndex = {};
+
+    for (const item of draftFiles) {
+      window.draftFileIndex[item.name] = item.id;
+
+      const contentRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+        { headers }
+      );
+      if (!contentRes.ok) continue;
+
+      let draft;
+      try {
+        draft = await contentRes.json();
+      } catch {
+        continue;
+      }
+
+      const dateIso  = draft.bearbeitet_am || '';
+      const dateDisp = dateIso ? new Date(dateIso).toLocaleDateString('de-DE') : '';
+
+      const tech = [draft.techniker1, draft.techniker2].filter(Boolean).join(', ');
+      const maschine =
+        draft.maschine ||
+        draft.maschine_value ||
+        draft.maschine_text ||
+        draft.sonstige_maschine ||
+        '';
+      const teil =
+        draft.anlagenteil ||
+        draft.anlagenteil_value ||
+        draft.anlagenteil_text ||
+        draft.sonstige_anlagenteil ||
+        '';
+
+      const auftragsId =
+        draft.auftrag_id ||
+        draft.auftrags_id ||
+        item.name.replace(/\.json$/i, '');
+
+      // Provisorium aus Draft falls vorhanden
+      let provFlag   = 0;
+      let provStatus = 'none';
+      let provText   = '';
+
+      if (draft.provisorium_aktiv === 'Ja') {
+        provFlag = 1;
+        const art    = draft.provisorium_art || '';
+        const vonStr = draft.provisorium_von || '';
+        const bisStr = draft.provisorium_bis || '';
+
+        const todayIso = new Date().toISOString().slice(0,10);
+        let statusText = '';
+
+        if (!bisStr) {
+          provStatus = 'open';
+          statusText = '⚠ aktiv';
+        } else {
+          const bisIso      = bisStr.slice(0,10);
+          const bisDateDisp = new Date(bisStr).toLocaleDateString('de-DE');
+          if (bisIso >= todayIso) {
+            provStatus = 'active';
+            statusText = '⚠ aktiv bis ' + bisDateDisp;
+          } else {
+            provStatus = 'done';
+            statusText = '✓ beendet am ' + bisDateDisp;
+          }
+        }
+        provText = (art ? art + ' – ' : '') + statusText;
+      }
+
+      rows.push({
+        dateIso,
+        dateDisp,
+        tech,
+        maschine,
+        teil,
+        provText,
+        provFlag,
+        provStatus,
+        id: auftragsId,
+        fileName: item.name,
+        fileId: item.id
+      });
+    }
+
+    rows.sort((a, b) => (b.dateIso || '').localeCompare(a.dateIso || ''));
+
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+      let rowStyle = '';
+      if (r.provStatus === 'open' || r.provStatus === 'active') {
+        rowStyle = ' style="background:#fff3cd;"';
+      }
+
+      const link = `
+        <a href="#"
+           class="draft-open-link"
+           data-file="${encodeURIComponent(r.fileName)}"
+           data-id="${r.fileId}">
+          ${r.id}
+        </a>`;
+
+      return `<tr${rowStyle}>
+        <td data-k="bearbeitet_am" data-iso="${r.dateIso}">${r.dateDisp}</td>
+        <td data-k="techniker">${r.tech}</td>
+        <td data-k="maschine">${r.maschine}</td>
+        <td data-k="anlagenteil">${r.teil}</td>
+        <td data-k="provisorium" data-prov="${r.provFlag}" data-provstatus="${r.provStatus}">${r.provText}</td>
+        <td data-k="auftrag_id">${link}</td>
+      </tr>`;
+    }).join('');
+
+    // Klick auf Auftrags-ID → Entwurf laden
+    tbody.querySelectorAll('.draft-open-link').forEach(a => {
+      a.addEventListener('click', async ev => {
+        ev.preventDefault();
+        const fileName = decodeURIComponent(a.dataset.file || '');
+        const fileId   = a.dataset.id || null;
+
+        if (!fileName) return;
+
+        window.currentDraftFileName = fileName;
+        window.currentDraftFileId   = fileId;
+
+        try {
+          await loadDraftFromOneDrive(fileName);
+          // Formular ins Blickfeld holen
+          document.getElementById('auftrag_id')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+          console.error('Entwurf aus Dashboard laden:', e);
+          alert('❌ Entwurf konnte nicht geladen werden.');
+        }
+      });
+    });
+
+    applyFiltersToDraftDashboard();
+  } catch (e) {
+    console.error('Draft-Dashboard:', e);
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Fehler beim Laden.</td></tr>';
+  }
+}
+
+// Filter anwenden
+function applyFiltersToDraftDashboard() {
+  const valDate = (document.getElementById('df_bearbeitet_am')?.value || '').trim(); // ISO
+  const valTech = (document.getElementById('df_techniker')?.value     || '').trim().toLowerCase();
+  const valMach = (document.getElementById('df_maschine')?.value      || '').trim().toLowerCase();
+  const valTeil = (document.getElementById('df_anlagenteil')?.value   || '').trim().toLowerCase();
+  const valProv = (document.getElementById('df_provisorium')?.value   || '').trim(); // "", "mit", "ohne"
+
+  const rows = document.querySelectorAll('#draftDashTable tbody tr');
+  let shown = 0;
+
+  const now   = new Date();
+  const last30 = new Date(now.getTime() - 30*24*60*60*1000);
+
+  rows.forEach(tr => {
+    const cDate = tr.querySelector('[data-k="bearbeitet_am"]');
+    const cTech = tr.querySelector('[data-k="techniker"]');
+    const cMac  = tr.querySelector('[data-k="maschine"]');
+    const cTeil = tr.querySelector('[data-k="anlagenteil"]');
+    const cProv = tr.querySelector('[data-k="provisorium"]');
+
+    let ok = true;
+
+    if (valTech && !(cTech?.textContent || '').toLowerCase().includes(valTech)) ok = false;
+    if (valMach && !(cMac ?.textContent || '').toLowerCase().includes(valMach)) ok = false;
+    if (valTeil && !(cTeil?.textContent || '').toLowerCase().includes(valTeil)) ok = false;
+
+    if (ok && valProv === 'mit') {
+      const flag = cProv?.dataset.prov || '0';
+      if (flag !== '1') ok = false;
+    }
+    if (ok && valProv === 'ohne') {
+      const flag = cProv?.dataset.prov || '0';
+      if (flag !== '0') ok = false;
+    }
+
+    if (ok && valDate) {
+      const rowIso = cDate?.dataset.iso || '';
+      if (!rowIso || rowIso < valDate) ok = false;
+    }
+
+    if (ok && !window.showAllDrafts) {
+      const rowIso = cDate?.dataset.iso || '';
+      if (rowIso) {
+        const d = new Date(rowIso);
+        if (!(d >= last30)) ok = false;
+      }
+    }
+
+    tr.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+
+  const empty = document.getElementById('draftDashEmpty');
+  if (empty) empty.style.display = shown ? 'none' : 'block';
+}
+</script>
+
 <script>
 /* ===== Wartungsplan – Daten & OneDrive-Speicher ===== */
 // const WP_FILE = "Wartungsplaene.json";   // schon weiter oben definiert
@@ -5838,6 +6246,108 @@ window.addEventListener("load", async function () {
     window.wartungslog = [];
   }
 });
+</script>
+<script>
+async function loadDraftDashboard() {
+  await signInAndAcquireToken(true);
+  await resolveShareLinkToFolder();
+
+  const tbody = document.getElementById('draftDashboardBody');
+  const empty = document.getElementById('draftDashEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Lade…</td></tr>';
+  empty.style.display = 'none';
+
+  try {
+    const headers = { Authorization: `Bearer ${accessToken}` };
+
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_DRAFTS_ITEM_ID}/children?$top=2000`;
+    const res = await fetch(listUrl, { headers });
+    const items = (await res.json()).value || [];
+
+    const rows = [];
+
+    for (const item of items) {
+      if (!item.file || !item.name.endsWith('.json')) continue;
+
+      const contentRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+        { headers }
+      );
+      const draft = await contentRes.json();
+
+      const dateIso = draft.bearbeitet_am || '';
+      const dateDisp = dateIso ? new Date(dateIso).toLocaleDateString('de-DE') : '';
+      const tech = [draft.techniker1, draft.techniker2].filter(Boolean).join(', ');
+      const maschine = draft.maschine || draft.maschine_text || '';
+      const teil = draft.anlagenteil || draft.anlagenteil_text || '';
+
+      const auftragsId = draft.auftrag_id || item.name.replace('.json','');
+
+      const prov = draft.provisorium_aktiv === 'Ja' ? '⚠ Ja' : '';
+
+      rows.push({ dateIso, dateDisp, tech, maschine, teil, prov, id: auftragsId, fileId: item.id });
+    }
+
+    if (!rows.length) {
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.dateDisp}</td>
+        <td>${r.tech}</td>
+        <td>${r.maschine}</td>
+        <td>${r.teil}</td>
+        <td>${r.prov}</td>
+        <td>
+          <a href="#" class="draft-open" data-id="${r.fileId}">${r.id}</a>
+        </td>
+      </tr>
+    `).join('');
+
+    document.querySelectorAll('.draft-open').forEach(a => {
+      a.addEventListener('click', async e => {
+        e.preventDefault();
+        await loadDraftFromOneDriveById(a.dataset.id);
+      });
+    });
+
+    applyFiltersToDraftDashboard();
+  } catch (e) {
+    console.error(e);
+    tbody.innerHTML = '<tr><td colspan="6">Fehler beim Laden</td></tr>';
+  }
+}
+</script>
+<script>
+function applyFiltersToDraftDashboard() {
+  const fDate = document.getElementById('df_bearbeitet_am')?.value || '';
+  const fTech = document.getElementById('df_techniker')?.value.toLowerCase() || '';
+  const fM    = document.getElementById('df_maschine')?.value.toLowerCase() || '';
+  const fT    = document.getElementById('df_anlagenteil')?.value.toLowerCase() || '';
+  const fP    = document.getElementById('df_provisorium')?.value || '';
+
+  const rows = document.querySelectorAll('#draftDashboardBody tr');
+
+  rows.forEach(tr => {
+    const tds = tr.children;
+    let ok = true;
+
+    if (fDate && !tds[0].textContent.includes(fDate)) ok = false;
+    if (fTech && !tds[1].textContent.toLowerCase().includes(fTech)) ok = false;
+    if (fM && !tds[2].textContent.toLowerCase().includes(fM)) ok = false;
+    if (fT && !tds[3].textContent.toLowerCase().includes(fT)) ok = false;
+    if (fP === 'mit' && !tds[4].textContent.includes('⚠')) ok = false;
+    if (fP === 'ohne' && tds[4].textContent.includes('⚠')) ok = false;
+
+    tr.style.display = ok ? '' : 'none';
+  });
+}
 </script>
 
 
