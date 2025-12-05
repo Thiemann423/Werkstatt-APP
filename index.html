@@ -4288,8 +4288,164 @@ async function loadDraftDashboard() {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Fehler beim Laden.</td></tr>';
   }
 }
+// ==========================================
+// 📝 Entwürfe-Dashboard – Daten & Click-Handler
+// ==========================================
+
+window.showAllDrafts = false;   // wird im DOMContentLoaded-Block benutzt
+
+async function loadDraftDashboard() {
+  if (!accessToken) {
+    alert("Bitte zuerst anmelden.");
+    return;
+  }
+
+  await resolveShareLinkToFolder();
+  if (!TARGET.driveId || !TARGET.parentItemId) {
+    alert("Zielordner nicht initialisiert.");
+    return;
+  }
+
+  const tbody = document.getElementById('draftDashboardBody');
+  const empty = document.getElementById('draftDashEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Lade…</td></tr>';
+  if (empty) empty.style.display = 'none';
+
+  try {
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const parentId = window.TARGET_DRAFTS_ITEM_ID || TARGET.parentItemId;
+
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${parentId}/children?$top=2000&$select=id,name,file`;
+
+    const res = await fetch(listUrl, { headers });
+    if (!res.ok) {
+      console.error(await res.text());
+      throw new Error("Liste der Entwürfe konnte nicht geladen werden.");
+    }
+
+    const items = (await res.json()).value || [];
+    const draftFiles = items.filter(i => i.file && i.name.endsWith('.json'));
+
+    const rows = [];
+
+    for (const item of draftFiles) {
+      const contentRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+        { headers }
+      );
+      if (!contentRes.ok) continue;
+
+      let draft;
+      try {
+        draft = await contentRes.json();
+      } catch {
+        continue;
+      }
+
+      const dateIso  = draft.bearbeitet_am || '';
+      const dateDisp = dateIso ? new Date(dateIso).toLocaleDateString('de-DE') : '';
+
+      const tech = [draft.techniker1, draft.techniker2].filter(Boolean).join(', ');
+      const maschine =
+        draft.maschine ||
+        draft.maschine_value ||
+        draft.maschine_text ||
+        draft.sonstige_maschine ||
+        '';
+      const teil =
+        draft.anlagenteil ||
+        draft.anlagenteil_value ||
+        draft.anlagenteil_text ||
+        draft.sonstige_anlagenteil ||
+        '';
+
+      const auftragsId =
+        draft.auftrag_id ||
+        draft.auftrags_id ||
+        item.name.replace(/\.json$/i, '');
+
+      const prov = draft.provisorium_aktiv === "Ja" ? "⚠ Ja" : "";
+
+      rows.push({
+        dateIso,
+        dateDisp,
+        tech,
+        maschine,
+        teil,
+        prov,
+        fileName: item.name,
+        fileId: item.id,
+        auftragsId
+      });
+    }
+
+    // sortiert nach Datum absteigend
+    rows.sort((a, b) => (b.dateIso || '').localeCompare(a.dateIso || ''));
+
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    // Tabelle aufbauen – wichtig: data-file + data-id für den Click-Handler
+    tbody.innerHTML = rows.map(r => {
+      const link = `
+        <a href="#"
+           class="draft-open-link"
+           data-file="${encodeURIComponent(r.fileName)}"
+           data-id="${r.fileId}">
+          ${r.auftragsId}
+        </a>`;
+
+      return `
+        <tr>
+          <td data-k="bearbeitet_am" data-iso="${r.dateIso}">${r.dateDisp}</td>
+          <td data-k="techniker">${r.tech}</td>
+          <td data-k="maschine">${r.maschine}</td>
+          <td data-k="anlagenteil">${r.teil}</td>
+          <td data-k="provisorium">${r.prov}</td>
+          <td data-k="auftrag_id">${link}</td>
+        </tr>`;
+    }).join('');
+
+    // 🔗 Click-Handler für die Auftrags-ID
+    tbody.querySelectorAll('.draft-open-link').forEach(a => {
+      a.addEventListener('click', async ev => {
+        ev.preventDefault();
+        const fileName = decodeURIComponent(a.dataset.file || '');
+        const fileId   = a.dataset.id || null;
+
+        if (!fileName) return;
+
+        try {
+          await loadDraftFromOneDrive(fileName, fileId);
+
+          document.getElementById('auftrag_id')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+          console.error('Entwurf aus Dashboard laden:', e);
+          alert('❌ Entwurf konnte nicht geladen werden.');
+        }
+      });
+    });
+
+    if (typeof applyFiltersToDraftDashboard === "function") {
+      applyFiltersToDraftDashboard();
+    }
+  } catch (e) {
+    console.error("Draft-Dashboard:", e);
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Fehler beim Laden der Entwürfe.</td></tr>';
+  }
+}
 
 // Filter anwenden
+
+    
 function applyFiltersToDraftDashboard() {
   const valDate = (document.getElementById('df_bearbeitet_am')?.value || '').trim(); // ISO
   const valTech = (document.getElementById('df_techniker')?.value     || '').trim().toLowerCase();
