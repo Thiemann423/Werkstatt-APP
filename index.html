@@ -2879,80 +2879,144 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveMasterToLocal();
   }
 
-  // Laden (OneDrive -> bei fehlender Datei: leeren -> sonst Local-Fallback)
-  async function loadMasterData() {
+// Laden (OneDrive -> bei fehlender Datei: Local-Fallback + Merge)
+async function loadMasterData() {
+  try {
+    // 1) Immer zuerst lokalen Cache laden (falls vorhanden)
+    let localCopy = null;
     try {
-      if (!accessToken) {                // nicht angemeldet -> nur local versuchen
-        loadMasterFromLocal();
-        return;
-      }
-
-      await resolveShareLinkToFolder();
-
-      // Prüfen, ob die Master-Datei existiert
-      const listUrl =
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-        `/children?$select=id,name`;
-      const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!listRes.ok) throw new Error("children list failed");
-      const list = await listRes.json();
-      const item = (list.value || []).find(x => x.name === MASTER_FILE);
-
-      // ❗ Datei existiert nicht -> Stammdaten leeren + Cache überschreiben
-      if (!item) {
-        setEmptyMaster();
-        return;
-      }
-
-      // Datei existiert -> Inhalt laden
-      const fileRes = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      if (!fileRes.ok) {
-        // z. B. 404/403 -> lieber nicht alte Daten behalten
-        setEmptyMaster();
-        return;
-      }
-
-      // gültige JSON übernehmen + Cache aktualisieren
-      masterData = await fileRes.json();
-      if (!masterData || typeof masterData !== "object") {
-        setEmptyMaster();
-        return;
-      }
-      // Safety: fehlende Felder initialisieren
-      masterData.version ??= 1;
-      masterData.maschinen ??= [];
-      masterData.anlagenteile ??= [];
-
-      saveMasterToLocal();
+      const s = localStorage.getItem("TE15_MASTER");
+      if (s) localCopy = JSON.parse(s);
     } catch (e) {
-      // Netzwerk/Parsing-Fehler -> Local-Fallback (falls vorhanden)
-      loadMasterFromLocal();
+      console.warn("loadMasterData() – lokaler Cache defekt:", e);
     }
+
+    // Wenn kein Token -> nur lokale Daten nutzen
+    if (!accessToken) {
+      if (localCopy && typeof localCopy === "object") {
+        masterData = localCopy;
+      } else {
+        setEmptyMaster();
+      }
+      return;
+    }
+
+    await resolveShareLinkToFolder();
+
+    // Prüfen, ob die Master-Datei existiert
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+      `/children?$select=id,name`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!listRes.ok) throw new Error("children list failed");
+
+    const list = await listRes.json();
+    const item = (list.value || []).find(x => x.name === MASTER_FILE);
+
+    // ❗ Datei existiert nicht -> Stammdaten leeren + ggf. nur lokalen Cache nehmen
+    if (!item) {
+      if (localCopy && typeof localCopy === "object") {
+        masterData = localCopy;
+        saveMasterToLocal();
+      } else {
+        setEmptyMaster();
+      }
+      return;
+    }
+
+    // Datei existiert -> Inhalt laden
+    const fileRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    if (!fileRes.ok) {
+      console.warn("loadMasterData() – Datei nicht lesbar, nutze lokalen Cache");
+      if (localCopy && typeof localCopy === "object") {
+        masterData = localCopy;
+        saveMasterToLocal();
+      } else {
+        setEmptyMaster();
+      }
+      return;
+    }
+
+    // 2) Cloud-Daten laden
+    const cloudData = await fileRes.json();
+    if (!cloudData || typeof cloudData !== "object") {
+      console.warn("loadMasterData() – ungültige Cloud-Daten, nutze lokalen Cache");
+      if (localCopy && typeof localCopy === "object") {
+        masterData = localCopy;
+        saveMasterToLocal();
+      } else {
+        setEmptyMaster();
+      }
+      return;
+    }
+
+    // 3) Safety: Basisstruktur
+    cloudData.version       ??= 1;
+    cloudData.maschinen     ??= [];
+    cloudData.anlagenteile  ??= [];
+
+    // 4) Merge: lokale + Cloud-Listen zusammenführen (Duplikate entfernen)
+    const mergeList = (key) => {
+      const fromCloud = Array.isArray(cloudData[key]) ? cloudData[key] : [];
+      const fromLocal = (localCopy && Array.isArray(localCopy[key])) ? localCopy[key] : [];
+      const set = new Set(
+        [...fromCloud, ...fromLocal]
+          .map(v => String(v || "").trim())
+          .filter(v => v)
+      );
+      masterData[key] = Array.from(set).sort((a, b) =>
+        a.localeCompare(b, "de", { sensitivity: "base" })
+      );
+    };
+
+    mergeList("maschinen");
+    mergeList("anlagenteile");
+    masterData.version = cloudData.version || 1;
+
+    // 5) Zusammengeführte Version wieder lokal cachen
+    saveMasterToLocal();
+  } catch (e) {
+    console.warn("loadMasterData() – Fehler, nutze lokalen Cache:", e);
+    // Netzwerk/Parsing-Fehler -> Local-Fallback (falls vorhanden)
+    loadMasterFromLocal();
+  }
+}
+async function saveMasterData() {
+  // immer lokal sichern
+  saveMasterToLocal();
+
+  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) {
+    console.warn("saveMasterData() – kein Graph, nur lokal gespeichert.");
+    return;
   }
 
-  // Speichern (OneDrive, plus Local-Cache)
-// Speichern (OneDrive, plus Local-Cache)
-async function saveMasterData() {
-  saveMasterToLocal();
-  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) return;
-
-  const url  = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-  const blob = new Blob([JSON.stringify(masterData, null, 2)], { type: "application/json" });
+  const url  =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
+  const blob = new Blob([JSON.stringify(masterData, null, 2)], {
+    type: "application/json"
+  });
 
   try {
-    await fetch(url, {
+    const resp = await fetch(url, {
       method: "PUT",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: blob
     });
+    if (!resp.ok) {
+      console.warn("saveMasterData() – Upload fehlgeschlagen:", resp.status, await resp.text());
+    }
   } catch (e) {
-    console.warn("saveMasterData() – Upload fehlgeschlagen:", e);
+    console.warn("saveMasterData() – Upload-Fehler:", e);
   }
 }
+
 
 /* === Neu: Sortier-Helfer (deutsche Sortierung, numerisch) === */
 function sortSelectOptions(selectEl, stickyTopValues = ["", "Sonstige"]) {
