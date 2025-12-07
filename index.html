@@ -2271,70 +2271,89 @@ document.addEventListener("DOMContentLoaded", function () {
   loadMasterData().then(rebuildDropdownsFromMaster);
 
   // 📝 "Sonstige"-Werte dauerhaft übernehmen
-  function tryAddCustomMaschine() {
-    if (!sonstigeMaschineInput || !maschineSelect) return;
-    let val = (sonstigeMaschineInput.value || "").trim();
-    if (!val) return;
+function tryAddCustomMaschine() {
+  if (!sonstigeMaschineInput || !maschineSelect) return;
+  let val = (sonstigeMaschineInput.value || "").trim();
+  if (!val) return;
 
-    // 1) ins Dropdown einfügen (falls addOptionUnique existiert)
-    if (typeof addOptionUnique === "function") {
-      addOptionUnique(maschineSelect, val);
-    } else {
-      maschineSelect.add(new Option(val, val));
-    }
-
-    // 2) Auswahl auf den neuen Wert setzen (wichtig fürs Pflichtfeld!)
-    maschineSelect.value = val;
-
-    // 3) Stammdaten-Array aktualisieren
-    if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
-    const exists = masterData.maschinen.some(
-      x => String(x || "").toLowerCase() === val.toLowerCase()
-    );
-    if (!exists) {
-      masterData.maschinen.push(val);
-      masterData.maschinen.sort((a,b) =>
-        a.localeCompare(b,"de",{sensitivity:"base"})
-      );
-      // auch Basisliste aktualisieren, damit pruneToBase den Eintrag nicht wieder entfernt
-      if (!baseMaschineValues.includes(val)) baseMaschineValues.push(val);
-      if (typeof saveMasterData === "function") saveMasterData();
-    }
-
-    // 4) Textfeld leeren & ausblenden
-    sonstigeMaschineInput.value = "";
-    updateMaschineField();
+  // 1) ins Dropdown einfügen
+  if (typeof addOptionUnique === "function") {
+    addOptionUnique(maschineSelect, val);   // fügt ein & sortiert
+  } else {
+    maschineSelect.add(new Option(val, val));
   }
 
-  function tryAddCustomAnlagenteil() {
-    if (!sonstigeAnlagenteilInput || !anlagenteilSelect) return;
-    let val = (sonstigeAnlagenteilInput.value || "").trim();
-    if (!val) return;
+  // 2) Auswahl auf den neuen Wert setzen (wichtig fürs Pflichtfeld!)
+  maschineSelect.value = val;
 
-    if (typeof addOptionUnique === "function") {
-      addOptionUnique(anlagenteilSelect, val);
-    } else {
-      anlagenteilSelect.add(new Option(val, val));
-    }
-
-    anlagenteilSelect.value = val;
-
-    if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
-    const exists = masterData.anlagenteile.some(
-      x => String(x || "").toLowerCase() === val.toLowerCase()
-    );
-    if (!exists) {
-      masterData.anlagenteile.push(val);
-      masterData.anlagenteile.sort((a,b) =>
-        a.localeCompare(b,"de",{sensitivity:"base"})
-      );
-      if (!baseAnlagenteilValues.includes(val)) baseAnlagenteilValues.push(val);
-      if (typeof saveMasterData === "function") saveMasterData();
-    }
-
-    sonstigeAnlagenteilInput.value = "";
-    updateAnlagenteilField();
+  // 3) Sicherheit: nochmal sortieren, "" + Sonstige bleiben oben
+  if (typeof sortSelectOptions === "function") {
+    sortSelectOptions(maschineSelect, ["", "Sonstige"]);
   }
+
+  // 4) Stammdaten-Array aktualisieren + speichern
+  if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
+  const exists = masterData.maschinen.some(
+    x => String(x || "").toLowerCase() === val.toLowerCase()
+  );
+  if (!exists) {
+    masterData.maschinen.push(val);
+    masterData.maschinen.sort((a,b) =>
+      a.localeCompare(b,"de",{sensitivity:"base"})
+    );
+
+    // auch Basisliste erweitern, damit pruneToBase ihn nie wieder löscht
+    if (!baseMaschineValues.includes(val)) baseMaschineValues.push(val);
+
+    if (typeof saveMasterData === "function") saveMasterData();
+  }
+
+  // 5) Textfeld leeren & ausblenden
+  sonstigeMaschineInput.value = "";
+  updateMaschineField();
+}
+
+function tryAddCustomAnlagenteil() {
+  if (!sonstigeAnlagenteilInput || !anlagenteilSelect) return;
+  let val = (sonstigeAnlagenteilInput.value || "").trim();
+  if (!val) return;
+
+  // 1) ins Dropdown einfügen
+  if (typeof addOptionUnique === "function") {
+    addOptionUnique(anlagenteilSelect, val);
+  } else {
+    anlagenteilSelect.add(new Option(val, val));
+  }
+
+  // 2) Auswahl setzen
+  anlagenteilSelect.value = val;
+
+  // 3) Sicherheit: sortieren
+  if (typeof sortSelectOptions === "function") {
+    sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
+  }
+
+  // 4) Stammdaten-Array aktualisieren + speichern
+  if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
+  const exists = masterData.anlagenteile.some(
+    x => String(x || "").toLowerCase() === val.toLowerCase()
+  );
+  if (!exists) {
+    masterData.anlagenteile.push(val);
+    masterData.anlagenteile.sort((a,b) =>
+      a.localeCompare(b,"de",{sensitivity:"base"})
+    );
+
+    if (!baseAnlagenteilValues.includes(val)) baseAnlagenteilValues.push(val);
+
+    if (typeof saveMasterData === "function") saveMasterData();
+  }
+
+  // 5) Textfeld leeren & ausblenden
+  sonstigeAnlagenteilInput.value = "";
+  updateAnlagenteilField();
+}
+
 
   // Eingabe übernehmen bei Verlassen der Felder
   if (sonstigeMaschineInput) {
