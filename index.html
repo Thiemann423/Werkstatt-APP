@@ -1089,73 +1089,102 @@ function _cacheLocal(list) {
 }
 
 async function _loadAll() {
-  // 1) Cloud, wenn möglich
-  if (window.accessToken) {
-    try {
-      const root  = await getShareRootEndpoint();
-      const cloud = await graphDownloadJsonFromFolder(root, WP_WARTUNG_CLOUD_FILENAME);
-      const arr   = Array.isArray(cloud.data) ? cloud.data : [];
-      window.__cloudEtag = cloud.etag || window.__cloudEtag || null;
-      _cacheLocal(arr);
-      console.log("[WP] aus Cloud geladen:", arr);
-      return arr;
-    } catch (err) {
-      console.warn("[WP] Cloud-Load fehlgeschlagen, nutze lokalen Cache:", err);
-    }
-  }
-
-  // 2) localStorage
+  // 0) lokaler Standard
+  let list = [];
   try {
     const raw = localStorage.getItem(WP_WARTUNG_STORAGE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        console.log("[WP] aus localStorage geladen:", arr);
-        return arr;
-      }
+      if (Array.isArray(arr)) list = arr;
     }
   } catch (_) {}
 
-  // 3) RAM-Fallback
-  if (Array.isArray(window.__memLog)) {
-    console.log("[WP] aus RAM-Fallback geladen:", window.__memLog);
-    return window.__memLog.slice();
+  // 1) Ohne Login oder TARGET keine Cloud-Versuche
+  if (!window.accessToken || !window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    console.log("[WP] _loadAll – nutze nur lokalen Cache:", list);
+    return list;
   }
 
-  console.log("[WP] noch keine Wartungsdaten gespeichert");
-  return [];
-}
+  try {
+    // wie bei Stammdaten / Wartungsplänen: Datei direkt über Pfad holen
+    const url =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET.parentItemId}:/${encodeURIComponent(WP_WARTUNG_CLOUD_FILENAME)}:/content`;
 
-// Für andere Stellen: kompletten Log laden + global ablegen
-async function wpLogLoad() {
-  const raw = await _loadAll();
-  window.wartungslog = Array.isArray(raw) ? raw.slice() : [];
-  return window.wartungslog;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (res.status === 404) {
+      // Datei existiert noch nicht -> leere Liste, aber lokalen Cache überschreiben
+      console.log("[WP] _loadAll – wartungslog.json existiert noch nicht, starte leer.");
+      list = [];
+      _cacheLocal(list);
+      return list;
+    }
+
+    if (!res.ok) {
+      console.warn("[WP] _loadAll – Cloud antwortet nicht OK, nutze lokalen Cache:", res.status);
+      return list;
+    }
+
+    const cloudData = await res.json();
+    if (Array.isArray(cloudData)) {
+      list = cloudData;
+      _cacheLocal(list);
+      console.log("[WP] _loadAll – aus Cloud geladen:", list);
+    } else {
+      console.warn("[WP] _loadAll – Cloud-Daten waren kein Array, nutze lokalen Cache.");
+    }
+  } catch (err) {
+    console.warn("[WP] _loadAll – Cloud-Load fehlgeschlagen, nutze lokalen Cache:", err);
+  }
+
+  return list;
 }
 
 async function _saveAll(list) {
   const payload = Array.isArray(list) ? list : [];
-  _cacheLocal(payload);
-  console.log("[WP] lokal gespeichert:", payload);
 
-  if (!window.accessToken) return false;
+  // 1) immer lokal cachen
+  _cacheLocal(payload);
+  console.log("[WP] _saveAll – lokal gespeichert:", payload);
+
+  // 2) wenn kein Login / TARGET -> hier aufhören, damit es lokal wenigstens funktioniert
+  if (!window.accessToken || !window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    console.warn("[WP] _saveAll – kein Cloud-Zugriff (kein Token oder TARGET), nur lokal gespeichert.");
+    return false;
+  }
 
   try {
-    const root = await getShareRootEndpoint();
-    const res  = await graphUploadJsonToFolder(
-      root,
-      WP_WARTUNG_CLOUD_FILENAME,
-      payload,
-      window.__cloudEtag || null
-    );
-    window.__cloudEtag = (res && res.etag) || window.__cloudEtag || null;
-    console.log("[WP] Cloud-Speicher OK");
+    const url =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET.parentItemId}:/${encodeURIComponent(WP_WARTUNG_CLOUD_FILENAME)}:/content`;
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    });
+
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: blob
+    });
+
+    if (!res.ok) {
+      console.warn("[WP] _saveAll – Cloud-Speicher fehlgeschlagen:", res.status);
+      return false;
+    }
+
+    console.log("[WP] _saveAll – Cloud-Speicher OK.");
     return true;
   } catch (err) {
-    console.warn("[WP] Cloud-Save fehlgeschlagen, lokale Daten bleiben erhalten:", err);
+    console.warn("[WP] _saveAll – Cloud-Save fehlgeschlagen, lokale Daten bleiben erhalten:", err);
     return false;
   }
 }
+
 
 
 
