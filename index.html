@@ -4513,49 +4513,73 @@ const WP_CACHE_KEY = "TE15_WARTUNGSPLAENE";
 
 
 async function wpLoad() {
-  // 1) Cache lesen
+  // 1) Cache lesen (nur als Fallback)
+  let cacheObj = {};
   try {
-    var raw = localStorage.getItem(WP_CACHE_KEY);
-    wartungsplaene = raw ? JSON.parse(raw) : {};
+    const raw = localStorage.getItem(WP_CACHE_KEY);
+    cacheObj = raw ? JSON.parse(raw) : {};
   } catch (e) {
     console.warn("[WP] Cache parse failed:", e);
-    wartungsplaene = {};
+    cacheObj = {};
   }
 
-  // 2) OneDrive: gleiche Logik/Ordner wie wpSave()
-  try {
-    var token = (typeof window !== "undefined" && window.accessToken) ? window.accessToken : "";
+  wartungsplaene = {}; // Standard: erstmal leer
 
-    if (token) {
-      // sicherstellen, dass TARGET mit parentItemId initialisiert ist
+  const hasToken = !!(typeof window !== "undefined" && window.accessToken);
+
+  // 2) Wenn angemeldet: IMMER versuchen, aus OneDrive (Hauptordner) zu laden
+  if (hasToken) {
+    try {
+      // sicherstellen, dass TARGET gesetzt ist
       if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
         try { await resolveShareLinkToFolder(); } catch (_) {}
       }
 
       if (window.TARGET && TARGET.driveId && TARGET.parentItemId) {
-        var url =
+        const url =
           "https://graph.microsoft.com/v1.0/drives/" +
           window.TARGET.driveId +
           "/items/" +
           window.TARGET.parentItemId +
           ":/" + encodeURIComponent(WP_FILE) + ":/content";
 
-        var r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+        const r = await fetch(url, {
+          headers: { Authorization: "Bearer " + window.accessToken }
+        });
+
         if (r && r.ok) {
           try {
             wartungsplaene = await r.json();
           } catch (eJson) {
             wartungsplaene = JSON.parse(await r.text());
           }
+
+          // Cloud-Daten in Cache schreiben
+          try {
+            localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene));
+          } catch (eSet) {}
+        } else if (r && r.status === 404) {
+          // Datei gibt es noch nicht → leere Struktur
+          wartungsplaene = {};
           try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch (eSet) {}
+        } else {
+          console.warn("[WP] OneDrive load not OK, nutze Cache:", r && r.status);
+          wartungsplaene = cacheObj;
         }
+      } else {
+        console.warn("[WP] TARGET ohne parentItemId, nutze Cache.");
+        wartungsplaene = cacheObj;
       }
+    } catch (e) {
+      console.warn("[WP] OneDrive load failed, nutze Cache:", e);
+      wartungsplaene = cacheObj;
     }
-  } catch (e) {
-    console.warn("[WP] OneDrive load failed:", e);
+  } else {
+    // 3) Nicht angemeldet → nur lokalen Cache verwenden
+    wartungsplaene = cacheObj;
   }
 
-  // 3) Index bauen & UI anstoßen
+  // 4) Index bauen & UI anstoßen
   try {
     wpBuildIndex();
   } catch (e) {
@@ -4564,7 +4588,6 @@ async function wpLoad() {
 
   console.info("[WP] geladen:", Object.keys(wartungsplaene || {}).length, "Maschinen");
 
-  // 4) UI initialisieren
   try {
     if (typeof wpRefreshTaskList     === "function") wpRefreshTaskList();
     if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(null);
@@ -4572,6 +4595,7 @@ async function wpLoad() {
     console.warn("[WP] init UI failed:", e);
   }
 }
+
 
 
 
