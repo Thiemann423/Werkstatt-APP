@@ -4522,27 +4522,33 @@ async function wpLoad() {
     wartungsplaene = {};
   }
 
-  // 2) OneDrive: gemeinsamer Meta-Ordner wie beim Dashboard
+  // 2) OneDrive: gleiche Logik/Ordner wie wpSave()
   try {
-    var token   = (typeof window !== "undefined" && window.accessToken) ? window.accessToken : "";
-    var hasMeta = window.TARGET && window.TARGET.driveId && window.TARGET_META_ITEM_ID;
+    var token = (typeof window !== "undefined" && window.accessToken) ? window.accessToken : "";
 
-    if (token && hasMeta) {
-      var url =
-        "https://graph.microsoft.com/v1.0/drives/" +
-        window.TARGET.driveId +
-        "/items/" +
-        window.TARGET_META_ITEM_ID +
-        ":/" + encodeURIComponent(WP_FILE) + ":/content";
+    if (token) {
+      // sicherstellen, dass TARGET mit parentItemId initialisiert ist
+      if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+        try { await resolveShareLinkToFolder(); } catch (_) {}
+      }
 
-      var r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-      if (r && r.ok) {
-        try {
-          wartungsplaene = await r.json();
-        } catch (eJson) {
-          wartungsplaene = JSON.parse(await r.text());
+      if (window.TARGET && TARGET.driveId && TARGET.parentItemId) {
+        var url =
+          "https://graph.microsoft.com/v1.0/drives/" +
+          window.TARGET.driveId +
+          "/items/" +
+          window.TARGET.parentItemId +
+          ":/" + encodeURIComponent(WP_FILE) + ":/content";
+
+        var r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+        if (r && r.ok) {
+          try {
+            wartungsplaene = await r.json();
+          } catch (eJson) {
+            wartungsplaene = JSON.parse(await r.text());
+          }
+          try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch (eSet) {}
         }
-        try { localStorage.setItem(WP_CACHE_KEY, JSON.stringify(wartungsplaene)); } catch (eSet) {}
       }
     }
   } catch (e) {
@@ -4566,6 +4572,7 @@ async function wpLoad() {
     console.warn("[WP] init UI failed:", e);
   }
 }
+
 
 
 
