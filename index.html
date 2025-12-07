@@ -2142,17 +2142,17 @@ document.addEventListener("DOMContentLoaded", function () {
   endTimeInput?.addEventListener("input", calculateDuration);
 
   // "Sonstige"-Felder & Selects
-  const maschineSelect           = document.getElementById("maschine");
-  const sonstigeMaschineInput    = document.getElementById("sonstige_maschine");
-  const labelSonstigeMaschine    = document.getElementById("label-sonstige-maschine");
+  const maschineSelect            = document.getElementById("maschine");
+  const sonstigeMaschineInput     = document.getElementById("sonstige_maschine");
+  const labelSonstigeMaschine     = document.getElementById("label-sonstige-maschine");
 
-  const anlagenteilSelect        = document.getElementById("anlagenteil");
-  const sonstigeAnlagenteilInput = document.getElementById("sonstige_anlagenteil");
-  const labelSonstigeAnlagenteil = document.getElementById("label-sonstige-anlagenteil");
+  const anlagenteilSelect         = document.getElementById("anlagenteil");
+  const sonstigeAnlagenteilInput  = document.getElementById("sonstige_anlagenteil");
+  const labelSonstigeAnlagenteil  = document.getElementById("label-sonstige-anlagenteil");
 
-  const reinigungsartSelect      = document.getElementById("reinigungsart_zusatz");
+  const reinigungsartSelect       = document.getElementById("reinigungsart_zusatz");
   const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
-  const labelSonstigeReinigungsart  = document.getElementById("label-sonstige_reinigungsart_zusatz");
+  const labelSonstigeReinigungsart = document.getElementById("label-sonstige_reinigungsart_zusatz");
 
   // NEU: Provisorium-Felder
   const provisoriumSelect   = document.getElementById("provisorium_aktiv");
@@ -2163,20 +2163,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateMaschineField() {
     const show = maschineSelect && maschineSelect.value === "Sonstige";
-    if (sonstigeMaschineInput) sonstigeMaschineInput.style.display = show ? "block" : "none";
-    if (labelSonstigeMaschine) labelSonstigeMaschine.style.display   = show ? "block" : "none";
+    if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
+    if (labelSonstigeMaschine)  labelSonstigeMaschine.style.display  = show ? "block" : "none";
   }
 
   function updateAnlagenteilField() {
     const show = anlagenteilSelect && anlagenteilSelect.value === "Sonstige";
     if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
-    if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display   = show ? "block" : "none";
+    if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
   }
 
   function updateReinigungsartField() {
     const show = reinigungsartSelect && reinigungsartSelect.value === "Sonstige";
-    if (sonstigeReinigungsartInput) sonstigeReinigungsartInput.style.display = show ? "block" : "none";
-    if (labelSonstigeReinigungsart) labelSonstigeReinigungsart.style.display   = show ? "block" : "none";
+    if (sonstigeReinigungsartInput)  sonstigeReinigungsartInput.style.display  = show ? "block" : "none";
+    if (labelSonstigeReinigungsart)  labelSonstigeReinigungsart.style.display  = show ? "block" : "none";
   }
 
   // Provisorium anzeigen/verstecken
@@ -2192,10 +2192,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  maschineSelect?.addEventListener("change", updateMaschineField);
-  anlagenteilSelect?.addEventListener("change", updateAnlagenteilField);
+  maschineSelect?.addEventListener("change",      updateMaschineField);
+  anlagenteilSelect?.addEventListener("change",   updateAnlagenteilField);
   reinigungsartSelect?.addEventListener("change", updateReinigungsartField);
-  provisoriumSelect?.addEventListener("change", updateProvisoriumField);
+  provisoriumSelect?.addEventListener("change",   updateProvisoriumField);
 
   // initialer Zustand
   updateMaschineField();
@@ -2273,15 +2273,23 @@ document.addEventListener("DOMContentLoaded", function () {
   loadMasterData().then(rebuildDropdownsFromMaster);
 
   // 📝 "Sonstige"-Werte dauerhaft übernehmen
+
   function tryAddCustomMaschine() {
     if (!sonstigeMaschineInput || !maschineSelect) return;
     const val = (sonstigeMaschineInput.value || "").trim();
     if (!val) return;
 
-    // 1) ins Dropdown
-    addOptionUnique(maschineSelect, val, { autoselect: true });
+    // 1) ins Dropdown einfügen
+    if (typeof addOptionUnique === "function") {
+      addOptionUnique(maschineSelect, val);   // ohne autoselect
+    } else {
+      maschineSelect.add(new Option(val, val));
+    }
 
-    // 2) in masterData
+    // 2) Auswahl WIRKLICH auf den neuen Wert setzen (wichtig für Pflichtfeld)
+    maschineSelect.value = val;
+
+    // 3) in masterData übernehmen
     if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
     const exists = masterData.maschinen.some(
       x => String(x || "").toLowerCase() === val.toLowerCase()
@@ -2294,7 +2302,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (typeof saveMasterData === "function") saveMasterData();
     }
 
-    // 3) Textfeld leeren & ausblenden
+    // 4) Textfeld leeren & ausblenden
     sonstigeMaschineInput.value = "";
     updateMaschineField();
   }
@@ -2304,8 +2312,17 @@ document.addEventListener("DOMContentLoaded", function () {
     const val = (sonstigeAnlagenteilInput.value || "").trim();
     if (!val) return;
 
-    addOptionUnique(anlagenteilSelect, val, { autoselect: true });
+    // 1) ins Dropdown einfügen
+    if (typeof addOptionUnique === "function") {
+      addOptionUnique(anlagenteilSelect, val);
+    } else {
+      anlagenteilSelect.add(new Option(val, val));
+    }
 
+    // 2) Auswahl auf den neuen Wert setzen
+    anlagenteilSelect.value = val;
+
+    // 3) in masterData übernehmen
     if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
     const exists = masterData.anlagenteile.some(
       x => String(x || "").toLowerCase() === val.toLowerCase()
@@ -2318,6 +2335,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (typeof saveMasterData === "function") saveMasterData();
     }
 
+    // 4) Textfeld leeren & ausblenden
     sonstigeAnlagenteilInput.value = "";
     updateAnlagenteilField();
   }
