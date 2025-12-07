@@ -2154,7 +2154,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
   const labelSonstigeReinigungsart = document.getElementById("label-sonstige_reinigungsart_zusatz");
 
-  // NEU: Provisorium-Felder
+  // Provisorium-Felder
   const provisoriumSelect   = document.getElementById("provisorium_aktiv");
   const provisoriumDetails  = document.getElementById("provisorium_details");
   const provisoriumArtInput = document.getElementById("provisorium_art");
@@ -2179,7 +2179,6 @@ document.addEventListener("DOMContentLoaded", function () {
     if (labelSonstigeReinigungsart)  labelSonstigeReinigungsart.style.display  = show ? "block" : "none";
   }
 
-  // Provisorium anzeigen/verstecken
   function updateProvisoriumField() {
     if (!provisoriumSelect || !provisoriumDetails) return;
     const show = provisoriumSelect.value === "Ja";
@@ -2212,16 +2211,15 @@ document.addEventListener("DOMContentLoaded", function () {
   function pruneToBase(selectEl, baseValues) {
     if (!selectEl) return;
     Array.from(selectEl.options).forEach(o => {
-      if (!baseValues.includes(o.value)) o.remove(); // alle dynamischen raus
+      if (!baseValues.includes(o.value)) o.remove();
     });
-    if (!baseValues.includes(selectEl.value)) selectEl.value = ""; // ungültige Auswahl zurücksetzen
+    if (!baseValues.includes(selectEl.value)) selectEl.value = "";
   }
 
   function rebuildDropdownsFromMaster() {
     const selM = document.getElementById("maschine");
     const selA = document.getElementById("anlagenteil");
 
-    // aktuelle Auswahl sichern (Value + sichtbarer Text)
     const keep = (sel) => sel ? {
       value: sel.value,
       text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
@@ -2273,23 +2271,22 @@ document.addEventListener("DOMContentLoaded", function () {
   loadMasterData().then(rebuildDropdownsFromMaster);
 
   // 📝 "Sonstige"-Werte dauerhaft übernehmen
-
   function tryAddCustomMaschine() {
     if (!sonstigeMaschineInput || !maschineSelect) return;
-    const val = (sonstigeMaschineInput.value || "").trim();
+    let val = (sonstigeMaschineInput.value || "").trim();
     if (!val) return;
 
-    // 1) ins Dropdown einfügen
+    // 1) ins Dropdown einfügen (falls addOptionUnique existiert)
     if (typeof addOptionUnique === "function") {
-      addOptionUnique(maschineSelect, val);   // ohne autoselect
+      addOptionUnique(maschineSelect, val);
     } else {
       maschineSelect.add(new Option(val, val));
     }
 
-    // 2) Auswahl WIRKLICH auf den neuen Wert setzen (wichtig für Pflichtfeld)
+    // 2) Auswahl auf den neuen Wert setzen (wichtig fürs Pflichtfeld!)
     maschineSelect.value = val;
 
-    // 3) in masterData übernehmen
+    // 3) Stammdaten-Array aktualisieren
     if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
     const exists = masterData.maschinen.some(
       x => String(x || "").toLowerCase() === val.toLowerCase()
@@ -2299,6 +2296,8 @@ document.addEventListener("DOMContentLoaded", function () {
       masterData.maschinen.sort((a,b) =>
         a.localeCompare(b,"de",{sensitivity:"base"})
       );
+      // auch Basisliste aktualisieren, damit pruneToBase den Eintrag nicht wieder entfernt
+      if (!baseMaschineValues.includes(val)) baseMaschineValues.push(val);
       if (typeof saveMasterData === "function") saveMasterData();
     }
 
@@ -2309,20 +2308,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function tryAddCustomAnlagenteil() {
     if (!sonstigeAnlagenteilInput || !anlagenteilSelect) return;
-    const val = (sonstigeAnlagenteilInput.value || "").trim();
+    let val = (sonstigeAnlagenteilInput.value || "").trim();
     if (!val) return;
 
-    // 1) ins Dropdown einfügen
     if (typeof addOptionUnique === "function") {
       addOptionUnique(anlagenteilSelect, val);
     } else {
       anlagenteilSelect.add(new Option(val, val));
     }
 
-    // 2) Auswahl auf den neuen Wert setzen
     anlagenteilSelect.value = val;
 
-    // 3) in masterData übernehmen
     if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
     const exists = masterData.anlagenteile.some(
       x => String(x || "").toLowerCase() === val.toLowerCase()
@@ -2332,10 +2328,10 @@ document.addEventListener("DOMContentLoaded", function () {
       masterData.anlagenteile.sort((a,b) =>
         a.localeCompare(b,"de",{sensitivity:"base"})
       );
+      if (!baseAnlagenteilValues.includes(val)) baseAnlagenteilValues.push(val);
       if (typeof saveMasterData === "function") saveMasterData();
     }
 
-    // 4) Textfeld leeren & ausblenden
     sonstigeAnlagenteilInput.value = "";
     updateAnlagenteilField();
   }
@@ -2348,9 +2344,29 @@ document.addEventListener("DOMContentLoaded", function () {
     sonstigeAnlagenteilInput.addEventListener("blur", tryAddCustomAnlagenteil);
   }
 
-  // KEINE extra change-Listener mehr, die tryAddCustom* erneut aufrufen
+  // 🔁 EXTRA-SICHERHEIT:
+  // Falls Blur mal nicht feuert, wird beim Absenden noch einmal versucht,
+  // aus "Sonstige" + Text einen echten Wert zu machen, BEVOR validiert wird.
+  const form = document.querySelector("form");
+  if (form) {
+    form.addEventListener("submit", function () {
+      if (maschineSelect &&
+          maschineSelect.value === "Sonstige" &&
+          sonstigeMaschineInput &&
+          sonstigeMaschineInput.value.trim()) {
+        tryAddCustomMaschine();
+      }
+      if (anlagenteilSelect &&
+          anlagenteilSelect.value === "Sonstige" &&
+          sonstigeAnlagenteilInput &&
+          sonstigeAnlagenteilInput.value.trim()) {
+        tryAddCustomAnlagenteil();
+      }
+    }, true); // capture = true → läuft vor der eigentlichen Validierung
+  }
 });
 </script>
+
 
 
 
