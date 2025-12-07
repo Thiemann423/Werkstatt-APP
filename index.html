@@ -1089,7 +1089,7 @@ function _cacheLocal(list) {
 }
 
 async function _loadAll() {
-  // 0) lokaler Standard
+  // 0) lokalen Cache lesen
   let list = [];
   try {
     const raw = localStorage.getItem(WP_WARTUNG_STORAGE_KEY);
@@ -1099,14 +1099,22 @@ async function _loadAll() {
     }
   } catch (_) {}
 
-  // 1) Ohne Login oder TARGET keine Cloud-Versuche
-  if (!window.accessToken || !window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-    console.log("[WP] _loadAll – nutze nur lokalen Cache:", list);
+  // 1) ohne Login oder Zielordner nur lokalen Cache verwenden
+  if (!window.accessToken) {
+    console.log("[WP] _loadAll – kein AccessToken, nutze nur lokalen Cache:", list);
     return list;
   }
 
   try {
-    // wie bei Stammdaten / Wartungsplänen: Datei direkt über Pfad holen
+    // sicherstellen, dass TARGET gesetzt ist
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      await resolveShareLinkToFolder();
+    }
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      console.warn("[WP] _loadAll – TARGET nicht initialisiert, nutze lokalen Cache.");
+      return list;
+    }
+
     const url =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
       `/items/${TARGET.parentItemId}:/${encodeURIComponent(WP_WARTUNG_CLOUD_FILENAME)}:/content`;
@@ -1117,7 +1125,7 @@ async function _loadAll() {
     });
 
     if (res.status === 404) {
-      // Datei existiert noch nicht -> leere Liste, aber lokalen Cache überschreiben
+      // Datei gibt es noch nicht → leere Liste, aber lokalen Cache aktualisieren
       console.log("[WP] _loadAll – wartungslog.json existiert noch nicht, starte leer.");
       list = [];
       _cacheLocal(list);
@@ -1125,7 +1133,7 @@ async function _loadAll() {
     }
 
     if (!res.ok) {
-      console.warn("[WP] _loadAll – Cloud antwortet nicht OK, nutze lokalen Cache:", res.status);
+      console.warn("[WP] _loadAll – Cloud nicht OK, nutze lokalen Cache:", res.status);
       return list;
     }
 
@@ -1135,7 +1143,7 @@ async function _loadAll() {
       _cacheLocal(list);
       console.log("[WP] _loadAll – aus Cloud geladen:", list);
     } else {
-      console.warn("[WP] _loadAll – Cloud-Daten waren kein Array, nutze lokalen Cache.");
+      console.warn("[WP] _loadAll – Cloud-Daten kein Array, nutze lokalen Cache.");
     }
   } catch (err) {
     console.warn("[WP] _loadAll – Cloud-Load fehlgeschlagen, nutze lokalen Cache:", err);
@@ -1147,17 +1155,25 @@ async function _loadAll() {
 async function _saveAll(list) {
   const payload = Array.isArray(list) ? list : [];
 
-  // 1) immer lokal cachen
+  // 1) immer lokal speichern
   _cacheLocal(payload);
   console.log("[WP] _saveAll – lokal gespeichert:", payload);
 
-  // 2) wenn kein Login / TARGET -> hier aufhören, damit es lokal wenigstens funktioniert
-  if (!window.accessToken || !window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-    console.warn("[WP] _saveAll – kein Cloud-Zugriff (kein Token oder TARGET), nur lokal gespeichert.");
+  // 2) Cloud nur, wenn wir alles wissen
+  if (!window.accessToken) {
+    console.warn("[WP] _saveAll – kein AccessToken, nur lokal gespeichert.");
     return false;
   }
 
   try {
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      await resolveShareLinkToFolder();
+    }
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      console.warn("[WP] _saveAll – TARGET nicht initialisiert, nur lokal gespeichert.");
+      return false;
+    }
+
     const url =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
       `/items/${TARGET.parentItemId}:/${encodeURIComponent(WP_WARTUNG_CLOUD_FILENAME)}:/content`;
@@ -1184,6 +1200,7 @@ async function _saveAll(list) {
     return false;
   }
 }
+
 
 
 
@@ -4552,16 +4569,36 @@ async function wpLoad() {
 
 // Speichern (Cache + OneDrive)
 async function wpSave(){
+  // immer lokal
   try { localStorage.setItem("TE15_WARTUNGSPLAENE", JSON.stringify(wartungsplaene)); } catch {}
   wpRebuildIndex();
 
-  if (!window.accessToken || !window.TARGET_META_ITEM_ID) return;
-  const url = `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}:/${encodeURIComponent(WP_FILE)}:/content`;
-  const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], { type:"application/json" });
+  // ohne Login / Zielordner keine Cloud-Speicherung
+  if (!window.accessToken) return;
+  if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    try { await resolveShareLinkToFolder(); } catch (_) {}
+  }
+  if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) return;
+
+  const url =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${TARGET.parentItemId}:/${encodeURIComponent(WP_FILE)}:/content`;
+
+  const blob = new Blob([JSON.stringify(wartungsplaene, null, 2)], {
+    type:"application/json"
+  });
+
   try{
-    await fetch(url, { method:"PUT", headers:{Authorization:`Bearer ${accessToken}`}, body:blob });
-  }catch(e){ console.warn("wpSave()", e); }
+    await fetch(url, {
+      method:"PUT",
+      headers:{ Authorization:`Bearer ${accessToken}` },
+      body: blob
+    });
+  }catch(e){
+    console.warn("wpSave() – Cloud-Speicher fehlgeschlagen:", e);
+  }
 }
+
 
 
 
