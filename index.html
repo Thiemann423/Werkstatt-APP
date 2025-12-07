@@ -2553,9 +2553,6 @@ window.addEventListener('load', function() {
       );
       if (createMeta.ok) meta = await createMeta.json();
     }
-    TARGET_META_ITEM_ID = meta?.id || null;
-
-    // --- Cache schreiben (inkl. IDs der Unterordner) ---
     localStorage.setItem("TARGET_CACHE", JSON.stringify({
       shareUrl:      SHARE_URL,
       driveId:       TARGET.driveId,
@@ -2563,7 +2560,12 @@ window.addEventListener('load', function() {
       draftsItemId:  TARGET_DRAFTS_ITEM_ID,
       metaItemId:    TARGET_META_ITEM_ID
     }));
+
+    // ➕ WICHTIG: Globale Variablen für alle anderen Module setzen
+    window.TARGET             = TARGET;
+    window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
   }
+
 
 // 3) Login/Token nur per Redirect
 async function signInAndAcquireToken(
