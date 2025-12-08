@@ -5153,46 +5153,49 @@ function setupWartungsplanUI(){
       if (typeof wpEvalWarning         === "function") wpEvalWarning();
       if (typeof wpUpdateGlobalBanner  === "function") wpUpdateGlobalBanner();
       if (typeof wpSyncPrintSummary    === "function") wpSyncPrintSummary(null);
+      if (typeof wpSyncImageButton     === "function") wpSyncImageButton(null);   // 👈 Button verstecken
     };
   }
 
   // ── Aufgabe geändert ──────────────────────────────────────────────
-// ── Aufgabe geändert ──────────────────────────────────────────────
-if (E.selTask){
-  E.selTask.onchange = function(){
+  if (E.selTask){
+    E.selTask.onchange = function(){
+      const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
+      if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
+
+      // Intervall nur vorschlagen, wenn im Datensatz noch keins steht
+      if (!t || !toInt((t && t.intervalDays), "")) {
+        try { if (typeof wpApplyMailRules === "function") wpApplyMailRules({ force:false }); } catch (e) {}
+      }
+
+      if (typeof wpUpdateGlobalBanner === "function")  wpUpdateGlobalBanner();
+      if (typeof wpSyncPrintSummary   === "function")  wpSyncPrintSummary(t);
+      if (typeof wpSyncImageButton    === "function")  wpSyncImageButton(t);      // 👈 Button setzen
+    };
+  }
+
+  // Eingaben → Fälligkeit neu berechnen
+  if (E.interval) E.interval.addEventListener('input', function(){
+    if (typeof wpRecalc === "function") wpRecalc();
+  });
+
+  // NEU: "Zuletzt durchgeführt"
+  if (E.last) E.last.addEventListener('change', async function(){
     const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
-    if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
-    if (typeof wpEvalWarning         === "function") wpEvalWarning();
-    if (typeof wpUpdateGlobalBanner === "function")  wpUpdateGlobalBanner();
-    if (typeof wpSyncPrintSummary   === "function")  wpSyncPrintSummary(t);
+    if (!t) return;
 
-    // ➕ NEU: Bilder-Button für diese Aufgabe setzen
-    if (typeof wpSyncImageButton === "function")     wpSyncImageButton(t);
-  };
-}
+    let v = (E.last.value || "").trim();
+    const mm = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (mm) { v = mm[3] + '-' + mm[2] + '-' + mm[1]; E.last.value = v; }
+    t.lastDateISO = (/^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : "";
 
-
-// Eingaben → Fälligkeit neu berechnen
-if (E.interval) E.interval.addEventListener('input', function(){
-  if (typeof wpRecalc === "function") wpRecalc();
-});
-
-// NEU: "Zuletzt durchgeführt"
-if (E.last) E.last.addEventListener('change', async function(){
-  const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
-  if (!t) return;
-
-  let v = (E.last.value || "").trim();
-  const mm = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (mm) { v = mm[3] + '-' + mm[2] + '-' + mm[1]; E.last.value = v; }
-  t.lastDateISO = (/^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : "";
-
-  if (typeof wpSave        === "function") await wpSave();
-  if (typeof wpRecalc      === "function") wpRecalc();
-  if (typeof wpEvalWarning === "function") wpEvalWarning();
-  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
-  if (typeof wpSyncPrintSummary   === "function") wpSyncPrintSummary(t);
-});
+    if (typeof wpSave        === "function") await wpSave();
+    if (typeof wpRecalc      === "function") wpRecalc();
+    if (typeof wpEvalWarning === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary   === "function") wpSyncPrintSummary(t);
+    if (typeof wpSyncImageButton    === "function") wpSyncImageButton(t);        // 👈 Button aktualisieren
+  });
 
 // (5) ── Neue Aufgabe anlegen ──────────────────────────────────────
 if (E.btnAdd) E.btnAdd.addEventListener('click', async function(){
@@ -5323,25 +5326,31 @@ if (typeof wpSyncPrintSummary    === "function") wpSyncPrintSummary(initTask);
 
 /* ---------- Init ---------- */
 
-document.addEventListener("DOMContentLoaded", async function(){
+document.addEventListener("DOMContentLoaded", async function () {
   if (typeof wpLoad    === "function") await wpLoad();
   if (typeof wpLogLoad === "function") await wpLogLoad();
 
-  setupWartungsplanUI();
+  // Wartungs-UI initialisieren
+  if (typeof setupWartungsplanUI === "function") setupWartungsplanUI();
 
-  if (typeof wpRefreshTaskList     === "function") wpRefreshTaskList();
+  // aktuellen Task holen und alle Anzeigen synchronisieren
+  if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
   const cur = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
+
   if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(cur);
   if (typeof wpEvalWarning         === "function") wpEvalWarning();
   if (typeof wpUpdateGlobalBanner  === "function") wpUpdateGlobalBanner();
   if (typeof wpSyncPrintSummary    === "function") wpSyncPrintSummary(cur);
+  if (typeof wpSyncImageButton     === "function") wpSyncImageButton(cur);  // 👈 neu: Bild-Button setzen
 
+  // Überfällige Aufgaben prüfen (wie bisher)
   try {
     if (typeof window.wpCheckOverdueAndNotify === "function") {
-      window.wpCheckOverdueAndNotify({ sendMail:false });
+      window.wpCheckOverdueAndNotify({ sendMail: false });
     }
   } catch (e) {}
 });
+
 </script>
 
 
