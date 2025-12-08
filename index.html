@@ -4874,36 +4874,8 @@ function wpStatusUpdateForTask(task){
 }
 
 
-/* ---------- Fälligkeiten & Banner ---------- */
 function wpOverdueTasks(machineName){
   const tasks = wartungsplaene[machineName] || _wpIdx[wpNorm(machineName)] || [];
-  // 📷 Bilder-Button setzen
-const imageBtn = document.getElementById("wpImageBtn");
-if (imageBtn){
-  imageBtn.remove();
-}
-
-if (task.images && task.images.length){
-  const btn = document.createElement("button");
-  btn.id = "wpImageBtn";
-  btn.textContent = "📷 Bilder anzeigen";
-  btn.className = "no-print";
-  btn.style.marginTop = "10px";
-  btn.style.padding = "8px 12px";
-  btn.style.borderRadius = "8px";
-  btn.style.border = "0";
-  btn.style.cursor = "pointer";
-  btn.style.background = "#0d6efd";
-  btn.style.color = "white";
-
-  btn.onclick = function(){
-    openImageModal(task.images);
-  };
-
-  // Button unter dem Wartungsbereich einhängen:
-  document.getElementById("wpPanel")?.appendChild(btn);
-}
-
 
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
@@ -4912,6 +4884,7 @@ if (task.images && task.images.length){
     return wpStatus(next).level === "overdue";
   });
 }
+
 
 // Alle Maschinen prüfen und überfällige Aufgaben einsammeln
 function wpOverdueAll(){
