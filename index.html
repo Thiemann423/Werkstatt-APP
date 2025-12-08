@@ -6510,35 +6510,46 @@ function openImageModal(images){
   const modal = document.getElementById("imageModal");
   const box   = document.getElementById("imageModalContent");
 
+  // Container konfigurieren: vertikal, mit Scroll
   box.innerHTML = "";
+  box.style.display = "block";
+  box.style.overflowY = "auto";
+  box.style.maxHeight = "90vh";
+  box.style.padding = "10px";
 
   if (!images || !images.length){
-    box.innerHTML = "<p style='color:white;font-size:20px'>Keine Bilder vorhanden</p>";
+    box.innerHTML = "<p style='color:white;font-size:20px;text-align:center;'>Keine Bilder vorhanden</p>";
   } else {
-    images.forEach(img => {
+    images.forEach((img, index) => {
       const wrap = document.createElement("div");
       wrap.style.textAlign = "center";
       wrap.style.color = "white";
+      wrap.style.marginBottom = "20px";
+
+      const title = document.createElement("div");
+      title.textContent = (img.title || "") + (images.length > 1 ? ` (${index+1}/${images.length})` : "");
+      title.style.marginBottom = "6px";
+      title.style.fontSize = "18px";
+      title.style.fontWeight = "bold";
 
       const image = document.createElement("img");
       image.src = img.src;
-      image.style.maxWidth = "280px";
+      image.style.maxWidth = "90%";
+      image.style.maxHeight = "70vh";
       image.style.borderRadius = "10px";
       image.style.boxShadow = "0 0 10px black";
+      image.style.display = "block";
+      image.style.margin = "0 auto";
 
-      const title = document.createElement("div");
-      title.textContent = img.title || "";
-      title.style.marginTop = "6px";
-      title.style.fontSize = "14px";
-
-      wrap.appendChild(image);
       wrap.appendChild(title);
+      wrap.appendChild(image);
       box.appendChild(wrap);
     });
   }
 
   modal.style.display = "flex";
 }
+
 
 // schließt das Bilder-Fenster
 function closeImageModal(){
