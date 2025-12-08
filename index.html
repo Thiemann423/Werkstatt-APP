@@ -4877,6 +4877,34 @@ function wpStatusUpdateForTask(task){
 /* ---------- Fälligkeiten & Banner ---------- */
 function wpOverdueTasks(machineName){
   const tasks = wartungsplaene[machineName] || _wpIdx[wpNorm(machineName)] || [];
+  // 📷 Bilder-Button setzen
+const imageBtn = document.getElementById("wpImageBtn");
+if (imageBtn){
+  imageBtn.remove();
+}
+
+if (task.images && task.images.length){
+  const btn = document.createElement("button");
+  btn.id = "wpImageBtn";
+  btn.textContent = "📷 Bilder anzeigen";
+  btn.className = "no-print";
+  btn.style.marginTop = "10px";
+  btn.style.padding = "8px 12px";
+  btn.style.borderRadius = "8px";
+  btn.style.border = "0";
+  btn.style.cursor = "pointer";
+  btn.style.background = "#0d6efd";
+  btn.style.color = "white";
+
+  btn.onclick = function(){
+    openImageModal(task.images);
+  };
+
+  // Button unter dem Wartungsbereich einhängen:
+  document.getElementById("wpPanel")?.appendChild(btn);
+}
+
+
   return tasks.filter(t => {
     const inter = toInt(t.intervalDays || 0, 0);
     const last  = isIsoDate(t.lastDateISO) ? t.lastDateISO : "";
@@ -5129,20 +5157,20 @@ function setupWartungsplanUI(){
   }
 
   // ── Aufgabe geändert ──────────────────────────────────────────────
-  if (E.selTask){
-    E.selTask.onchange = function(){
-      const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
-      if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
+// ── Aufgabe geändert ──────────────────────────────────────────────
+if (E.selTask){
+  E.selTask.onchange = function(){
+    const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
+    if (typeof wpStatusUpdateForTask === "function") wpStatusUpdateForTask(t);
+    if (typeof wpEvalWarning         === "function") wpEvalWarning();
+    if (typeof wpUpdateGlobalBanner === "function")  wpUpdateGlobalBanner();
+    if (typeof wpSyncPrintSummary   === "function")  wpSyncPrintSummary(t);
 
-      // Intervall nur vorschlagen, wenn im Datensatz noch keins steht
-      if (!t || !toInt((t && t.intervalDays), "")) {
-        try { if (typeof wpApplyMailRules === "function") wpApplyMailRules({ force:false }); } catch (e) {}
-      }
+    // ➕ NEU: Bilder-Button für diese Aufgabe setzen
+    if (typeof wpSyncImageButton === "function")     wpSyncImageButton(t);
+  };
+}
 
-      if (typeof wpUpdateGlobalBanner === "function")  wpUpdateGlobalBanner();
-      if (typeof wpSyncPrintSummary   === "function")  wpSyncPrintSummary(t);
-    };
-  }
 
 // Eingaben → Fälligkeit neu berechnen
 if (E.interval) E.interval.addEventListener('input', function(){
@@ -6477,6 +6505,96 @@ window.addEventListener("load", async function () {
 });
 </script>
 
+<!-- 📷 Bilder-Popup -->
+<div id="imageModal" class="no-print"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);
+            z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+
+  <button onclick="closeImageModal()"
+          style="position:absolute;top:20px;right:20px;
+                 font-size:26px;background:#fff;border:0;border-radius:8px;
+                 padding:6px 14px;cursor:pointer;">
+    ✖
+  </button>
+
+  <div id="imageModalContent"
+       style="max-width:95%;max-height:90%;display:flex;
+              gap:20px;flex-wrap:wrap;justify-content:center;">
+  </div>
+</div>
+<script>
+// öffnet das Bilder-Fenster
+function openImageModal(images){
+  const modal = document.getElementById("imageModal");
+  const box   = document.getElementById("imageModalContent");
+
+  box.innerHTML = "";
+
+  if (!images || !images.length){
+    box.innerHTML = "<p style='color:white;font-size:20px'>Keine Bilder vorhanden</p>";
+  } else {
+    images.forEach(img => {
+      const wrap = document.createElement("div");
+      wrap.style.textAlign = "center";
+      wrap.style.color = "white";
+
+      const image = document.createElement("img");
+      image.src = img.src;
+      image.style.maxWidth = "280px";
+      image.style.borderRadius = "10px";
+      image.style.boxShadow = "0 0 10px black";
+
+      const title = document.createElement("div");
+      title.textContent = img.title || "";
+      title.style.marginTop = "6px";
+      title.style.fontSize = "14px";
+
+      wrap.appendChild(image);
+      wrap.appendChild(title);
+      box.appendChild(wrap);
+    });
+  }
+
+  modal.style.display = "flex";
+}
+
+// schließt das Bilder-Fenster
+function closeImageModal(){
+  document.getElementById("imageModal").style.display = "none";
+}
+
+// sorgt für den "📷 Bilder anzeigen"-Button
+function wpSyncImageButton(task){
+  var panel = document.getElementById("wartungsplanPanel");
+  if (!panel) return;
+
+  // alten Button entfernen
+  var old = document.getElementById("wpImageBtn");
+  if (old) old.remove();
+
+  // kein Task oder keine Bilder → kein Button
+  if (!task || !task.images || !task.images.length) return;
+
+  var btn = document.createElement("button");
+  btn.id = "wpImageBtn";
+  btn.type = "button";
+  btn.textContent = "📷 Bilder anzeigen";
+  btn.className = "no-print";
+  btn.style.marginTop = "10px";
+  btn.style.padding = "8px 12px";
+  btn.style.borderRadius = "8px";
+  btn.style.border = "0";
+  btn.style.cursor = "pointer";
+  btn.style.background = "#0d6efd";
+  btn.style.color = "white";
+
+  btn.addEventListener("click", function(){
+    openImageModal(task.images);
+  });
+
+  panel.appendChild(btn);
+}
+</script>
 
 
 
