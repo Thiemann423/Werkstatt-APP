@@ -2219,139 +2219,159 @@ document.addEventListener("DOMContentLoaded", function () {
   updateReinigungsartField();
   updateProvisoriumField();
   // ------------------------------------
-  // Offene Provisorien für Dropdown laden
-  // ------------------------------------
-  // ------------------------------------
-  // Offene Provisorien für Dropdown laden
-  // ------------------------------------
-  async function loadOpenProvisoriumOptions() {
-    const sel = document.getElementById("provisorium_bezug_auftrag_id");
-    if (!sel) return;
+async function loadOpenProvisoriumOptions() {
+  const sel = document.getElementById("provisorium_bezug_auftrag_id");
+  if (!sel) return;
 
-    // Grundoption
-    sel.innerHTML =
-      '<option value="">Kein Bezug / neues Provisorium</option>';
+  // Grundoption
+  sel.innerHTML =
+    '<option value="">Kein Bezug / neues Provisorium</option>';
 
-    // Falls noch kein Token da ist: versuchen, eins zu holen
-    if (!accessToken) {
-      if (typeof signInAndAcquireToken === "function") {
-        try {
-          // versucht zuerst still ein Token zu holen, sonst Login-Popup
-          await signInAndAcquireToken(true);
-        } catch (e) {
-          console.warn("loadOpenProvisoriumOptions – kein Zugriff auf Graph:", e);
-          return; // ohne Token können wir die Liste nicht aus OneDrive laden
-        }
-      } else {
-        // Sicherheitsnetz: Funktion existiert nicht
-        console.warn("loadOpenProvisoriumOptions – signInAndAcquireToken fehlt");
-        return;
-      }
-    }
-
-    // ab hier solltest du ein accessToken haben
-    await resolveShareLinkToFolder();
-    if (!TARGET.driveId || !TARGET.parentItemId) return;
-
-    const headers     = { Authorization: `Bearer ${accessToken}` };
-    const META_SUFFIX = ".meta.json";
-    let   metaItems   = [];
-
-    // 1) Meta-Ordner, falls vorhanden
-    if (window.TARGET_META_ITEM_ID) {
-      const listMetaUrl =
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-        `/items/${TARGET_META_ITEM_ID}/children` +
-        `?$top=2000&$select=id,name,file`;
-      const res = await fetch(listMetaUrl, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        metaItems = (data.value || []).filter(
-          i => i.file && i.name.endsWith(META_SUFFIX)
-        );
-      }
-    }
-
-    // 2) Fallback Hauptordner
-    if (!metaItems.length) {
-      const listMainUrl =
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-        `/items/${TARGET.parentItemId}/children` +
-        `?$top=2000&$select=id,name,file`;
-      const res = await fetch(listMainUrl, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        metaItems = (data.value || []).filter(
-          i => i.file && i.name.endsWith(META_SUFFIX)
-        );
-      }
-    }
-
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const options  = [];
-
-    for (const m of metaItems) {
-      const mres = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
-        { headers }
-      );
-      if (!mres.ok) continue;
-
-      let meta;
+  // Falls noch kein Token da ist: versuchen, eins zu holen
+  if (!accessToken) {
+    if (typeof signInAndAcquireToken === "function") {
       try {
-        meta = await mres.json();
-      } catch {
-        continue;
+        // versucht zuerst still ein Token zu holen, sonst Login-Popup
+        await signInAndAcquireToken(true);
+      } catch (e) {
+        console.warn("loadOpenProvisoriumOptions – kein Zugriff auf Graph:", e);
+        return; // ohne Token können wir die Liste nicht aus OneDrive laden
       }
-
-// ✅ nur prüfen, OB es ein Provisorium ist
-if (meta.provisorium_aktiv !== "Ja") continue;
-
-// ✅ bis-Datum darf gelesen werden (für Anzeige), aber NICHT mehr gefiltert
-const bisIso = (meta.provisorium_bis || "").slice(0, 10);
-
-
- if (bisIso && bisIso < todayIso) continue;
-
-
-      const auftragsId =
-        meta.auftrags_id ||
-        meta.auftrag_id ||
-        m.name.replace(META_SUFFIX, "");
-
-      const maschine =
-        meta.maschine ||
-        meta.maschine_value ||
-        meta.maschine_text ||
-        meta.sonstige_maschine ||
-        "";
-
-      const teil =
-        meta.anlagenteil ||
-        meta.anlagenteil_value ||
-        meta.anlagenteil_text ||
-        meta.sonstige_anlagenteil ||
-        "";
-
-      const label =
-        `${auftragsId} – ${maschine}${teil ? " / " + teil : ""}`;
-
-      options.push({ value: auftragsId, label });
-    }
-
-    const collator = new Intl.Collator("de", {
-      numeric: true,
-      sensitivity: "base"
-    });
-    options.sort((a, b) => collator.compare(a.label, b.label));
-
-    for (const o of options) {
-      const opt = document.createElement("option");
-      opt.value = o.value;
-      opt.textContent = o.label;
-      sel.appendChild(opt);
+    } else {
+      // Sicherheitsnetz: Funktion existiert nicht
+      console.warn("loadOpenProvisoriumOptions – signInAndAcquireToken fehlt");
+      return;
     }
   }
+
+  // ab hier solltest du ein accessToken haben
+  await resolveShareLinkToFolder();
+  if (!TARGET.driveId || !TARGET.parentItemId) return;
+
+  const headers     = { Authorization: `Bearer ${accessToken}` };
+  const META_SUFFIX = ".meta.json";
+  let   metaItems   = [];
+
+  // 1) Meta-Ordner, falls vorhanden
+  if (window.TARGET_META_ITEM_ID) {
+    const listMetaUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET_META_ITEM_ID}/children` +
+      `?$top=2000&$select=id,name,file`;
+    const res = await fetch(listMetaUrl, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      metaItems = (data.value || []).filter(
+        i => i.file && i.name.endsWith(META_SUFFIX)
+      );
+    }
+  }
+
+  // 2) Fallback Hauptordner
+  if (!metaItems.length) {
+    const listMainUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET.parentItemId}/children` +
+      `?$top=2000&$select=id,name,file`;
+    const res = await fetch(listMainUrl, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      metaItems = (data.value || []).filter(
+        i => i.file && i.name.endsWith(META_SUFFIX)
+      );
+    }
+  }
+
+  // -------------------------
+  // Alle Metas einmal einlesen
+  // -------------------------
+  const metaList = []; // { meta, auftragsId, maschine, teil }
+
+  for (const m of metaItems) {
+    const mres = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
+      { headers }
+    );
+    if (!mres.ok) continue;
+
+    let meta;
+    try {
+      meta = await mres.json();
+    } catch {
+      continue;
+    }
+
+    const auftragsId =
+      meta.auftrags_id ||
+      meta.auftrag_id ||
+      m.name.replace(META_SUFFIX, "");
+
+    const maschine =
+      meta.maschine ||
+      meta.maschine_value ||
+      meta.maschine_text ||
+      meta.sonstige_maschine ||
+      "";
+
+    const teil =
+      meta.anlagenteil ||
+      meta.anlagenteil_value ||
+      meta.anlagenteil_text ||
+      meta.sonstige_anlagenteil ||
+      "";
+
+    metaList.push({ meta, auftragsId, maschine, teil });
+  }
+
+  // ----------------------------------------
+  // Menge aller bereits "aufgelösten" IDs
+  // (also IDs, die in provisorium_bezug_auftrag_id vorkommen)
+  // ----------------------------------------
+  const resolvedSet = new Set();
+
+  for (const { meta } of metaList) {
+    const ref = (meta.provisorium_bezug_auftrag_id || "").trim();
+    if (ref) resolvedSet.add(ref);
+  }
+
+  // ----------------------------------------
+  // Dropdown nur mit offenen Provisorien befüllen:
+  // - provisorium_aktiv === "Ja"
+  // - auftragsId NICHT in resolvedSet
+  // ----------------------------------------
+  const options = [];
+
+  for (const { meta, auftragsId, maschine, teil } of metaList) {
+    // ✅ nur echte Provisorien
+    if (meta.provisorium_aktiv !== "Ja") continue;
+
+    // ✅ bereits von anderem Auftrag "abgearbeitet"? -> nicht anzeigen
+    if (resolvedSet.has(auftragsId)) continue;
+
+    // ✅ bis-Datum darf gelesen werden (für Anzeige / Status),
+    //    aber NICHT mehr zum Filtern verwendet werden
+    // const bisIso = (meta.provisorium_bis || "").slice(0, 10);
+
+    const label =
+      `${auftragsId} – ${maschine}${teil ? " / " + teil : ""}`;
+
+    options.push({ value: auftragsId, label });
+  }
+
+  const collator = new Intl.Collator("de", {
+    numeric: true,
+    sensitivity: "base"
+  });
+  options.sort((a, b) => collator.compare(a.label, b.label));
+
+  for (const o of options) {
+    const opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.label;
+    sel.appendChild(opt);
+  }
+}
+
 
   // Beim Laden der Seite gleich einmal befüllen
   loadOpenProvisoriumOptions().catch(console.error);
