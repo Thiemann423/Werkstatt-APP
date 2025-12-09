@@ -1733,7 +1733,7 @@ window.addEventListener("load", function(){
          placeholder="Bitte angeben..."
          style="display:none;margin-top:5px;width:100%;padding:6px;">
 </div>
-<!-- ⬇️ HIER kommt jetzt der neue Provisorium-Block rein -->
+<!-- ⬇️ Provisorium-Block mit Bezug auf bestehenden Auftrag -->
 <div class="section" style="margin-bottom:12px;">
   <label for="provisorium_aktiv" style="display:block;font-weight:bold;">
     Provisorium eingebaut?
@@ -1747,6 +1747,7 @@ window.addEventListener("load", function(){
   <div id="provisorium_details"
        style="display:none;margin-top:10px;border:1px solid #ddd;padding:10px;border-radius:6px;">
 
+    <!-- Art des Provisoriums -->
     <div style="margin-bottom:10px;">
       <label for="provisorium_art" style="font-weight:bold;display:block;">
         Art des Provisoriums
@@ -1756,7 +1757,8 @@ window.addEventListener("load", function(){
              style="width:100%;padding:6px;">
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <!-- Gültigkeitszeitraum -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
       <div>
         <label for="provisorium_von" style="font-weight:bold;display:block;">
           Provisorium gültig von
@@ -1775,8 +1777,23 @@ window.addEventListener("load", function(){
       </div>
     </div>
 
+    <!-- ⬇️ NEU: Bezug auf bestehendes Provisorium -->
+    <div style="margin-top:4px;">
+      <label for="provisorium_bezug_auftrag_id" style="font-weight:bold;display:block;">
+        Bezieht sich auf Provisorium aus Auftrag-ID (optional)
+      </label>
+      <select id="provisorium_bezug_auftrag_id" name="provisorium_bezug_auftrag_id"
+              style="width:100%;padding:6px;">
+        <option value="">Kein Bezug / neues Provisorium</option>
+      </select>
+      <small style="display:block;margin-top:4px;font-size:12px;color:#666;">
+        Nur ausfüllen, wenn dieser Auftrag ein bestehendes Provisorium aufhebt.
+      </small>
+    </div>
+
   </div>
 </div>
+
 <!-- ⬆️ Ende Provisorium -->
 <!-- ⬇️ HIER EINSETZEN: Wartungsplan-Panel -->
 <div class="section" id="wartungsplanSection" style="margin:16px 0;">
@@ -2201,6 +2218,123 @@ document.addEventListener("DOMContentLoaded", function () {
   updateAnlagenteilField();
   updateReinigungsartField();
   updateProvisoriumField();
+  // ------------------------------------
+  // Offene Provisorien für Dropdown laden
+  // ------------------------------------
+  async function loadOpenProvisoriumOptions() {
+    const sel = document.getElementById("provisorium_bezug_auftrag_id");
+    if (!sel) return;
+
+    // Grundoption
+    sel.innerHTML =
+      '<option value="">Kein Bezug / neues Provisorium</option>';
+
+    if (!accessToken) {
+      // ohne Login gibt es keine zentrale Liste – Formular funktioniert trotzdem
+      return;
+    }
+
+    await resolveShareLinkToFolder();
+    if (!TARGET.driveId || !TARGET.parentItemId) return;
+
+    const headers    = { Authorization: `Bearer ${accessToken}` };
+    const META_SUFFIX = ".meta.json";
+    let metaItems    = [];
+
+    // 1) Meta-Ordner, falls vorhanden
+    if (window.TARGET_META_ITEM_ID) {
+      const listMetaUrl =
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+        `/items/${TARGET_META_ITEM_ID}/children` +
+        `?$top=2000&$select=id,name,file`;
+      const res = await fetch(listMetaUrl, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        metaItems = (data.value || []).filter(
+          i => i.file && i.name.endsWith(META_SUFFIX)
+        );
+      }
+    }
+
+    // 2) Fallback Hauptordner
+    if (!metaItems.length) {
+      const listMainUrl =
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+        `/items/${TARGET.parentItemId}/children` +
+        `?$top=2000&$select=id,name,file`;
+      const res = await fetch(listMainUrl, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        metaItems = (data.value || []).filter(
+          i => i.file && i.name.endsWith(META_SUFFIX)
+        );
+      }
+    }
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const options  = [];
+
+    for (const m of metaItems) {
+      const mres = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
+        { headers }
+      );
+      if (!mres.ok) continue;
+
+      let meta;
+      try {
+        meta = await mres.json();
+      } catch {
+        continue;
+      }
+
+      if (meta.provisorium_aktiv !== "Ja") continue;
+
+      const bisIso = (meta.provisorium_bis || "").slice(0, 10);
+      // nur offene / noch gültige Provisorien anbieten
+      if (bisIso && bisIso < todayIso) continue;
+
+      const auftragsId =
+        meta.auftrags_id ||
+        meta.auftrag_id ||
+        m.name.replace(META_SUFFIX, "");
+
+      const maschine =
+        meta.maschine ||
+        meta.maschine_value ||
+        meta.maschine_text ||
+        meta.sonstige_maschine ||
+        "";
+
+      const teil =
+        meta.anlagenteil ||
+        meta.anlagenteil_value ||
+        meta.anlagenteil_text ||
+        meta.sonstige_anlagenteil ||
+        "";
+
+      const label =
+        `${auftragsId} – ${maschine}${teil ? " / " + teil : ""}`;
+
+      options.push({ value: auftragsId, label });
+    }
+
+    const collator = new Intl.Collator("de", {
+      numeric: true,
+      sensitivity: "base"
+    });
+    options.sort((a, b) => collator.compare(a.label, b.label));
+
+    for (const o of options) {
+      const opt = document.createElement("option");
+      opt.value = o.value;
+      opt.textContent = o.label;
+      sel.appendChild(opt);
+    }
+  }
+
+  // Beim Laden der Seite gleich einmal befüllen
+  loadOpenProvisoriumOptions().catch(console.error);
 
   // 🔒 Basis-Optionen (HTML-Defaults) einmalig puffern
   const baseMaschineValues =
@@ -3124,7 +3258,7 @@ const fieldIds = [
   "provisorium_art",
   "provisorium_von",
   "provisorium_bis",
-
+  "provisorium_bezug_auftrag_id",   // ⬅️ NEU
   "ort_datum"
 ];
 function addOptionSorted(select, value, autoSelect = true) {
@@ -3547,6 +3681,8 @@ doc.close();
     provisorium_art:    document.getElementById("provisorium_art")?.value || "",
     provisorium_von:    document.getElementById("provisorium_von")?.value || "",
     provisorium_bis:    document.getElementById("provisorium_bis")?.value || "",
+      provisorium_bezug_auftrag_id:
+    document.getElementById("provisorium_bezug_auftrag_id")?.value || "",
   };
 
 
@@ -4078,6 +4214,13 @@ async function loadDashboard(){
 
         provText = (art ? art + " – " : "") + statusText;
       }
+    const provRef = (meta.provisorium_bezug_auftrag_id || "").trim();
+
+    // Falls dieser Auftrag selbst kein Provisorium setzt,
+    // aber ein anderes aufhebt, trotzdem Text anzeigen
+    if (!provText && provRef) {
+      provText = "Auflösung Provisorium " + provRef;
+    }
 
       rows.push({
         dateIso:  meta.bearbeitet_am || '',
@@ -4089,11 +4232,35 @@ async function loadDashboard(){
         provText,
         provFlag,
         provStatus,
-
+        provRef,
         id:  auftragsId,
         url: pdfMap.get(pdfName) || null
       });
     }
+    // ---------------------------------------------
+    // Verknüpfungen: welches Provisorium wurde durch
+    // welchen Auftrag aufgelöst?
+    // ---------------------------------------------
+    const resolvedByMap = {};
+
+    // 1) Map aufbauen: Provisorium-ID -> [Auftrags-IDs, die es auflösen]
+    rows.forEach(r => {
+      const ref = (r.provRef || "").trim();
+      if (!ref) return;
+      if (!resolvedByMap[ref]) resolvedByMap[ref] = [];
+      resolvedByMap[ref].push(r.id);
+    });
+
+    // 2) Bei den Ursprungs-Provisorien Text anhängen
+    rows.forEach(r => {
+      const resolvers = resolvedByMap[r.id];
+      if (!resolvers || !resolvers.length) return;
+
+      const listStr = resolvers.join(", ");
+      r.provText =
+        (r.provText ? r.provText + " – " : "") +
+        "aufgelöst durch " + listStr;
+    });
 
     // Sortieren nach Datum
     rows.sort((a,b) => (b.dateIso||'').localeCompare(a.dateIso||''));
