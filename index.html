@@ -89,13 +89,14 @@
     white-space:nowrap;
     min-width:0;
   }
-  .print-value{
-    white-space:pre-wrap;
-    word-break:break-word;
-    overflow-wrap:anywhere;
-    line-height:1.35;
-    min-width:0;
-  }
+.print-value{
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.6;      /* mehr Zeilenhöhe */
+  min-width: 0;
+}
+
 
   /* Silbentrennung außerhalb des Iframes */
   html[lang="de"] .print-value { hyphens:auto; }
@@ -159,12 +160,13 @@
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   hyphens: auto !important;
-  line-height: 1.4 !important;
+  line-height: 1.6 !important;   /* höher */
   margin-bottom: 6px !important;
   min-width: 0 !important;
   flex: 1 1 62% !important;
   max-width: 62% !important;
 }
+
 /* (zweite Definitionen bleiben wie bei dir) */
 </style>
 
@@ -3458,19 +3460,26 @@ container.querySelectorAll('select').forEach(sel => {
   sel.replaceWith(row); row.append(l, v);
 });
 
+
 // 4) TEXTAREA → IMMER in statischen Text umwandeln (sonst wird abgeschnitten)
 container.querySelectorAll('textarea').forEach(ta => {
   const label = container.querySelector(`label[for="${ta.id}"]`);
   const row   = d.createElement('div'); 
   row.className = 'print-field';
-  row.classList.add('avoid-break');                 // ← hinzugefügt
+  row.classList.add('avoid-break');
   const l     = d.createElement('div'); l.className = 'print-label';
   const v     = d.createElement('div'); v.className = 'print-value';
   l.textContent = label?.textContent?.trim() || ta.name || '';
-  v.textContent = (ta.value || '').trim();          // value als Text (kein HTML)
+
+  // Zeilenumbrüche konsistent machen, überflüssige Leerzeichen entfernen
+  let txt = (ta.value || '').replace(/\r\n/g, '\n');
+  txt = txt.replace(/[ \t]+/g, ' ').trim();
+  v.textContent = txt;
+
   if (label) label.remove();
   ta.replaceWith(row); row.append(l, v);
 });
+
 
 // 5) Normale Inputs (date, time, text, number …) in statischen Text wandeln
 container.querySelectorAll('input').forEach(inp => {
