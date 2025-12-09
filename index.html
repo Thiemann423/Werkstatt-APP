@@ -5990,10 +5990,22 @@ if (saveBtn) saveBtn.addEventListener("click", function(){
 });
 
 var doneBtn = _byId("wpMarkDoneToday");
-if (doneBtn) doneBtn.addEventListener("click", function(){
-  // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
+if (doneBtn) doneBtn.addEventListener("click", function () {
+  // 🔒 Doppel-/Mehrfachklick verhindern, solange wir verarbeiten
+  if (doneBtn.dataset.busy === "1") return;
+  doneBtn.dataset.busy = "1";
+
   var todayISO = _toISO(new Date());
-  var lastEl = _byId("wpLastDate");
+  var lastEl   = _byId("wpLastDate");
+
+  // ⛔ Bereits heute eingetragen? Dann nichts nochmal machen
+  if (lastEl && lastEl.value === todayISO) {
+    doneBtn.dataset.busy = "0";
+    alert("Diese Aufgabe wurde heute bereits als durchgeführt markiert.");
+    return;
+  }
+
+  // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
   if (lastEl) lastEl.value = todayISO;
 
   // Fälligkeit sauber über die neue Logik berechnen
@@ -6002,11 +6014,14 @@ if (doneBtn) doneBtn.addEventListener("click", function(){
   }
 
   // Eintrag wie bisher ins Log schreiben (lokale Logik)
-  var entry = _collectEntryFromForm({useTodayIfEmpty:true});
+  var entry = _collectEntryFromForm({ useTodayIfEmpty: true });
   wpLogExecution(entry);
 
-  var pnl=_byId("wpLogPanel");
+  var pnl = _byId("wpLogPanel");
   if (pnl && pnl.style.display === "block") renderWpLogTable();
+
+  // 🔓 Button wieder freigeben
+  doneBtn.dataset.busy = "0";
 });
 
 document.addEventListener("DOMContentLoaded", () => {
