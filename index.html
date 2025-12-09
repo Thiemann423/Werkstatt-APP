@@ -2304,12 +2304,15 @@ document.addEventListener("DOMContentLoaded", function () {
         continue;
       }
 
-      // nur Aufträge mit aktivem Provisorium
-      if (meta.provisorium_aktiv !== "Ja") continue;
+// ✅ nur prüfen, OB es ein Provisorium ist
+if (meta.provisorium_aktiv !== "Ja") continue;
 
-      const bisIso = (meta.provisorium_bis || "").slice(0, 10);
-      // nur offene / noch gültige Provisorien anbieten
-      if (bisIso && bisIso < todayIso) continue;
+// ✅ bis-Datum darf gelesen werden (für Anzeige), aber NICHT mehr gefiltert
+const bisIso = (meta.provisorium_bis || "").slice(0, 10);
+
+
+ if (bisIso && bisIso < todayIso) continue;
+
 
       const auftragsId =
         meta.auftrags_id ||
