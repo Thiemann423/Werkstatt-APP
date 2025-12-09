@@ -4552,6 +4552,8 @@ async function loadDraftDashboard() {
         draft.auftrag_id ||
         draft.auftrags_id ||
         item.name.replace(/\.json$/i, '');
+      
+const bezugId = (draft.provisorium_bezug_auftrag_id || '').trim();
 
       // Provisorium aus Draft falls vorhanden
       let provFlag   = 0;
@@ -4584,20 +4586,57 @@ async function loadDraftDashboard() {
         provText = (art ? art + ' – ' : '') + statusText;
       }
 
-      rows.push({
-        dateIso,
-        dateDisp,
-        tech,
-        maschine,
-        teil,
-        provText,
-        provFlag,
-        provStatus,
-        id: auftragsId,
-        fileName: item.name,
-        fileId: item.id
-      });
+     rows.push({
+  dateIso,
+  dateDisp,
+  tech,
+  maschine,
+  teil,
+  provText,
+  provFlag,
+  provStatus,
+  id: auftragsId,
+  bezugId,              // 🔹 neu
+  fileName: item.name,
+  fileId: item.id
+});
+
     }
+// 🔗 Provisorien-Verknüpfung für Anzeige im Dashboard
+const rowsById = new Map();
+
+// Map: Auftrags-ID -> alle zugehörigen Zeilen
+for (const r of rows) {
+  const key = (r.id || '').trim();
+  if (!key) continue;
+  if (!rowsById.has(key)) rowsById.set(key, []);
+  rowsById.get(key).push(r);
+}
+
+// Jetzt durch alle Zeilen laufen und Verknüpfungen eintragen
+for (const r of rows) {
+  const ref = (r.bezugId || '').trim();
+  if (!ref) continue; // kein Bezug → nichts zu tun
+
+  // Text für den "auflösenden" Auftrag
+  const selfSuffix = `löst Provisorium aus ${ref} ab`;
+  r.provText = r.provText
+    ? `${r.provText} – ${selfSuffix}`
+    : selfSuffix;
+
+  // Text für den ursprünglichen Provisoriums-Auftrag
+  const originRows = rowsById.get(ref);
+  if (originRows && originRows.length) {
+    originRows.forEach(or => {
+      const otherSuffix = `aufgelöst durch ${r.id}`;
+      if (!or.provText || !or.provText.includes(otherSuffix)) {
+        or.provText = or.provText
+          ? `${or.provText} – ${otherSuffix}`
+          : otherSuffix;
+      }
+    });
+  }
+}
 
     rows.sort((a, b) => (b.dateIso || '').localeCompare(a.dateIso || ''));
 
