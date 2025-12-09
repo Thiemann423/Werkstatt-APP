@@ -847,9 +847,8 @@ async function getDueList(){
 
   
 
-<!-- z-index-Kapselung fürs Sticky-Header -->
 <div id="dashPanel" style="display:none;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:12px;position:relative;">
-  <div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;align-items:end;">
+  <div style="display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:10px;align-items:end;">
     <div>
       <label for="f_bearbeitet_am">Bearbeitet am</label>
       <input type="date" id="f_bearbeitet_am" style="width:100%;padding:6px;">
@@ -866,7 +865,13 @@ async function getDueList(){
       <label for="f_anlagenteil">Anlagenteil</label>
       <input type="text" id="f_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
     </div>
+    <!-- 🔎 NEU: Auftrags-ID-Filter -->
+    <div>
+      <label for="f_auftrag_id">Auftrags-ID</label>
+      <input type="text" id="f_auftrag_id" placeholder="z. B. REP-2025..." style="width:100%;padding:6px;">
+    </div>
   </div>
+
 
   <div style="margin-top:8px;">
     <label for="f_provisorium">Provisorium</label>
@@ -886,10 +891,11 @@ async function getDueList(){
             style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
       ❌ Filter löschen
     </button>
-    <button type="button" id="dashRangeBtn" data-mode="30"
-            style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
-     🗓️ Letzte 30 Tage
-    </button>
+ <button type="button" id="dashRangeBtn" data-mode="7"
+        style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+  🗓️ Letzte 7 Tage
+</button>
+
   </div>
 
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
@@ -4052,6 +4058,9 @@ const META_SUFFIX = '.meta.json';
 
 // false = nur letzte 30 Tage, true = alle
 window.showAllOrders = false;
+  // Zeitraum im Dashboard: '7', '30' oder 'all'
+window.dashRangeMode = '7';
+
 
 document.addEventListener('DOMContentLoaded', () => {
   // ==============================
@@ -4063,6 +4072,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearBtn = document.getElementById('dashClear');
   const rangeBtn = document.getElementById('dashRangeBtn');
 
+  // aktueller Zeitraum aus dem Button lesen (Fallback: 7 Tage)
+  if (rangeBtn) {
+    window.dashRangeMode = rangeBtn.dataset.mode || '7';
+  }
+
   toggle?.addEventListener('click', () => {
     const show = panel.style.display === 'none' || !panel.style.display;
     panel.style.display = show ? 'block' : 'none';
@@ -4072,35 +4086,49 @@ document.addEventListener('DOMContentLoaded', () => {
   reload?.addEventListener('click', loadDashboard);
 
   clearBtn?.addEventListener('click', () => {
-    ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium'].forEach(id => {
+    ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium','f_auftrag_id'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
-    window.showAllOrders = false;
-    if (rangeBtn){ rangeBtn.dataset.mode = '30'; rangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
-    applyFiltersToDashboard();
-  });
-
-  rangeBtn?.addEventListener('click', () => {
-    const mode = rangeBtn.dataset.mode || '30';
-    if (mode === '30') {
-      window.showAllOrders = true;
-      rangeBtn.dataset.mode = 'all';
-      rangeBtn.textContent  = '🗓️ Alle Aufträge';
-      const d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
-    } else {
-      window.showAllOrders = false;
-      rangeBtn.dataset.mode = '30';
-      rangeBtn.textContent  = '🗓️ Letzte 30 Tage';
+    window.dashRangeMode = '7';
+    if (rangeBtn){
+      rangeBtn.dataset.mode = '7';
+      rangeBtn.textContent  = '🗓️ Letzte 7 Tage';
     }
     applyFiltersToDashboard();
   });
 
-  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil'].forEach(id => {
+  // Zeitraum: 7 Tage -> 30 Tage -> Alle -> 7 Tage ...
+  rangeBtn?.addEventListener('click', () => {
+    const current = rangeBtn.dataset.mode || window.dashRangeMode || '7';
+    let next  = '7';
+    let label = '🗓️ Letzte 7 Tage';
+
+    if (current === '7') {
+      next  = '30';
+      label = '🗓️ Letzte 30 Tage';
+    } else if (current === '30') {
+      next  = 'all';
+      label = '🗓️ Alle Aufträge';
+      const d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
+    } else {
+      next  = '7';
+      label = '🗓️ Letzte 7 Tage';
+    }
+
+    window.dashRangeMode = next;
+    rangeBtn.dataset.mode = next;
+    rangeBtn.textContent  = label;
+    applyFiltersToDashboard();
+  });
+
+  // Filter-Inputs
+  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_auftrag_id'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
   });
 
   // Select reagiert auf change
   document.getElementById('f_provisorium')?.addEventListener('change', applyFiltersToDashboard);
+
 
 
   // ==============================
@@ -4420,18 +4448,26 @@ function updateAnalytics(){
 }
 
 function applyFiltersToDashboard(){
-  const valDate   = (document.getElementById('f_bearbeitet_am')?.value || '').trim(); // ISO
-  const valTech   = (document.getElementById('f_techniker')?.value     || '').trim().toLowerCase();
-  const valMach   = (document.getElementById('f_maschine')?.value      || '').trim().toLowerCase();
-  const valTeil   = (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase();
-  const valProv   = (document.getElementById('f_provisorium')?.value   || '').trim(); // "", "mit", "ohne"
+  const valDate = (document.getElementById('f_bearbeitet_am')?.value || '').trim(); // ISO
+  const valTech = (document.getElementById('f_techniker')?.value     || '').trim().toLowerCase();
+  const valMach = (document.getElementById('f_maschine')?.value      || '').trim().toLowerCase();
+  const valTeil = (document.getElementById('f_anlagenteil')?.value   || '').trim().toLowerCase();
+  const valProv = (document.getElementById('f_provisorium')?.value   || '').trim(); // "", "mit", "ohne"
+  const valId   = (document.getElementById('f_auftrag_id')?.value    || '').trim().toLowerCase();
 
   const rows = document.querySelectorAll('#dashTable tbody tr');
   let shown = 0;
 
-  // Grenze für „letzte 30 Tage“
-  const now   = new Date();
-  const last30 = new Date(now.getTime() - 30*24*60*60*1000);
+  const now       = new Date();
+  const rangeMode = window.dashRangeMode || '7';   // '7' | '30' | 'all'
+  let   rangeDays = null;
+
+  if (rangeMode === '7')      rangeDays = 7;
+  else if (rangeMode === '30') rangeDays = 30;
+
+  const rangeLimit = rangeDays != null
+    ? new Date(now.getTime() - rangeDays * 24 * 60 * 60 * 1000)
+    : null;
 
   rows.forEach(tr => {
     const cDate = tr.querySelector('[data-k="bearbeitet_am"]');
@@ -4439,6 +4475,7 @@ function applyFiltersToDashboard(){
     const cMac  = tr.querySelector('[data-k="maschine"]');
     const cTeil = tr.querySelector('[data-k="anlagenteil"]');
     const cProv = tr.querySelector('[data-k="provisorium"]');
+    const cId   = tr.querySelector('[data-k="auftrag_id"]');
 
     let ok = true;
 
@@ -4446,6 +4483,7 @@ function applyFiltersToDashboard(){
     if (valTech && !(cTech?.textContent || '').toLowerCase().includes(valTech)) ok = false;
     if (valMach && !(cMac ?.textContent || '').toLowerCase().includes(valMach)) ok = false;
     if (valTeil && !(cTeil?.textContent || '').toLowerCase().includes(valTeil)) ok = false;
+    if (valId   && !(cId  ?.textContent || '').toLowerCase().includes(valId  )) ok = false;
 
     // Provisorium-Filter
     if (ok && valProv === 'mit') {
@@ -4463,12 +4501,12 @@ function applyFiltersToDashboard(){
       if (!rowIso || rowIso < valDate) ok = false;
     }
 
-    // 30-Tage-Einschränkung (wenn nicht „alle“ aktiv)
-    if (ok && !window.showAllOrders) {
+    // Bereich „letzte 7/30 Tage“, nur wenn kein explizites Datum gewählt ist
+    if (ok && !valDate && rangeLimit) {
       const rowIso = cDate?.dataset.iso || '';
       if (rowIso) {
         const d = new Date(rowIso);
-        if (!(d >= last30)) ok = false;
+        if (!(d >= rangeLimit)) ok = false;
       }
     }
 
@@ -4485,6 +4523,7 @@ function applyFiltersToDashboard(){
     updateProvisoriumStats();
   }
 }
+
 
 // ===== /Dashboard =====
 
