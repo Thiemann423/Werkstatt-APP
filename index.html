@@ -2070,27 +2070,19 @@ button.clear-signature {
 
 
 <script>
-function initSignaturePad(id) {
-  const canvas = document.getElementById(id);
+function initSignaturePad(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
   const ctx = canvas.getContext("2d");
 
   function resizeCanvas() {
-    // HiDPI/Retina scharf rendern
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const ratio = window.devicePixelRatio || 1;
+    const rect  = canvas.getBoundingClientRect();
+    canvas.width  = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    ctx.scale(ratio, ratio);
 
-    // CSS-Größe aus dem Layout (Fallbacks, falls offset 0 ist)
-    const style = getComputedStyle(canvas);
-    const cssW = canvas.offsetWidth  || parseInt(style.width)  || 600;
-    const cssH = canvas.offsetHeight || parseInt(style.height) || 200;
-
-    // Interne Auflösung hochskalieren
-    canvas.width  = Math.round(cssW * ratio);
-    canvas.height = Math.round(cssH * ratio);
-
-    // Koordinaten wieder in CSS-Pixeln
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-    // Strichstil
     ctx.lineWidth   = 2;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
@@ -2098,10 +2090,18 @@ function initSignaturePad(id) {
   }
 
   resizeCanvas();
-  // ↳ Diese Zeile ist neu: bei Fenstergröße neu skalieren
   window.addEventListener('resize', resizeCanvas);
 
   let drawing = false;
+  // Flag: 0 = keine Unterschrift, 1 = unterschrieben
+  canvas.dataset.signed = canvas.dataset.signed || "0";
+
+  function clearCanvasError() {
+    canvas.classList.remove('field-error');
+    if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains('error-text')) {
+      canvas.nextElementSibling.remove();
+    }
+  }
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -2109,6 +2109,9 @@ function initSignaturePad(id) {
     const r = canvas.getBoundingClientRect();
     ctx.beginPath();
     ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+
+    canvas.dataset.signed = "1";   // 👉 jetzt gilt als unterschrieben
+    clearCanvasError();
   }, { passive: false });
 
   canvas.addEventListener("pointermove", (e) => {
@@ -2122,23 +2125,30 @@ function initSignaturePad(id) {
   canvas.addEventListener("pointerleave",() => { drawing = false; });
 }
 
-// Dein Load-Listener kann unverändert bleiben:
 window.addEventListener("load", () => {
   initSignaturePad("unterschrift_abnahme");
   initSignaturePad("unterschrift_technik");
 });
+
 </script>
 
 
 
 <script>
 function clearSignature(index) {
-    const canvases = document.querySelectorAll("canvas");
-    if (canvases[index]) {
-        const ctx = canvases[index].getContext("2d");
-        ctx.clearRect(0, 0, canvases[index].width, canvases[index].height);
-    }
+  const canvases = document.querySelectorAll("canvas.signature-pad");
+  const canvas   = canvases[index];
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.dataset.signed = "0";          // 👉 Unterschrift wieder „weg“
+  canvas.classList.remove('field-error');
+  if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains('error-text')) {
+    canvas.nextElementSibling.remove();
+  }
 }
+
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -3004,46 +3014,79 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Pflichtfelder prüfen
-  function validateBeforeFinish(){
-    _clearAllFieldErrors();
-    let ok = true;
+function validateBeforeFinish(){
+  _clearAllFieldErrors();
+  let ok = true;
 
-    // 1) Bearbeitet am
-    const fDatum = _byId('bearbeitet_am');
-    if (!fDatum?.value) { _showFieldError(fDatum, '„Bearbeitet am“ ist ein Pflichtfeld.'); ok = false; }
-
-    // 2) Techniker 1
-    const fTech1 = _byId('techniker1');
-    if (!fTech1?.value) { _showFieldError(fTech1, '„Techniker 1“ ist ein Pflichtfeld.'); ok = false; }
-
-    // 3) Maschine (+ Sonstige-Text)
-    const selM = _byId('maschine');
-    if (!selM?.value) {
-      _showFieldError(selM, '„Maschine“ ist ein Pflichtfeld.'); ok = false;
-    } else if (selM.value === 'Sonstige') {
-      const txtM = _byId('sonstige_maschine');
-      if (!txtM?.value.trim()) { _showFieldError(txtM || selM, 'Bitte „Sonstiges (Maschine)“ angeben.'); ok = false; }
-    }
-
-    // 4) Anlagenteil (+ Sonstige-Text)
-    const selA = _byId('anlagenteil');
-    if (!selA?.value) {
-      _showFieldError(selA, '„Anlagenteil“ ist ein Pflichtfeld.'); ok = false;
-    } else if (selA.value === 'Sonstige') {
-      const txtA = _byId('sonstige_anlagenteil');
-      if (!txtA?.value.trim()) { _showFieldError(txtA || selA, 'Bitte „Sonstiges (Anlagenteil)“ angeben.'); ok = false; }
-    }
-
-    // 5) Fehlerbeschreibung
-    const fDesc = _byId('fehlerbeschreibung');
-    if (!fDesc?.value.trim()) { _showFieldError(fDesc, '„Fehlerbeschreibung“ ist ein Pflichtfeld.'); ok = false; }
-
-    if (!ok) {
-      document.querySelector('.field-error')?.scrollIntoView({ behavior:'smooth', block:'center' });
-      alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
-    }
-    return ok;
+  // 1) Bearbeitet am
+  const fDatum = _byId('bearbeitet_am');
+  if (!fDatum?.value) {
+    _showFieldError(fDatum, '„Bearbeitet am“ ist ein Pflichtfeld.');
+    ok = false;
   }
+
+  // 2) Techniker 1
+  const fTech1 = _byId('techniker1');
+  if (!fTech1?.value) {
+    _showFieldError(fTech1, '„Techniker 1“ ist ein Pflichtfeld.');
+    ok = false;
+  }
+
+  // 3) Maschine (+ Sonstige-Text)
+  const selM = _byId('maschine');
+  if (!selM?.value) {
+    _showFieldError(selM, '„Maschine“ ist ein Pflichtfeld.');
+    ok = false;
+  } else if (selM.value === 'Sonstige') {
+    const txtM = _byId('sonstige_maschine');
+    if (!txtM?.value.trim()) {
+      _showFieldError(txtM || selM, 'Bitte „Sonstiges (Maschine)“ angeben.');
+      ok = false;
+    }
+  }
+
+  // 4) Anlagenteil (+ Sonstige-Text)
+  const selA = _byId('anlagenteil');
+  if (!selA?.value) {
+    _showFieldError(selA, '„Anlagenteil“ ist ein Pflichtfeld.');
+    ok = false;
+  } else if (selA.value === 'Sonstige') {
+    const txtA = _byId('sonstige_anlagenteil');
+    if (!txtA?.value.trim()) {
+      _showFieldError(txtA || selA, 'Bitte „Sonstiges (Anlagenteil)“ angeben.');
+      ok = false;
+    }
+  }
+
+  // 5) Fehlerbeschreibung
+  const fDesc = _byId('fehlerbeschreibung');
+  if (!fDesc?.value.trim()) {
+    _showFieldError(fDesc, '„Fehlerbeschreibung“ ist ein Pflichtfeld.');
+    ok = false;
+  }
+
+  // 6) Unterschriften (nur beim Abschließen)
+  function _checkSignature(canvasId, labelText){
+    const c = _byId(canvasId);
+    if (!c) return;                         // falls Canvas nicht existiert, nichts prüfen
+    if (c.dataset.signed === "1") return;   // bereits unterschrieben
+
+    _showFieldError(c, `„${labelText}“ ist ein Pflichtfeld.`);
+    ok = false;
+  }
+
+  _checkSignature('unterschrift_abnahme', 'Unterschrift MA Abnahme (Produktkreisfreigabe)');
+  _checkSignature('unterschrift_technik', 'Unterschrift MA Technik');
+
+  if (!ok) {
+    document.querySelector('.field-error')
+      ?.scrollIntoView({ behavior:'smooth', block:'center' });
+    alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
+  }
+
+  return ok;
+}
+
 </script>
 
 
