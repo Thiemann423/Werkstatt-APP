@@ -2171,53 +2171,70 @@ document.addEventListener("DOMContentLoaded", function () {
   const sonstigeReinigungsartInput = document.getElementById("sonstige_reinigungsart");
   const labelSonstigeReinigungsart = document.getElementById("label-sonstige_reinigungsart_zusatz");
 
-  // Provisorium-Felder
-  const provisoriumSelect   = document.getElementById("provisorium_aktiv");
-  const provisoriumDetails  = document.getElementById("provisorium_details");
-  const provisoriumArtInput = document.getElementById("provisorium_art");
-  const provisoriumVonInput = document.getElementById("provisorium_von");
-  const provisoriumBisInput = document.getElementById("provisorium_bis");
+// Provisorium-Felder
+const provisoriumSelect      = document.getElementById("provisorium_aktiv");
+const provisoriumDetails     = document.getElementById("provisorium_details");
+const provisoriumArtInput    = document.getElementById("provisorium_art");
+const provisoriumVonInput    = document.getElementById("provisorium_von");
+const provisoriumBisInput    = document.getElementById("provisorium_bis");
+const provisoriumBezugSelect = document.getElementById("provisorium_bezug_auftrag_id");
 
-  function updateMaschineField() {
-    const show = maschineSelect && maschineSelect.value === "Sonstige";
-    if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
-    if (labelSonstigeMaschine)  labelSonstigeMaschine.style.display  = show ? "block" : "none";
+function updateMaschineField() {
+  const show = maschineSelect && maschineSelect.value === "Sonstige";
+  if (sonstigeMaschineInput)  sonstigeMaschineInput.style.display  = show ? "block" : "none";
+  if (labelSonstigeMaschine)  labelSonstigeMaschine.style.display  = show ? "block" : "none";
+}
+
+function updateAnlagenteilField() {
+  const show = anlagenteilSelect && anlagenteilSelect.value === "Sonstige";
+  if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
+  if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
+}
+
+function updateReinigungsartField() {
+  const show = reinigungsartSelect && reinigungsartSelect.value === "Sonstige";
+  if (sonstigeReinigungsartInput)  sonstigeReinigungsartInput.style.display  = show ? "block" : "none";
+  if (labelSonstigeReinigungsart)  labelSonstigeReinigungsart.style.display  = show ? "block" : "none";
+}
+
+function updateProvisoriumField() {
+  if (!provisoriumSelect) return;
+
+  const isNewProv = provisoriumSelect.value === "Ja";
+
+  // Kasten für Provisorium immer anzeigen
+  if (provisoriumDetails) {
+    provisoriumDetails.style.display = "block";
   }
 
-  function updateAnlagenteilField() {
-    const show = anlagenteilSelect && anlagenteilSelect.value === "Sonstige";
-    if (sonstigeAnlagenteilInput) sonstigeAnlagenteilInput.style.display = show ? "block" : "none";
-    if (labelSonstigeAnlagenteil) labelSonstigeAnlagenteil.style.display = show ? "block" : "none";
+  // Felder für *neues* Provisorium nur bei "Ja" aktiv
+  if (provisoriumArtInput) {
+    provisoriumArtInput.disabled = !isNewProv;
+    if (!isNewProv) provisoriumArtInput.value = "";
+  }
+  if (provisoriumVonInput) {
+    provisoriumVonInput.disabled = !isNewProv;
+    if (!isNewProv) provisoriumVonInput.value = "";
+  }
+  if (provisoriumBisInput) {
+    provisoriumBisInput.disabled = !isNewProv;
+    if (!isNewProv) provisoriumBisInput.value = "";
   }
 
-  function updateReinigungsartField() {
-    const show = reinigungsartSelect && reinigungsartSelect.value === "Sonstige";
-    if (sonstigeReinigungsartInput)  sonstigeReinigungsartInput.style.display  = show ? "block" : "none";
-    if (labelSonstigeReinigungsart)  labelSonstigeReinigungsart.style.display  = show ? "block" : "none";
-  }
+  // Das Bezug-Dropdown bleibt immer aktiv – kein extra Code nötig.
+}
 
-  function updateProvisoriumField() {
-    if (!provisoriumSelect || !provisoriumDetails) return;
-    const show = provisoriumSelect.value === "Ja";
-    provisoriumDetails.style.display = show ? "block" : "none";
+maschineSelect?.addEventListener("change",      updateMaschineField);
+anlagenteilSelect?.addEventListener("change",   updateAnlagenteilField);
+reinigungsartSelect?.addEventListener("change", updateReinigungsartField);
+provisoriumSelect?.addEventListener("change",   updateProvisoriumField);
 
-    if (!show) {
-      if (provisoriumArtInput) provisoriumArtInput.value = "";
-      if (provisoriumVonInput) provisoriumVonInput.value = "";
-      if (provisoriumBisInput) provisoriumBisInput.value = "";
-    }
-  }
+// initialer Zustand
+updateMaschineField();
+updateAnlagenteilField();
+updateReinigungsartField();
+updateProvisoriumField();
 
-  maschineSelect?.addEventListener("change",      updateMaschineField);
-  anlagenteilSelect?.addEventListener("change",   updateAnlagenteilField);
-  reinigungsartSelect?.addEventListener("change", updateReinigungsartField);
-  provisoriumSelect?.addEventListener("change",   updateProvisoriumField);
-
-  // initialer Zustand
-  updateMaschineField();
-  updateAnlagenteilField();
-  updateReinigungsartField();
-  updateProvisoriumField();
   // ------------------------------------
 async function loadOpenProvisoriumOptions() {
   const sel = document.getElementById("provisorium_bezug_auftrag_id");
