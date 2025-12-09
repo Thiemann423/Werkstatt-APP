@@ -2221,6 +2221,9 @@ document.addEventListener("DOMContentLoaded", function () {
   // ------------------------------------
   // Offene Provisorien für Dropdown laden
   // ------------------------------------
+  // ------------------------------------
+  // Offene Provisorien für Dropdown laden
+  // ------------------------------------
   async function loadOpenProvisoriumOptions() {
     const sel = document.getElementById("provisorium_bezug_auftrag_id");
     if (!sel) return;
@@ -2229,17 +2232,30 @@ document.addEventListener("DOMContentLoaded", function () {
     sel.innerHTML =
       '<option value="">Kein Bezug / neues Provisorium</option>';
 
+    // Falls noch kein Token da ist: versuchen, eins zu holen
     if (!accessToken) {
-      // ohne Login gibt es keine zentrale Liste – Formular funktioniert trotzdem
-      return;
+      if (typeof signInAndAcquireToken === "function") {
+        try {
+          // versucht zuerst still ein Token zu holen, sonst Login-Popup
+          await signInAndAcquireToken(true);
+        } catch (e) {
+          console.warn("loadOpenProvisoriumOptions – kein Zugriff auf Graph:", e);
+          return; // ohne Token können wir die Liste nicht aus OneDrive laden
+        }
+      } else {
+        // Sicherheitsnetz: Funktion existiert nicht
+        console.warn("loadOpenProvisoriumOptions – signInAndAcquireToken fehlt");
+        return;
+      }
     }
 
+    // ab hier solltest du ein accessToken haben
     await resolveShareLinkToFolder();
     if (!TARGET.driveId || !TARGET.parentItemId) return;
 
-    const headers    = { Authorization: `Bearer ${accessToken}` };
+    const headers     = { Authorization: `Bearer ${accessToken}` };
     const META_SUFFIX = ".meta.json";
-    let metaItems    = [];
+    let   metaItems   = [];
 
     // 1) Meta-Ordner, falls vorhanden
     if (window.TARGET_META_ITEM_ID) {
@@ -2288,6 +2304,7 @@ document.addEventListener("DOMContentLoaded", function () {
         continue;
       }
 
+      // nur Aufträge mit aktivem Provisorium
       if (meta.provisorium_aktiv !== "Ja") continue;
 
       const bisIso = (meta.provisorium_bis || "").slice(0, 10);
@@ -2335,6 +2352,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Beim Laden der Seite gleich einmal befüllen
   loadOpenProvisoriumOptions().catch(console.error);
+
 
   // 🔒 Basis-Optionen (HTML-Defaults) einmalig puffern
   const baseMaschineValues =
