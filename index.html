@@ -618,134 +618,168 @@ async function getShareRootEndpoint() {
     return a === b ? 0 : a < b ? -1 : 1;
   }
 
-async function getDueList(){
-  // 1. Neue Logik: computeDueMap benutzen, wenn vorhanden
-  if (typeof window.computeDueMap === 'function'){
-    try {
-      const map = await window.computeDueMap();   // <-- WICHTIG: await!
-      const out = [];
-      for (const [,v] of map){
-        if (v.status === 'today' || v.status === 'overdue'){
-          out.push({
-            machine: v.machine || "",
-            task:    v.taskName || v.task || "",
-            nextDue: v.nextDue || "",
-            status:  v.status
-          });
+  // Liste der heute fälligen / überfälligen Wartungen ermitteln
+  async function getDueList() {
+    // 1. Neue Logik: computeDueMap benutzen, wenn vorhanden
+    if (typeof window.computeDueMap === "function") {
+      try {
+        const map = await window.computeDueMap();   // <-- WICHTIG: await!
+        const out = [];
+        for (const [, v] of map) {
+          if (v.status === "today" || v.status === "overdue") {
+            out.push({
+              machine: v.machine || "",
+              task:    v.taskName || v.task || "",
+              nextDue: v.nextDue || "",
+              status:  v.status
+            });
+          }
         }
+        return out;
+      } catch (e) {
+        console.warn("getDueList/computeDueMap:", e);
       }
-      return out;
-    } catch (e) {
-      console.warn("getDueList/computeDueMap:", e);
     }
+
+    // 2. Fallback: nur mit window.wartungslog arbeiten
+    const list   = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+    const latest = new Map();
+    for (const e of list) {
+      const key  = `${(e.machine || "").trim()}||${(e.taskName || "").trim()}`;
+      const last = (e.dateISO || "").trim();
+      if (!latest.has(key) || (last && last > (latest.get(key).dateISO || ""))) {
+        latest.set(key, e);
+      }
+    }
+    const today = toISO(new Date());
+    const out   = [];
+    latest.forEach(e => {
+      const intv = (e.intervalDays === "" || e.intervalDays == null) ? 0 : Number(e.intervalDays);
+      const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
+      if (!next) return;
+      const status = cmpISO(next, today) < 0 ? "overdue"
+                   : cmpISO(next, today) === 0 ? "today"
+                   : "ok";
+      if (status !== "ok") {
+        out.push({
+          machine: e.machine || "",
+          task:    e.taskName || "",
+          nextDue: next,
+          status
+        });
+      }
+    });
+    return out;
   }
 
-  // 2. Fallback: nur mit window.wartungslog arbeiten
-  const list   = Array.isArray(window.wartungslog) ? window.wartungslog : [];
-  const latest = new Map();
-  for (const e of list){
-    const key  = `${(e.machine||"").trim()}||${(e.taskName||"").trim()}`;
-    const last = (e.dateISO||"").trim();
-    if (!latest.has(key) || (last && last > (latest.get(key).dateISO||""))){
-      latest.set(key, e);
-    }
-  }
-  const today = toISO(new Date());
-  const out   = [];
-  latest.forEach(e=>{
-    const intv = (e.intervalDays==="" || e.intervalDays==null) ? 0 : Number(e.intervalDays);
-    const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
-    if (!next) return;
-    const status = cmpISO(next, today) < 0 ? 'overdue'
-                 : cmpISO(next, today) === 0 ? 'today'
-                 : 'ok';
-    if (status !== 'ok'){
-      out.push({
-        machine: e.machine || "",
-        task:    e.taskName || "",
-        nextDue: next,
-        status
+  // --- Mail-Versand für überfällige Wartungen -----------------
+  window.wpSendOverdueMail = async function (dueList) {
+    try {
+      if (!window.accessToken) {
+        console.warn("[WP] Kein Access Token, Mail kann nicht gesendet werden.");
+        return;
+      }
+      if (!Array.isArray(dueList) || !dueList.length) return;
+
+      // einfache HTML-Tabelle bauen
+      let rows = dueList.map(v => {
+        const machine = v.machine || v.maschine || "";
+        const task    = v.taskName || v.task || "";
+        const nextDue = v.nextDue || "";
+        const status  = v.status || "";
+        return `<tr>
+          <td>${machine}</td>
+          <td>${task}</td>
+          <td>${nextDue}</td>
+          <td>${status}</td>
+        </tr>`;
+      }).join("");
+
+      const bodyHtml = `
+        <p>Hinweis aus der Werkstatt-App:</p>
+        <p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>
+        <table border="1" cellspacing="0" cellpadding="4">
+          <thead>
+            <tr>
+              <th>Maschine</th>
+              <th>Aufgabe</th>
+              <th>Fällig am</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p>Bitte im Wartungs-Dashboard prüfen.</p>
+      `;
+
+      const mail = {
+        message: {
+          subject: `Wartungs-Hinweis: ${dueList.length} Aufgabe(n) fällig/überfällig`,
+          body: {
+            contentType: "HTML",
+            content: bodyHtml
+          },
+          toRecipients: [
+            { emailAddress: { address: "mike.hafermalz@petri-feinkost.de" } },
+            { emailAddress: { address: "merten.thiemann@petri-feinkost.de" } }
+          ]
+        },
+        saveToSentItems: true
+      };
+
+      const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + window.accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(mail)
       });
-    }
-  });
-  return out;
-}
 
-<script>
-// --- Mail-Versand für überfällige Wartungen -----------------
-async function wpSendOverdueMail(dueList) {
-  try {
-    if (!window.accessToken) {
-      console.warn("[WP] Kein Access Token, Mail kann nicht gesendet werden.");
+      if (!res.ok) {
+        console.error("[WP] sendMail fehlgeschlagen:", res.status, await res.text());
+      } else {
+        console.log("[WP] Warn-Mail erfolgreich gesendet.");
+      }
+    } catch (e) {
+      console.error("[WP] Fehler beim Mailversand:", e);
+    }
+  };
+
+  // --- Öffentliche Funktion: prüfen + optional Mail senden ----
+  window.wpCheckOverdueAndNotify = async function (opts) {
+    opts = opts || {};
+    const sendMail = !!opts.sendMail;
+
+    let dueList = [];
+    try {
+      dueList = await getDueList();
+    } catch (e) {
+      console.warn("[WP] getDueList Fehler:", e);
+      dueList = [];
+    }
+
+    if (!Array.isArray(dueList) || !dueList.length) {
+      console.log("[WP] Keine fälligen Wartungen, keine Mail nötig.");
       return;
     }
-    if (!Array.isArray(dueList) || !dueList.length) return;
 
-    // einfache HTML-Tabelle bauen
-    let rows = dueList.map(v => {
-      const machine = v.machine || v.maschine || "";
-      const task    = v.taskName || v.task || "";
-      const nextDue = v.nextDue || "";
-      const status  = v.status || "";
-      return `<tr>
-        <td>${machine}</td>
-        <td>${task}</td>
-        <td>${nextDue}</td>
-        <td>${status}</td>
-      </tr>`;
-    }).join("");
+    // Nur einmal pro Tag pro Browser mailen
+    const today = (new Date()).toISOString().slice(0, 10);
+    const LS_KEY = "WP_LAST_OVERDUE_MAIL_DATE";
+    let lastDate = null;
+    try { lastDate = localStorage.getItem(LS_KEY); } catch (_) {}
 
-    const bodyHtml = `
-      <p>Hinweis aus der Werkstatt-App:</p>
-      <p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>
-      <table border="1" cellspacing="0" cellpadding="4">
-        <thead>
-          <tr>
-            <th>Maschine</th>
-            <th>Aufgabe</th>
-            <th>Fällig am</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p>Bitte im Wartungs-Dashboard prüfen.</p>
-    `;
-
-    const mail = {
-      message: {
-        subject: `Wartungs-Hinweis: ${dueList.length} Aufgabe(n) fällig/überfällig`,
-        body: {
-          contentType: "HTML",
-          content: bodyHtml
-        },
-        toRecipients: [
-          { emailAddress: { address: "mike.hafermalz@petri-feinkost.de" } },
-          { emailAddress: { address: "merten.thiemann@petri-feinkost.de" } }
-        ]
-      },
-      saveToSentItems: true
-    };
-
-    const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + window.accessToken,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(mail)
-    });
-
-    if (!res.ok) {
-      console.error("[WP] sendMail fehlgeschlagen:", res.status, await res.text());
-    } else {
-      console.log("[WP] Warn-Mail erfolgreich gesendet.");
+    if (sendMail && lastDate === today) {
+      console.log("[WP] Warn-Mail heute bereits gesendet.");
+      return;
     }
-  } catch (e) {
-    console.error("[WP] Fehler beim Mailversand:", e);
-  }
-}
-</script>
+
+    if (sendMail) {
+      await window.wpSendOverdueMail(dueList);
+      try { localStorage.setItem(LS_KEY, today); } catch (_) {}
+    }
+  };
 
   // Öffnet Dashboard + wählt Maschine
   function wpOpenMachineFromName(name) {
