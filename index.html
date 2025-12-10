@@ -671,6 +671,81 @@ async function getDueList(){
   return out;
 }
 
+<script>
+// --- Mail-Versand für überfällige Wartungen -----------------
+async function wpSendOverdueMail(dueList) {
+  try {
+    if (!window.accessToken) {
+      console.warn("[WP] Kein Access Token, Mail kann nicht gesendet werden.");
+      return;
+    }
+    if (!Array.isArray(dueList) || !dueList.length) return;
+
+    // einfache HTML-Tabelle bauen
+    let rows = dueList.map(v => {
+      const machine = v.machine || v.maschine || "";
+      const task    = v.taskName || v.task || "";
+      const nextDue = v.nextDue || "";
+      const status  = v.status || "";
+      return `<tr>
+        <td>${machine}</td>
+        <td>${task}</td>
+        <td>${nextDue}</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join("");
+
+    const bodyHtml = `
+      <p>Hinweis aus der Werkstatt-App:</p>
+      <p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>
+      <table border="1" cellspacing="0" cellpadding="4">
+        <thead>
+          <tr>
+            <th>Maschine</th>
+            <th>Aufgabe</th>
+            <th>Fällig am</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p>Bitte im Wartungs-Dashboard prüfen.</p>
+    `;
+
+    const mail = {
+      message: {
+        subject: `Wartungs-Hinweis: ${dueList.length} Aufgabe(n) fällig/überfällig`,
+        body: {
+          contentType: "HTML",
+          content: bodyHtml
+        },
+        toRecipients: [
+          { emailAddress: { address: "mike.hafermalz@petri-feinkost.de" } },
+          { emailAddress: { address: "merten.thiemann@petri-feinkost.de" } }
+        ]
+      },
+      saveToSentItems: true
+    };
+
+    const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + window.accessToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(mail)
+    });
+
+    if (!res.ok) {
+      console.error("[WP] sendMail fehlgeschlagen:", res.status, await res.text());
+    } else {
+      console.log("[WP] Warn-Mail erfolgreich gesendet.");
+    }
+  } catch (e) {
+    console.error("[WP] Fehler beim Mailversand:", e);
+  }
+}
+</script>
 
   // Öffnet Dashboard + wählt Maschine
   function wpOpenMachineFromName(name) {
@@ -6525,6 +6600,133 @@ function listDueOrOverdue(dueMap){
   return out.sort((a,b)=> (a.nextDue||"").localeCompare(b.nextDue||""));
 }
 
+  // --- E-Mail-Versand bei fälligen/überfälligen Wartungen -----------------
+  window.wpSendOverdueMail = async function(dueList) {
+    try {
+      if (!window.accessToken) {
+        console.warn("[WP] Kein accessToken, Mail kann nicht gesendet werden.");
+        return;
+      }
+      if (!Array.isArray(dueList) || !dueList.length) return;
+
+      // HTML-Tabelle für die Mail bauen
+      var rows = dueList.map(function(v){
+        var machine = (v.machine || v.maschine || "").toString();
+        var task    = (v.task || v.taskName || "").toString();
+        var nextDue = (v.nextDue || "").toString();
+        var status  = (v.status || "").toString();
+        return "<tr>"
+             + "<td>" + machine + "</td>"
+             + "<td>" + task    + "</td>"
+             + "<td>" + nextDue + "</td>"
+             + "<td>" + status  + "</td>"
+             + "</tr>";
+      }).join("");
+
+      var bodyHtml =
+        "<p>Hinweis aus der Wartungs-App:</p>"
+        + "<p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>"
+        + "<table border=\\"1\\" cellspacing=\\"0\\" cellpadding=\\"4\\">"
+        +   "<thead>"
+        +     "<tr>"
+        +       "<th>Maschine</th>"
+        +       "<th>Aufgabe</th>"
+        +       "<th>Fällig am</th>"
+        +       "<th>Status</th>"
+        +     "</tr>"
+        +   "</thead>"
+        +   "<tbody>" + rows + "</tbody>"
+        + "</table>"
+        + "<p>Bitte im Wartungs-Dashboard prüfen.</p>";
+
+      var mail = {
+        message: {
+          subject: "Wartungs-Hinweis: " + dueList.length + " Aufgabe(n) fällig/überfällig",
+          body: {
+            contentType: "HTML",
+            content: bodyHtml
+          },
+          toRecipients: [
+            { emailAddress: { address: "mike.hafermalz@petri-feinkost.de" } },
+            { emailAddress: { address: "merten.thiemann@petri-feinkost.de" } }
+          ]
+        },
+        saveToSentItems: true
+      };
+
+      var res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + window.accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(mail)
+      });
+
+      if (!res.ok) {
+        var txt = "";
+        try { txt = await res.text(); } catch(_) {}
+        console.error("[WP] sendMail fehlgeschlagen:", res.status, txt);
+      } else {
+        console.log("[WP] Warn-Mail erfolgreich gesendet.");
+      }
+    } catch (e) {
+      console.error("[WP] Fehler beim Mailversand:", e);
+    }
+  };
+
+  // --- Öffentliche Funktion: prüfen + optional Mail senden -----------------
+  window.wpCheckOverdueAndNotify = async function(opts) {
+    opts = opts || {};
+    var sendMail = !!opts.sendMail;
+
+    // 1) Fälligkeitsdaten berechnen (wie in refreshOverdueUI)
+    var map = new Map();
+    try {
+      if (typeof computeDueMap === "function") {
+        var maybe = computeDueMap();
+        map = (maybe && typeof maybe.then === "function") ? await maybe : (maybe || new Map());
+      }
+    } catch(e){ map = new Map(); }
+
+    // 2) heute/überfällige Wartungen ermitteln
+    var dueList = [];
+    try {
+      if (typeof listDueOrOverdue === "function") {
+        dueList = listDueOrOverdue(map) || [];
+      }
+    } catch(e){
+      console.warn("[WP] listDueOrOverdue Fehler:", e);
+      dueList = [];
+    }
+
+    if (!dueList.length) {
+      console.log("[WP] Keine fälligen Wartungen, keine Mail nötig.");
+      return;
+    }
+
+    // 3) Nur einmal pro Tag eine Mail (pro Browser)
+    var d = new Date();
+    var today = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    var LS_KEY = "WP_LAST_OVERDUE_MAIL_DATE";
+    var lastDate = null;
+    try { lastDate = localStorage.getItem(LS_KEY); } catch(_) {}
+
+    if (sendMail && lastDate === today) {
+      console.log("[WP] Warn-Mail heute bereits gesendet.");
+      return;
+    }
+
+    // 4) E-Mail senden
+    if (sendMail) {
+      if (typeof window.wpSendOverdueMail === "function") {
+        await window.wpSendOverdueMail(dueList);
+        try { localStorage.setItem(LS_KEY, today); } catch(_) {}
+      } else {
+        console.warn("[WP] wpSendOverdueMail nicht definiert.");
+      }
+    }
+  };
 
   // Roter Punkt am Button + Title/ARIA
   function updateButtonBadge(isOverdue){
