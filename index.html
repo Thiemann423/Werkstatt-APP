@@ -5711,12 +5711,9 @@ if (E.btnDel) E.btnDel.addEventListener('click', async function(){
 });
 
 // Heute durchgeführt
-if (E.btnDone) E.btnDone.addEventListener('click', async function(){
+if (E.btnDone) E.btnDone.addEventListener("click", async function () {
   const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
-  if (!t){ alert("Bitte eine Aufgabe wählen."); return; }
-
-btnDone.addEventListener("click", async () => {
-  if (!t) return;
+  if (!t) { alert("Bitte eine Aufgabe wählen."); return; }
 
   // Heute
   t.lastDateISO = wpTodayISO();
@@ -5725,22 +5722,23 @@ btnDone.addEventListener("click", async () => {
     if (typeof wpLogExecution === "function") {
       await wpLogExecution({
         dateISO      : t.lastDateISO,
-        machine      : (E.selMaschine    && E.selMaschine.value)    ? E.selMaschine.value    : "",
+        machine      : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
         taskName     : t.name,
         intervalDays : t.intervalDays,
         nipples      : t.nipples,
-        technician   : (E.selTechniker1  && E.selTechniker1.value)  ? E.selTechniker1.value  : ""
+        technician   : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
       });
     }
   } catch (e) {
     console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
   }
 
-  if (typeof wpRecalc            === "function") wpRecalc();
-  if (typeof wpEvalWarning       === "function") wpEvalWarning();
-  if (typeof wpUpdateGlobalBanner=== "function") wpUpdateGlobalBanner();
-  if (typeof wpSyncPrintSummary  === "function") wpSyncPrintSummary(t);
+  if (typeof wpRecalc === "function") wpRecalc();
+  if (typeof wpEvalWarning === "function") wpEvalWarning();
+  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
 });
+
 
 
 
@@ -6657,21 +6655,22 @@ function listDueOrOverdue(dueMap){
              + "</tr>";
       }).join("");
 
-      var bodyHtml =
-        "<p>Hinweis aus der Wartungs-App:</p>"
-        + "<p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>"
-        + "<table border=\\"1\\" cellspacing=\\"0\\" cellpadding=\\"4\\">"
-        +   "<thead>"
-        +     "<tr>"
-        +       "<th>Maschine</th>"
-        +       "<th>Aufgabe</th>"
-        +       "<th>Fällig am</th>"
-        +       "<th>Status</th>"
-        +     "</tr>"
-        +   "</thead>"
-        +   "<tbody>" + rows + "</tbody>"
-        + "</table>"
-        + "<p>Bitte im Wartungs-Dashboard prüfen.</p>";
+  var bodyHtml =
+  "<p>Hinweis aus der Wartungs-App:</p>"
+  + "<p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>"
+  + '<table border="1" cellspacing="0" cellpadding="4">'
+  +   "<thead>"
+  +     "<tr>"
+  +       "<th>Maschine</th>"
+  +       "<th>Aufgabe</th>"
+  +       "<th>Fällig am</th>"
+  +       "<th>Status</th>"
+  +     "</tr>"
+  +   "</thead>"
+  +   "<tbody>" + rows + "</tbody>"
+  + "</table>"
+  + "<p>Bitte im Wartungs-Dashboard prüfen.</p>";
+
 
       var mail = {
         message: {
