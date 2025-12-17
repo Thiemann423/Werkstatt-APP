@@ -1386,20 +1386,42 @@ async function loadWpLog() {
     return bd.localeCompare(ad);
   });
 
-  // 🧱 Render (mit Escaping)
+// 🧱 Render (mit Escaping)
 var html = "";
 for (var j=0; j<list.length; j++){
   var r = list[j] || {};
   var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
   var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
 
-  // 💬 Kommentar-Icon + Tooltip NUR am Icon
+  // 💬 Kommentar-Icon + Tooltip NUR am Icon (mit Wer + Wann)
   var cmt = (r.overdueComment && String(r.overdueComment).trim())
     ? String(r.overdueComment).trim()
     : "";
 
+  var who = (r.overdueCommentedByName && String(r.overdueCommentedByName).trim())
+    ? String(r.overdueCommentedByName).trim()
+    : (r.technician || "");
+
+  var whenIso = (r.overdueCommentedAt && String(r.overdueCommentedAt).trim())
+    ? String(r.overdueCommentedAt).trim()
+    : "";
+
+  // ISO -> "YYYY-MM-DD HH:MM"
+  var whenPretty = "";
+  if (whenIso) {
+    whenPretty = whenIso.slice(0, 16).replace("T", " ");
+  }
+
+  var tooltip = "";
+  if (cmt) {
+    tooltip =
+      (who ? who : "Unbekannt") +
+      (whenPretty ? (" – " + whenPretty) : "") +
+      ': "' + cmt + '"';
+  }
+
   var cmtIcon = cmt
-    ? (' <span aria-label="Kommentar" title="' + esc(cmt) + '" style="cursor:help;">💬</span>')
+    ? (' <span aria-label="Kommentar" title="' + esc(tooltip) + '" style="cursor:help;">💬</span>')
     : "";
 
   html += "<tr>"
@@ -1411,6 +1433,7 @@ for (var j=0; j<list.length; j++){
         +   "<td>" + esc(r.technician || "–") + "</td>"
         + "</tr>";
 }
+
 
   tbody.innerHTML = html;
 
@@ -5923,6 +5946,7 @@ function _collectEntryFromForm(opts){
 
 
 // ===== Ausführung einer Wartung + Speichern (cloud-first) =====
+// ===== Ausführung einer Wartung + Speichern (cloud-first) =====
 async function wpLogExecution(entry) {
   // 1) Eingabe absichern
   var src = (entry && typeof entry === "object") ? entry : {};
@@ -5935,7 +5959,6 @@ async function wpLogExecution(entry) {
   // 2) Felder normalisieren
   var dateISO;
   try {
-    // wenn _toISO da ist, benutzen (kann Date oder String ab)
     if (typeof _toISO === "function") {
       dateISO = _toISO(src.dateISO || new Date());
     } else {
@@ -5946,14 +5969,10 @@ async function wpLogExecution(entry) {
     dateISO = (new Date()).toISOString().slice(0, 10);
   }
 
-  var machine      = src.machine   ? String(src.machine).trim()   : "";
-  var taskName     = src.taskName  ? String(src.taskName).trim()  : "";
-  var intervalDays = (src.intervalDays === "" || src.intervalDays == null)
-    ? ""
-    : Number(src.intervalDays);
-  var nipples      = (src.nipples === "" || src.nipples == null)
-    ? ""
-    : Number(src.nipples);
+  var machine      = src.machine  ? String(src.machine).trim()  : "";
+  var taskName     = src.taskName ? String(src.taskName).trim() : "";
+  var intervalDays = (src.intervalDays === "" || src.intervalDays == null) ? "" : Number(src.intervalDays);
+  var nipples      = (src.nipples      === "" || src.nipples      == null) ? "" : Number(src.nipples);
 
   var technician = (src.technician && String(src.technician).trim())
     ? String(src.technician).trim()
@@ -5963,43 +5982,43 @@ async function wpLogExecution(entry) {
     ? String(src.technicianEmail).trim()
     : (u.email || "");
 
-var technicianUpn = (src.technicianUpn && String(src.technicianUpn).trim())
-  ? String(src.technicianUpn).trim()
-  : (u.upn || "");
+  var technicianUpn = (src.technicianUpn && String(src.technicianUpn).trim())
+    ? String(src.technicianUpn).trim()
+    : (u.upn || "");
 
-// ✅ NEU: Kommentar + optional prevNextDue normalisieren
-var overdueComment = (src.overdueComment && String(src.overdueComment).trim())
-  ? String(src.overdueComment).trim()
-  : "";
+  // ✅ Kommentar + optional prevNextDue normalisieren
+  var overdueComment = (src.overdueComment && String(src.overdueComment).trim())
+    ? String(src.overdueComment).trim()
+    : "";
 
-var prevNextDue = (src.prevNextDue && String(src.prevNextDue).trim())
-  ? String(src.prevNextDue).trim()
-  : "";
+  var prevNextDue = (src.prevNextDue && String(src.prevNextDue).trim())
+    ? String(src.prevNextDue).trim()
+    : "";
 
-// 3) finaler Eintrag
-var e = {
-  dateISO        : dateISO,
-  machine        : machine,
-  taskName       : taskName,
-  intervalDays   : intervalDays,
-  nipples        : nipples,
-  technician     : technician,
-  technicianEmail: technicianEmail,
-  technicianUpn  : technicianUpn,
+  // 3) finaler Eintrag
+  var e = {
+    dateISO        : dateISO,
+    machine        : machine,
+    taskName       : taskName,
+    intervalDays   : intervalDays,
+    nipples        : nipples,
+    technician     : technician,
+    technicianEmail: technicianEmail,
+    technicianUpn  : technicianUpn,
 
-  // ✅ NEU: wird wirklich gespeichert
-  overdueComment : overdueComment,
-  prevNextDue    : prevNextDue
-};
+    // ✅ optional: hilft später fürs Nachvollziehen
+    prevNextDue    : prevNextDue,
 
+    // ✅ Audit: Kommentar + wer/wann
+    overdueComment        : overdueComment,
+    overdueCommentedAt    : overdueComment ? (new Date()).toISOString() : "",
+    overdueCommentedByName: overdueComment ? technician : "",
+    overdueCommentedByUpn : overdueComment ? technicianUpn : ""
+  };
 
   // 4) Bisherige Liste laden (Cloud → local → RAM)
   let list = [];
-  try {
-    list = await _loadAll();
-  } catch (_) {
-    list = [];
-  }
+  try { list = await _loadAll(); } catch (_) { list = []; }
   if (!Array.isArray(list)) list = [];
 
   list.push(e);
@@ -6017,9 +6036,9 @@ var e = {
   // 6) UI aktualisieren
   try {
     if (typeof loadWpLog === "function") {
-      await loadWpLog();              // neue Variante: Tabelle selber neu bauen
+      await loadWpLog();
     } else if (typeof renderWpLogTable === "function") {
-      renderWpLogTable();             // Fallback, falls du noch die alte Render-Funktion hast
+      renderWpLogTable();
     }
   } catch (e) {
     console.warn("[WP] Fehler beim Refresh des Wartungs-Logs:", e);
@@ -6027,7 +6046,7 @@ var e = {
 
   try {
     if (typeof window.wpRefreshOverdueUI === "function") {
-      window.wpRefreshOverdueUI();    // Badge / Overdue-Banner
+      window.wpRefreshOverdueUI();
     }
   } catch (e) {
     console.warn("[WP] Fehler beim Overdue-Refresh:", e);
@@ -6035,6 +6054,7 @@ var e = {
 
   return e;
 }
+
 
 
 
