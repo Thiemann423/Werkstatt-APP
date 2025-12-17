@@ -5953,21 +5953,35 @@ async function wpLogExecution(entry) {
     ? String(src.technicianEmail).trim()
     : (u.email || "");
 
-  var technicianUpn = (src.technicianUpn && String(src.technicianUpn).trim())
-    ? String(src.technicianUpn).trim()
-    : (u.upn || "");
+var technicianUpn = (src.technicianUpn && String(src.technicianUpn).trim())
+  ? String(src.technicianUpn).trim()
+  : (u.upn || "");
 
-  // 3) finaler Eintrag
-  var e = {
-    dateISO        : dateISO,
-    machine        : machine,
-    taskName       : taskName,
-    intervalDays   : intervalDays,
-    nipples        : nipples,
-    technician     : technician,
-    technicianEmail: technicianEmail,
-    technicianUpn  : technicianUpn
-  };
+// ✅ NEU: Kommentar + optional prevNextDue normalisieren
+var overdueComment = (src.overdueComment && String(src.overdueComment).trim())
+  ? String(src.overdueComment).trim()
+  : "";
+
+var prevNextDue = (src.prevNextDue && String(src.prevNextDue).trim())
+  ? String(src.prevNextDue).trim()
+  : "";
+
+// 3) finaler Eintrag
+var e = {
+  dateISO        : dateISO,
+  machine        : machine,
+  taskName       : taskName,
+  intervalDays   : intervalDays,
+  nipples        : nipples,
+  technician     : technician,
+  technicianEmail: technicianEmail,
+  technicianUpn  : technicianUpn,
+
+  // ✅ NEU: wird wirklich gespeichert
+  overdueComment : overdueComment,
+  prevNextDue    : prevNextDue
+};
+
 
   // 4) Bisherige Liste laden (Cloud → local → RAM)
   let list = [];
