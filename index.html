@@ -1335,8 +1335,9 @@ async function loadWpLog() {
   try {
     if (typeof getWpFilters === "function") {
       var f = getWpFilters() || {};
-      from = f.from || ""; 
-      to   = f.to   || "";
+      from = _wpDateInputToISO(f.from || "");
+to   = _wpDateInputToISO(f.to   || "");
+
       mach = (f.mach || "").toLowerCase();
       task = (f.task || "").toLowerCase();
       tech = (f.tech || "").toLowerCase();
@@ -6086,16 +6087,20 @@ function _wpDateInputToISO(s){
   s = (s == null) ? "" : String(s).trim();
   if (!s) return "";
 
-  // schon ISO: 2025-12-17
+  // ISO
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-  // deutsch: 17.12.2025 -> 2025-12-17
+  // deutsch: 15.12.2025
   var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (m) return m[3] + "-" + m[2] + "-" + m[1];
 
-  // fallback: lieber nicht filtern als falsch filtern
+  // auch akzeptieren: 2025.12.15 (falls irgendwo so angezeigt/gespeichert)
+  m = s.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+  if (m) return m[1] + "-" + m[2] + "-" + m[3];
+
   return "";
 }
+
 
 
 function wpLogApplyFilters(list){
