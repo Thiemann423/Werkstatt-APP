@@ -1387,21 +1387,31 @@ async function loadWpLog() {
   });
 
   // 🧱 Render (mit Escaping)
-  var html = "";
-  for (var j=0; j<list.length; j++){
-    var r = list[j] || {};
-    var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
-    var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
+var html = "";
+for (var j=0; j<list.length; j++){
+  var r = list[j] || {};
+  var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
+  var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
 
-    html += "<tr>"
-          +   "<td>" + esc(r.dateISO    || "")  + "</td>"
-          +   "<td>" + esc(r.machine    || "–") + "</td>"
-          +   "<td>" + esc(r.taskName   || "–") + "</td>"
-          +   "<td>" + esc(inter)              + "</td>"
-          +   "<td>" + esc(nip)                + "</td>"
-          +   "<td>" + esc(r.technician || "–")+ "</td>"
-          + "</tr>";
-  }
+  // 💬 Kommentar-Icon + Tooltip NUR am Icon
+  var cmt = (r.overdueComment && String(r.overdueComment).trim())
+    ? String(r.overdueComment).trim()
+    : "";
+
+  var cmtIcon = cmt
+    ? (' <span aria-label="Kommentar" title="' + esc(cmt) + '" style="cursor:help;">💬</span>')
+    : "";
+
+  html += "<tr>"
+        +   "<td>" + esc(r.dateISO || "") + cmtIcon + "</td>"
+        +   "<td>" + esc(r.machine    || "–") + "</td>"
+        +   "<td>" + esc(r.taskName   || "–") + "</td>"
+        +   "<td>" + esc(inter)              + "</td>"
+        +   "<td>" + esc(nip)                + "</td>"
+        +   "<td>" + esc(r.technician || "–") + "</td>"
+        + "</tr>";
+}
+
   tbody.innerHTML = html;
 
   // Empty-State ein/aus
