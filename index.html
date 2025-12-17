@@ -838,98 +838,94 @@ async function getShareRootEndpoint() {
     }
   }
 
-  // Banner + Alert befüllen
-  function renderGlobalOverdueUI(due) {
-    var banner = document.getElementById("wpGlobalOverdueBanner");
-    var openBtn = document.getElementById("wpOpenFromBanner");
-    var alertBox = document.getElementById("wpGlobalAlert");
+// Banner + Alert befüllen
+function renderGlobalOverdueUI(due) {
+  var banner = document.getElementById("wpGlobalOverdueBanner");
+  var openBtn = document.getElementById("wpOpenFromBanner");
+  var alertBox = document.getElementById("wpGlobalAlert");
 
-    // Banner
-    if (banner) {
-      if (due && due.length) {
-        var msgEl = banner.querySelector("[data-msg]");
-        if (msgEl) {
-          var over = due.filter(d => d.status === "overdue").length;
-          var tod = due.filter(d => d.status === "today").length;
-          msgEl.textContent = over
-            ? "Es gibt " +
-              over +
-              " überfällige und " +
-              tod +
-              " heute fällige Wartungen."
-            : "Es gibt " + tod + " heute fällige Wartungen.";
-        }
-        banner.style.display = "flex";
-      } else {
-        banner.style.display = "none";
+  // Banner
+  if (banner) {
+    if (due && due.length) {
+      var msgEl = banner.querySelector("[data-msg]");
+      if (msgEl) {
+        var over = due.filter(d => d.status === "overdue").length;
+        var tod = due.filter(d => d.status === "today").length;
+        msgEl.textContent = over
+          ? "Es gibt " + over + " überfällige und " + tod + " heute fällige Wartungen."
+          : "Es gibt " + tod + " heute fällige Wartungen.";
       }
-    }
-
-    // Button im Banner
-    if (openBtn) {
-      openBtn.onclick = function () {
-        if (due && due.length === 1 && due[0] && due[0].machine) {
-          if (typeof wpOpenMachineFromName === "function") {
-            wpOpenMachineFromName(due[0].machine);
-            return;
-          }
-        }
-        var tgl = document.getElementById("toggleWpLogBtn");
-        if (tgl) tgl.click();
-      };
-    }
-
-    // Alert-Liste
-    if (alertBox) {
-      if (due && due.length) {
-        var items = due
-          .slice(0, 8)
-          .map(function (d) {
-            var label = [d.machine || "", d.task || ""]
-              .filter(Boolean)
-              .join(" – ");
-            var when = d.nextDue
-              ? " (" +
-                d.nextDue +
-                (d.status === "overdue" ? " überfällig" : " heute") +
-                ")"
-              : "";
-            return (
-              '<li><button data-goto="' +
-              encodeURIComponent(d.machine || "") +
-              '" style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
-              label +
-              when +
-              "</button></li>"
-            );
-          })
-          .join("");
-        alertBox.innerHTML =
-          "<strong>⚠️ Wartung fällig:</strong>" +
-          '<ul style="margin:6px 0 0 18px;list-style:disc;">' +
-          items +
-          "</ul>";
-        alertBox.style.display = "block";
-
-        var btns = alertBox.querySelectorAll("button[data-goto]");
-        for (var i = 0; i < btns.length; i++) {
-          btns[i].addEventListener("click", function () {
-            var name = decodeURIComponent(
-              this.getAttribute("data-goto") || ""
-            );
-            if (
-              name &&
-              typeof wpOpenMachineFromName === "function"
-            )
-              wpOpenMachineFromName(name);
-          });
-        }
-      } else {
-        alertBox.style.display = "none";
-        alertBox.innerHTML = "";
-      }
+      banner.style.display = "flex";
+    } else {
+      banner.style.display = "none";
     }
   }
+
+  // Button im Banner
+  if (openBtn) {
+    openBtn.onclick = function () {
+      if (due && due.length === 1 && due[0] && due[0].machine) {
+        if (typeof wpOpenMachineFromName === "function") {
+          wpOpenMachineFromName(due[0].machine);
+          return;
+        }
+      }
+      var tgl = document.getElementById("toggleWpLogBtn");
+      if (tgl) tgl.click();
+    };
+  }
+
+  // Alert-Liste
+  if (alertBox) {
+    if (due && due.length) {
+      var items = due
+        .slice(0, 8)
+        .map(function (d) {
+          var label = [d.machine || "", d.task || ""].filter(Boolean).join(" – ");
+          var when = d.nextDue
+            ? " (" + d.nextDue + (d.status === "overdue" ? " überfällig" : " heute") + ")"
+            : "";
+
+          // ✅ NEU: Kennzeichnung für überfällig + Kommentarpflicht
+          var needsComment = (d.status === "overdue");
+          var commentHint = needsComment ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>' : "";
+
+          return (
+            '<li><button data-goto="' +
+            encodeURIComponent(d.machine || "") +
+            '" data-needs-comment="' + (needsComment ? "1" : "0") + '"' +
+            ' style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
+            label +
+            when +
+            commentHint +
+            "</button></li>"
+          );
+        })
+        .join("");
+
+      alertBox.innerHTML =
+        "<strong>⚠️ Wartung fällig:</strong>" +
+        '<ul style="margin:6px 0 0 18px;list-style:disc;">' +
+        items +
+        "</ul>";
+      alertBox.style.display = "block";
+
+      var btns = alertBox.querySelectorAll("button[data-goto]");
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener("click", function () {
+          var name = decodeURIComponent(this.getAttribute("data-goto") || "");
+          if (name && typeof wpOpenMachineFromName === "function") {
+            wpOpenMachineFromName(name);
+          }
+        });
+      }
+    } else {
+      alertBox.style.display = "none";
+      alertBox.innerHTML = "";
+    }
+  }
+}
+
 
   // Start-Check (ohne Dashboard)
   document.addEventListener("DOMContentLoaded", function () {
@@ -5709,35 +5705,65 @@ if (E.btnDel) E.btnDel.addEventListener('click', async function(){
   if (typeof wpUpdateGlobalBanner  === "function") wpUpdateGlobalBanner();
   if (typeof wpSyncPrintSummary    === "function") wpSyncPrintSummary(null);
 });
-
-// Heute durchgeführt
 if (E.btnDone) E.btnDone.addEventListener("click", async function () {
   const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
   if (!t) { alert("Bitte eine Aufgabe wählen."); return; }
 
-  // Heute
-t.lastDateISO = wpTodayISO();
+  // Überfälligkeit auf Basis des bisherigen Standes prüfen (BEVOR wir lastDateISO überschreiben)
+  const today = wpTodayISO();
+  const prevLast = (t.lastDateISO || "").trim();
+  const prevNext = (prevLast && t.intervalDays) ? wpComputeNext(prevLast, t.intervalDays) : "";
+  const isOverdue = (prevNext && prevNext < today);
 
-try {
-  if (typeof wpLogExecution === "function") {
-    await wpLogExecution({
-      dateISO      : t.lastDateISO,
-      machine      : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
-      taskName     : t.name,
-      intervalDays : t.intervalDays,
-      nipples      : t.nipples,
-      technician   : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
-    });
+  let overdueComment = "";
+  if (isOverdue) {
+    overdueComment = prompt(
+      "⚠️ Diese Wartung ist ÜBERFÄLLIG.\nBitte kurz kommentieren, warum sie überfällig ist:",
+      ""
+    );
+
+    overdueComment = (overdueComment || "").trim();
+
+    if (!overdueComment) {
+      alert("Abgebrochen: Für überfällige Wartungen ist ein Kommentar Pflicht.");
+      return;
+    }
+
+    // optional: Mindestlänge
+    if (overdueComment.length < 10) {
+      alert("Bitte etwas ausführlicher kommentieren (mind. 10 Zeichen).");
+      return;
+    }
   }
-} catch (e) {
-  console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
-}
 
-if (typeof wpRecalc === "function") wpRecalc();
-if (typeof wpEvalWarning === "function") wpEvalWarning();
-if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
-if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
+  // Heute erst JETZT setzen
+  t.lastDateISO = today;
+
+  try {
+    if (typeof wpLogExecution === "function") {
+      await wpLogExecution({
+        dateISO       : t.lastDateISO,
+        machine       : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
+        taskName      : t.name,
+        intervalDays  : t.intervalDays,
+        nipples       : t.nipples,
+        technician    : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : "",
+        overdueComment: overdueComment,  // ✅ neu
+        prevNextDue   : prevNext         // optional
+      });
+    }
+  } catch (e) {
+    console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
+    alert("Speichern fehlgeschlagen. Bitte erneut versuchen.");
+    return; // ✅ wichtig
+  }
+
+  if (typeof wpRecalc === "function") wpRecalc();
+  if (typeof wpEvalWarning === "function") wpEvalWarning();
+  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
 });
+
 
 
 // Initialisieren
