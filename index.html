@@ -1343,19 +1343,29 @@ async function loadWpLog() {
     ? _wpNorm
     : function(s){ s = (s==null?"":String(s)); return s.toLowerCase().trim(); };
 
-  // 🔧 Filter sicher beziehen
+  // 🔧 Filter direkt aus den Inputs (kein getWpFilters nötig)
   var from="", to="", mach="", task="", tech="";
-  try {
-    if (typeof getWpFilters === "function") {
-      var f = getWpFilters() || {};
-      from = _wpDateInputToISO(f.from || "");
-to   = _wpDateInputToISO(f.to   || "");
 
-      mach = (f.mach || "").toLowerCase();
-      task = (f.task || "").toLowerCase();
-      tech = (f.tech || "").toLowerCase();
-    }
+  try {
+    // Wenn du _wpEl bereits eingebaut hast, nutz es – sonst fällt es auf getElementById zurück
+    var getEl = (typeof _wpEl === "function")
+      ? _wpEl
+      : function(id){ return document.getElementById(id); };
+
+    var fromEl = getEl("wpLog_from");
+    var toEl   = getEl("wpLog_to");
+    var mEl    = getEl("wpLog_machine");
+    var tEl    = getEl("wpLog_task");
+    var techEl = getEl("wpLog_tech");
+
+    from = _wpDateInputToISO(fromEl && fromEl.value ? fromEl.value : "");
+    to   = _wpDateInputToISO(toEl   && toEl.value   ? toEl.value   : "");
+
+    mach = norm(mEl    && mEl.value    ? mEl.value    : "");
+    task = norm(tEl    && tEl.value    ? tEl.value    : "");
+    tech = norm(techEl && techEl.value ? techEl.value : "");
   } catch(e) {}
+
 
   // Daten laden (CLOUD-first + Fallback)
   var raw = [];
