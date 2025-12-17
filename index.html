@@ -5716,37 +5716,29 @@ if (E.btnDone) E.btnDone.addEventListener("click", async function () {
   if (!t) { alert("Bitte eine Aufgabe wählen."); return; }
 
   // Heute
-  t.lastDateISO = wpTodayISO();
+t.lastDateISO = wpTodayISO();
 
-  try {
-    if (typeof wpLogExecution === "function") {
-      await wpLogExecution({
-        dateISO      : t.lastDateISO,
-        machine      : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
-        taskName     : t.name,
-        intervalDays : t.intervalDays,
-        nipples      : t.nipples,
-        technician   : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
-      });
-    }
-  } catch (e) {
-    console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
+try {
+  if (typeof wpLogExecution === "function") {
+    await wpLogExecution({
+      dateISO      : t.lastDateISO,
+      machine      : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
+      taskName     : t.name,
+      intervalDays : t.intervalDays,
+      nipples      : t.nipples,
+      technician   : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : ""
+    });
   }
+} catch (e) {
+  console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
+}
 
-  if (typeof wpRecalc === "function") wpRecalc();
-  if (typeof wpEvalWarning === "function") wpEvalWarning();
-  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
-  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
+if (typeof wpRecalc === "function") wpRecalc();
+if (typeof wpEvalWarning === "function") wpEvalWarning();
+if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
+if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
 });
 
-
-
-
-  if (typeof wpRecalc           === "function") wpRecalc();
-  if (typeof wpEvalWarning      === "function") wpEvalWarning();
-  if (typeof wpUpdateGlobalBanner=== "function") wpUpdateGlobalBanner();
-  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
-});
 
 // Initialisieren
 if (typeof wpRefreshTaskList === "function") wpRefreshTaskList();
