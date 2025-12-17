@@ -1406,11 +1406,23 @@ for (var j=0; j<list.length; j++){
     ? String(r.overdueCommentedAt).trim()
     : "";
 
-  // ISO -> "YYYY-MM-DD HH:MM"
-  var whenPretty = "";
-  if (whenIso) {
+// ISO (UTC) -> lokale Zeit (de-DE)
+var whenPretty = "";
+if (whenIso) {
+  try {
+    whenPretty = new Date(whenIso).toLocaleString("de-DE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch (_) {
+    // Fallback
     whenPretty = whenIso.slice(0, 16).replace("T", " ");
   }
+}
+
 
   var tooltip = "";
   if (cmt) {
