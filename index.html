@@ -2600,53 +2600,47 @@ async function loadOpenProvisoriumOptions() {
     if (!baseValues.includes(selectEl.value)) selectEl.value = "";
   }
 
-  function rebuildDropdownsFromMaster() {
-    const selM = document.getElementById("maschine");
-    const selA = document.getElementById("anlagenteil");
+function rebuildDropdownsFromMaster() {
+  const selMs = Array.from(document.querySelectorAll('select#maschine'));
+  const selAs = Array.from(document.querySelectorAll('select#anlagenteil'));
 
-    const keep = (sel) => sel ? {
-      value: sel.value,
-      text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
-    } : null;
+  if (!selMs.length && !selAs.length) return;
 
-    const keepMaschine    = keep(selM);
-    const keepAnlagenteil = keep(selA);
+  const keep = (sel) => sel ? {
+    value: sel.value,
+    text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
+  } : null;
 
-    const restore = (sel, kept) => {
-      if (!sel || !kept) return;
-      if ([...sel.options].some(o => o.value === kept.value)) {
-        sel.value = kept.value;
-        return;
-      }
-      const byText = [...sel.options].find(o =>
-        (o.textContent || o.innerText).trim() === kept.text
-      );
-      if (byText) sel.value = byText.value;
-    };
+  const restore = (sel, kept) => {
+    if (!sel || !kept) return;
+    if ([...sel.options].some(o => o.value === kept.value)) { sel.value = kept.value; return; }
+    const byText = [...sel.options].find(o => (o.textContent || o.innerText).trim() === kept.text);
+    if (byText) sel.value = byText.value;
+  };
 
-    // Maschine
-    if (selM) {
-      pruneToBase(selM, baseMaschineValues);
-      (masterData.maschinen || []).forEach(n =>
-        addOptionUnique(selM, n, { autoselect: false })
-      );
-      sortSelectOptions(selM, ["", "Sonstige"]);
-      restore(selM, keepMaschine);
-    }
+  // Maschine: alle Selects aktualisieren
+  selMs.forEach(selM => {
+    const kept = keep(selM);
+    pruneToBase(selM, baseMaschineValues);
+    (masterData.maschinen || []).forEach(n => addOptionUnique(selM, n, { autoselect: false }));
+    sortSelectOptions(selM, ["", "Sonstige"]);
+    restore(selM, kept);
+  });
 
-    // Anlagenteil
-    if (selA) {
-      pruneToBase(selA, baseAnlagenteilValues);
-      (masterData.anlagenteile || []).forEach(n =>
-        addOptionUnique(selA, n, { autoselect: false })
-      );
-      sortSelectOptions(selA, ["", "Sonstige"]);
-      restore(selA, keepAnlagenteil);
-    }
+  // Anlagenteil: alle Selects aktualisieren
+  selAs.forEach(selA => {
+    const kept = keep(selA);
+    pruneToBase(selA, baseAnlagenteilValues);
+    (masterData.anlagenteile || []).forEach(n => addOptionUnique(selA, n, { autoselect: false }));
+    sortSelectOptions(selA, ["", "Sonstige"]);
+    restore(selA, kept);
+  });
 
-    updateMaschineField();
-    updateAnlagenteilField();
-  }
+  // Sonstige-Felder korrekt ein-/ausblenden
+  updateMaschineField();
+  updateAnlagenteilField();
+}
+
 
   // global verfügbar
   window.rebuildDropdownsFromMaster = rebuildDropdownsFromMaster;
@@ -3532,31 +3526,54 @@ function addOptionUnique(selectEl, label, { autoselect = false } = {}) {
 
 /* ⬇️ NEU: Dropdowns aus Stammdaten vollständig neu aufbauen */
 window.rebuildDropdownsFromMaster = function () {
-  const maschineSelect    = document.getElementById("maschine");
-  const anlagenteilSelect = document.getElementById("anlagenteil");
-  if (!maschineSelect || !anlagenteilSelect) return;
+  const selMs = Array.from(document.querySelectorAll('select#maschine'));
+  const selAs = Array.from(document.querySelectorAll('select#anlagenteil'));
+  if (!selMs.length && !selAs.length) return;
 
-  // Basisoptionen (aus dem aktuellen HTML dieses Builds)
-  const baseMaschine = Array.from(maschineSelect.options).map(o => o.value);
-  const baseTeile    = Array.from(anlagenteilSelect.options).map(o => o.value);
+  const keep = (sel) => sel ? {
+    value: sel.value,
+    text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
+  } : null;
 
-  // Alles zurück auf „nur Basisoptionen“
-  Array.from(maschineSelect.options).forEach(o => { if (!baseMaschine.includes(o.value)) o.remove(); });
-  Array.from(anlagenteilSelect.options).forEach(o => { if (!baseTeile.includes(o.value))   o.remove(); });
+  const restore = (sel, kept) => {
+    if (!sel || !kept) return;
+    if ([...sel.options].some(o => o.value === kept.value)) { sel.value = kept.value; return; }
+    const byText = [...sel.options].find(o => (o.textContent || o.innerText).trim() === kept.text);
+    if (byText) sel.value = byText.value;
+  };
 
-  // Neue Stammdaten anhängen (fügt ein & sortiert direkt)
-  (masterData.maschinen     || []).forEach(n => addOptionUnique(maschineSelect, n));
-  (masterData.anlagenteile  || []).forEach(n => addOptionUnique(anlagenteilSelect, n));
+  // Maschine: alle Selects aktualisieren
+  selMs.forEach(selM => {
+    const kept = keep(selM);
 
-  // „Sonstige“-Felder korrekt ein-/ausblenden
-  maschineSelect.dispatchEvent(new Event('change'));
-  anlagenteilSelect.dispatchEvent(new Event('change'));
+    // Basisoptionen nur aus dem HTML-Build behalten
+    const baseMaschine = Array.from(selM.options).map(o => o.value);
+    Array.from(selM.options).forEach(o => { if (!baseMaschine.includes(o.value)) o.remove(); });
 
-  // Sicherheit: zum Schluss noch einmal sortieren
-  sortSelectOptions(maschineSelect, ["", "Sonstige"]);
-  sortSelectOptions(anlagenteilSelect, ["", "Sonstige"]);
+    (masterData.maschinen || []).forEach(n => addOptionUnique(selM, n));
+    sortSelectOptions(selM, ["", "Sonstige"]);
+    restore(selM, kept);
+
+    // „Sonstige“-Felder korrekt ein-/ausblenden
+    selM.dispatchEvent(new Event('change'));
+  });
+
+  // Anlagenteil: alle Selects aktualisieren
+  selAs.forEach(selA => {
+    const kept = keep(selA);
+
+    const baseTeile = Array.from(selA.options).map(o => o.value);
+    Array.from(selA.options).forEach(o => { if (!baseTeile.includes(o.value)) o.remove(); });
+
+    (masterData.anlagenteile || []).forEach(n => addOptionUnique(selA, n));
+    sortSelectOptions(selA, ["", "Sonstige"]);
+    restore(selA, kept);
+
+    selA.dispatchEvent(new Event('change'));
+  });
 };
 /* ⬆️ ENDE neu */
+
 
 
   // ====================
