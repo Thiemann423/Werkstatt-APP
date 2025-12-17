@@ -522,6 +522,7 @@ async function getShareRootEndpoint() {
 <script>
 /* Failsafe: Toggle bereitstellen + Button sicher aktivieren */
 (function () {
+
   // Toggle nur definieren, falls noch nicht vorhanden
   if (!window.__toggleWpLogPanel) {
     window.__toggleWpLogPanel = function () {
@@ -540,25 +541,36 @@ async function getShareRootEndpoint() {
         btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
       }
 
-      // Beim Öffnen Daten laden
+      // ✅ Beim Öffnen: Filter binden + Daten laden + Tabelle bauen
       if (willOpen) {
-        // 1. Alte Logik: Daten in window.wartungslog laden (für alte Helfer)
-        if (typeof wpLogLoad === "function") {
-          try { wpLogLoad(); } catch (e) { console.warn("wpLogLoad:", e); }
-        }
+        (async function () {
+          try {
+            if (typeof bindWpLogUi === "function") bindWpLogUi();
+          } catch (e) {
+            console.warn("bindWpLogUi:", e);
+          }
 
-        // 2. Neue Logik: direkt aus der Cloud laden und Tabelle bauen
-        if (typeof loadWpLog === "function") {
-          try { loadWpLog(); } catch (e) { console.warn("loadWpLog:", e); }
-        } else if (typeof renderWpLogTable === "function") {
-          // Fallback, falls loadWpLog einmal nicht existiert
-          try { renderWpLogTable(); } catch (e) { console.warn("renderWpLogTable:", e); }
-        }
+          try {
+            if (typeof wpLogLoad === "function") await wpLogLoad();
+          } catch (e) {
+            console.warn("wpLogLoad:", e);
+          }
+
+          try {
+            if (typeof loadWpLog === "function") {
+              await loadWpLog();
+            } else if (typeof renderWpLogTable === "function") {
+              renderWpLogTable();
+            }
+          } catch (e) {
+            console.warn("load/render:", e);
+          }
+        })();
       }
-    }; // <-- Funktion schließen
-  }   // <-- if(!window.__toggleWpLogPanel) schließen
+    };
+  }
 
-  // Button sicher aktivieren + Zusatzlistener
+  // Button sicher aktivieren
   window.addEventListener('load', function () {
     var btn   = document.getElementById('toggleWpLogBtn');
     var panel = document.getElementById('wpLogPanel');
@@ -569,7 +581,6 @@ async function getShareRootEndpoint() {
         'aria-expanded',
         (panel && panel.style.display === 'block') ? 'true' : 'false'
       );
-      // kein zusätzlicher click-Listener nötig, der Button hat schon ein inline onclick
     }
   });
 
@@ -577,11 +588,13 @@ async function getShareRootEndpoint() {
   window.addEventListener('keydown', function (e) {
     if (e.altKey && (e.key === 'w' || e.key === 'W')) {
       e.preventDefault();
-      window.__toggleWpLogPanel();
+      if (window.__toggleWpLogPanel) window.__toggleWpLogPanel();
     }
   });
+
 })();
 </script>
+
 
 
 <script>
@@ -6109,24 +6122,22 @@ function _wpDateInputToISO(s){
 
 
 function wpLogApplyFilters(list){
-  // Elemente sicher holen
-  var fromEl = _byId("wpLog_from");
-  var toEl   = _byId("wpLog_to");
-  var mEl    = _byId("wpLog_machine");
-  var tEl    = _byId("wpLog_task");
-  var techEl = _byId("wpLog_tech");
+  // Elemente sicher holen (JETZT scoped)
+  var fromEl = _wpEl("wpLog_from");
+  var toEl   = _wpEl("wpLog_to");
+  var mEl    = _wpEl("wpLog_machine");
+  var tEl    = _wpEl("wpLog_task");
+  var techEl = _wpEl("wpLog_tech");
 
-  // Werte ohne optional chaining lesen
   var fromRaw = (fromEl && typeof fromEl.value !== "undefined") ? fromEl.value : "";
   var toRaw   = (toEl   && typeof toEl.value   !== "undefined") ? toEl.value   : "";
 
-  // ✅ NEU: Datum robust normalisieren (ISO oder TT.MM.JJJJ)
   var from = _wpDateInputToISO(fromRaw);
   var to   = _wpDateInputToISO(toRaw);
 
-  var m    = _wpNorm(mEl   && typeof mEl.value   !== "undefined" ? mEl.value   : "");
-  var t    = _wpNorm(tEl   && typeof tEl.value   !== "undefined" ? tEl.value   : "");
-  var tech = _wpNorm(techEl&& typeof techEl.value!== "undefined" ? techEl.value: "");
+  var m    = _wpNorm(mEl    && typeof mEl.value    !== "undefined" ? mEl.value    : "");
+  var t    = _wpNorm(tEl    && typeof tEl.value    !== "undefined" ? tEl.value    : "");
+  var tech = _wpNorm(techEl && typeof techEl.value !== "undefined" ? techEl.value : "");
 
   var arr = Array.isArray(list) ? list : [];
 
@@ -6148,12 +6159,12 @@ function wpLogApplyFilters(list){
 
     if (tech){
       var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
-      var haystack = [
+      var hay = [
         e ? e.technician : "", e ? e.technicianEmail : "", e ? e.technicianUpn : "",
         (!e || !e.technician ? u.name : ""), (!e || !e.technicianEmail ? u.email : ""), (!e || !e.technicianUpn ? u.upn : "")
       ].filter(Boolean).map(_wpNorm).join(" ");
 
-      if (!haystack.includes(tech)) return false;
+      if (!hay.includes(tech)) return false;
     }
 
     return true;
@@ -6231,41 +6242,40 @@ async function toggleWpLogPanel(){
 
 function bindWpLogUi(){
   var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
+
   for (var i=0; i<ids.length; i++){
-    var el = _byId(ids[i]);
+    var el = _wpEl(ids[i]);
     if (el) el.addEventListener("input", renderWpLogTable);
   }
 
-var btnReload = _byId("wpLogReload");
-if (btnReload) btnReload.addEventListener("click", async function(){
-  // Cloud neu laden + danach rendern
-  try {
-    if (typeof wpLogLoad === "function") await wpLogLoad();
-  } catch (e) {
-    console.warn("wpLogLoad beim Reload:", e);
-  }
-  renderWpLogTable();
-});
+  var btnReload = _wpEl("wpLogReload");
+  if (btnReload) btnReload.addEventListener("click", async function(){
+    try {
+      if (typeof wpLogLoad === "function") await wpLogLoad();
+    } catch (e) {
+      console.warn("wpLogLoad beim Reload:", e);
+    }
+    renderWpLogTable();
+  });
 
-
-  var btnClear = _byId("wpLogClear");
+  var btnClear = _wpEl("wpLogClear");
   if (btnClear) btnClear.addEventListener("click", function(){
     for (var i=0; i<ids.length; i++){
-      var el = _byId(ids[i]); if (el) el.value = "";
+      var el = _wpEl(ids[i]); if (el) el.value = "";
     }
-    // optional: Range-Button auf 30 Tage zurücksetzen
-    var rangeBtn = _byId("wpLogRangeBtn");
+    var rangeBtn = _wpEl("wpLogRangeBtn");
     if (rangeBtn) { rangeBtn.dataset.mode = "30"; rangeBtn.textContent = "🗓️ Letzte 30 Tage"; }
     renderWpLogTable();
   });
 
-  var rangeBtn = _byId("wpLogRangeBtn");
+  var rangeBtn = _wpEl("wpLogRangeBtn");
   if (rangeBtn) rangeBtn.addEventListener("click", function(ev){
     var btn   = ev.currentTarget || ev.target;
     var mode  = String((btn && btn.dataset && btn.dataset.mode) || "30");
 
-    var today = new Date();              // nicht mutieren
-    var from  = new Date(today);         // echte Kopie
+    var today = new Date();
+    var from  = new Date(today);
+
     if (mode === "30"){
       from.setDate(from.getDate() - 30);
       btn.dataset.mode = "90";
@@ -6280,15 +6290,13 @@ if (btnReload) btnReload.addEventListener("click", async function(){
       btn.textContent  = "🗓️ Letzte 30 Tage";
     }
 
-    // Zentrale toISO benutzen (keine lokale Hilfsfunktion!)
-// Zentrale _toISO benutzen
-var elFrom = _byId("wpLog_from"); if (elFrom) elFrom.value = _toISO(from);
-var elTo   = _byId("wpLog_to");   if (elTo)   elTo.value   = _toISO(today);
-
+    var elFrom = _wpEl("wpLog_from"); if (elFrom) elFrom.value = _toISO(from);
+    var elTo   = _wpEl("wpLog_to");   if (elTo)   elTo.value   = _toISO(today);
 
     renderWpLogTable();
   });
 }
+
 
 
 
