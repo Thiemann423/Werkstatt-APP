@@ -2657,12 +2657,13 @@ async function loadOpenProvisoriumOptions() {
   // 📝 "Sonstige"-Werte dauerhaft übernehmen
 function tryAddCustomMaschine() {
   if (!sonstigeMaschineInput || !maschineSelect) return;
-  let val = (sonstigeMaschineInput.value || "").trim();
+
+  var val = (sonstigeMaschineInput.value || "").trim();
   if (!val) return;
 
   // 1) ins Dropdown einfügen
   if (typeof addOptionUnique === "function") {
-    addOptionUnique(maschineSelect, val);   // fügt ein & sortiert
+    addOptionUnique(maschineSelect, val);   // fügt ein & sortiert (falls eure Funktion das macht)
   } else {
     maschineSelect.add(new Option(val, val));
   }
@@ -2676,18 +2677,23 @@ function tryAddCustomMaschine() {
   }
 
   // 4) Stammdaten-Array aktualisieren + speichern
+  if (!masterData) masterData = {};
   if (!Array.isArray(masterData.maschinen)) masterData.maschinen = [];
-  const exists = masterData.maschinen.some(
-    x => String(x || "").toLowerCase() === val.toLowerCase()
-  );
+
+  var exists = masterData.maschinen.some(function (x) {
+    return String(x || "").toLowerCase() === val.toLowerCase();
+  });
+
   if (!exists) {
     masterData.maschinen.push(val);
-    masterData.maschinen.sort((a,b) =>
-      a.localeCompare(b,"de",{sensitivity:"base"})
-    );
+    masterData.maschinen.sort(function (a, b) {
+      return String(a).localeCompare(String(b), "de", { sensitivity: "base" });
+    });
 
     // auch Basisliste erweitern, damit pruneToBase ihn nie wieder löscht
-    if (!baseMaschineValues.includes(val)) baseMaschineValues.push(val);
+    if (Array.isArray(baseMaschineValues) && baseMaschineValues.indexOf(val) === -1) {
+      baseMaschineValues.push(val);
+    }
 
     if (typeof saveMasterData === "function") saveMasterData();
   }
@@ -2697,9 +2703,10 @@ function tryAddCustomMaschine() {
   updateMaschineField();
 }
 
+
 function tryAddCustomAnlagenteil() {
   if (!sonstigeAnlagenteilInput || !anlagenteilSelect) return;
-  let val = (sonstigeAnlagenteilInput.value || "").trim();
+  var val = (sonstigeAnlagenteilInput.value || "").trim();
   if (!val) return;
 
   // 1) ins Dropdown einfügen
@@ -2719,16 +2726,19 @@ function tryAddCustomAnlagenteil() {
 
   // 4) Stammdaten-Array aktualisieren + speichern
   if (!Array.isArray(masterData.anlagenteile)) masterData.anlagenteile = [];
-  const exists = masterData.anlagenteile.some(
-    x => String(x || "").toLowerCase() === val.toLowerCase()
-  );
+  var exists = masterData.anlagenteile.some(function (x) {
+    return String(x || "").toLowerCase() === val.toLowerCase();
+  });
+
   if (!exists) {
     masterData.anlagenteile.push(val);
-    masterData.anlagenteile.sort((a,b) =>
-      a.localeCompare(b,"de",{sensitivity:"base"})
-    );
+    masterData.anlagenteile.sort(function (a, b) {
+      return String(a).localeCompare(String(b), "de", { sensitivity: "base" });
+    });
 
-    if (!baseAnlagenteilValues.includes(val)) baseAnlagenteilValues.push(val);
+    if (Array.isArray(baseAnlagenteilValues) && baseAnlagenteilValues.indexOf(val) === -1) {
+      baseAnlagenteilValues.push(val);
+    }
 
     if (typeof saveMasterData === "function") saveMasterData();
   }
@@ -2739,34 +2749,73 @@ function tryAddCustomAnlagenteil() {
 }
 
 
-  // Eingabe übernehmen bei Verlassen der Felder
-  if (sonstigeMaschineInput) {
-    sonstigeMaschineInput.addEventListener("blur", tryAddCustomMaschine);
-  }
-  if (sonstigeAnlagenteilInput) {
-    sonstigeAnlagenteilInput.addEventListener("blur", tryAddCustomAnlagenteil);
-  }
+// Eingabe übernehmen bei Verlassen der Felder
+if (sonstigeMaschineInput) {
+  sonstigeMaschineInput.addEventListener("blur", tryAddCustomMaschine);
 
-  // 🔁 EXTRA-SICHERHEIT:
-  // Falls Blur mal nicht feuert, wird beim Absenden noch einmal versucht,
-  // aus "Sonstige" + Text einen echten Wert zu machen, BEVOR validiert wird.
-  const form = document.querySelector("form");
-  if (form) {
-    form.addEventListener("submit", function () {
-      if (maschineSelect &&
-          maschineSelect.value === "Sonstige" &&
-          sonstigeMaschineInput &&
-          sonstigeMaschineInput.value.trim()) {
-        tryAddCustomMaschine();
-      }
-      if (anlagenteilSelect &&
-          anlagenteilSelect.value === "Sonstige" &&
-          sonstigeAnlagenteilInput &&
-          sonstigeAnlagenteilInput.value.trim()) {
-        tryAddCustomAnlagenteil();
-      }
-    }, true); // capture = true → läuft vor der eigentlichen Validierung
-  }
+  // ✅ Enter = sofort übernehmen (nicht nur blur)
+  sonstigeMaschineInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      tryAddCustomMaschine();
+    }
+  });
+}
+
+if (sonstigeAnlagenteilInput) {
+  sonstigeAnlagenteilInput.addEventListener("blur", tryAddCustomAnlagenteil);
+
+  // ✅ Enter = sofort übernehmen (nicht nur blur)
+  sonstigeAnlagenteilInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      tryAddCustomAnlagenteil();
+    }
+  });
+}
+
+// ✅ Extra robust: wenn man im Select etwas ändert, übernehmen wir ggf. den Text
+if (maschineSelect) {
+  maschineSelect.addEventListener("change", function () {
+    if (sonstigeMaschineInput && sonstigeMaschineInput.value && sonstigeMaschineInput.value.trim()) {
+      tryAddCustomMaschine();
+    }
+  });
+}
+
+if (anlagenteilSelect) {
+  anlagenteilSelect.addEventListener("change", function () {
+    if (sonstigeAnlagenteilInput && sonstigeAnlagenteilInput.value && sonstigeAnlagenteilInput.value.trim()) {
+      tryAddCustomAnlagenteil();
+    }
+  });
+}
+
+
+// 🔁 EXTRA-SICHERHEIT:
+// Falls Blur/Enter/Change mal nicht feuert, wird beim Absenden noch einmal versucht,
+// aus "Sonstige" + Text einen echten Wert zu machen, BEVOR validiert wird.
+var form = document.querySelector("form");
+if (form) {
+  form.addEventListener("submit", function () {
+    if (maschineSelect &&
+        maschineSelect.value === "Sonstige" &&
+        sonstigeMaschineInput &&
+        sonstigeMaschineInput.value &&
+        sonstigeMaschineInput.value.trim()) {
+      tryAddCustomMaschine();
+    }
+
+    if (anlagenteilSelect &&
+        anlagenteilSelect.value === "Sonstige" &&
+        sonstigeAnlagenteilInput &&
+        sonstigeAnlagenteilInput.value &&
+        sonstigeAnlagenteilInput.value.trim()) {
+      tryAddCustomAnlagenteil();
+    }
+  }, true); // capture = true → läuft vor der eigentlichen Validierung
+}
+
 });
 </script>
 
