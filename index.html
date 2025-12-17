@@ -6082,6 +6082,20 @@ function displayTechnicianFor(entry){
 }
 
 
+function _wpDateInputToISO(s){
+  s = (s == null) ? "" : String(s).trim();
+  if (!s) return "";
+
+  // schon ISO: 2025-12-17
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // deutsch: 17.12.2025 -> 2025-12-17
+  var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) return m[3] + "-" + m[2] + "-" + m[1];
+
+  // fallback: lieber nicht filtern als falsch filtern
+  return "";
+}
 
 
 function wpLogApplyFilters(list){
@@ -6093,8 +6107,13 @@ function wpLogApplyFilters(list){
   var techEl = _byId("wpLog_tech");
 
   // Werte ohne optional chaining lesen
-  var from = (fromEl && typeof fromEl.value !== "undefined") ? fromEl.value : "";
-  var to   = (toEl   && typeof toEl.value   !== "undefined") ? toEl.value   : "";
+  var fromRaw = (fromEl && typeof fromEl.value !== "undefined") ? fromEl.value : "";
+  var toRaw   = (toEl   && typeof toEl.value   !== "undefined") ? toEl.value   : "";
+
+  // ✅ NEU: Datum robust normalisieren (ISO oder TT.MM.JJJJ)
+  var from = _wpDateInputToISO(fromRaw);
+  var to   = _wpDateInputToISO(toRaw);
+
   var m    = _wpNorm(mEl   && typeof mEl.value   !== "undefined" ? mEl.value   : "");
   var t    = _wpNorm(tEl   && typeof tEl.value   !== "undefined" ? tEl.value   : "");
   var tech = _wpNorm(techEl&& typeof techEl.value!== "undefined" ? techEl.value: "");
@@ -6118,7 +6137,6 @@ function wpLogApplyFilters(list){
     }
 
     if (tech){
-      // Suchkandidat: Log-Felder + Fallback aktueller User
       var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
       var haystack = [
         e ? e.technician : "", e ? e.technicianEmail : "", e ? e.technicianUpn : "",
@@ -6135,6 +6153,7 @@ function wpLogApplyFilters(list){
     return bd.localeCompare(ad);
   });
 }
+
 
 
 function renderWpLogTable(){
