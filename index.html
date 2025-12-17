@@ -6087,19 +6087,24 @@ function _wpDateInputToISO(s){
   s = (s == null) ? "" : String(s).trim();
   if (!s) return "";
 
-  // ISO
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-  // deutsch: 15.12.2025
-  var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (m) return m[3] + "-" + m[2] + "-" + m[1];
+  // deutsch: 5.1.2025 oder 05.01.2025
+  var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) {
+    var dd = String(m[1]).padStart(2,"0");
+    var mm = String(m[2]).padStart(2,"0");
+    return m[3] + "-" + mm + "-" + dd;
+  }
 
-  // auch akzeptieren: 2025.12.15 (falls irgendwo so angezeigt/gespeichert)
+  // 2025.12.15
   m = s.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
   if (m) return m[1] + "-" + m[2] + "-" + m[3];
 
+  // fallback: lieber nichts filtern statt falsch filtern
   return "";
 }
+
 
 
 
@@ -6208,15 +6213,21 @@ function renderWpLogTable(){
 }
 
 
-function toggleWpLogPanel(){
-  const p = _byId("wpLogPanel");
+async function toggleWpLogPanel(){
+  var p = _byId("wpLogPanel");
   if (!p) return;
-  const orders = _byId("dashPanel");
+  var orders = _byId("dashPanel");
   if (orders && orders.style.display === "block") orders.style.display = "none";
-  const willOpen = (p.style.display==="none" || !p.style.display);
+
+  var willOpen = (p.style.display==="none" || !p.style.display);
   p.style.display = willOpen ? "block" : "none";
-  if (willOpen){ wpLogLoad(); renderWpLogTable(); }
+
+  if (willOpen){
+    if (typeof wpLogLoad === "function") await wpLogLoad();
+    renderWpLogTable();
+  }
 }
+
 
 function bindWpLogUi(){
   var ids = ["wpLog_from","wpLog_to","wpLog_machine","wpLog_task","wpLog_tech"];
@@ -6225,12 +6236,17 @@ function bindWpLogUi(){
     if (el) el.addEventListener("input", renderWpLogTable);
   }
 
-  var btnReload = _byId("wpLogReload");
-  if (btnReload) btnReload.addEventListener("click", function(){
-    // Cloud neu laden + rendern
-    if (typeof wpLogLoad === "function") wpLogLoad();
-    renderWpLogTable();
-  });
+var btnReload = _byId("wpLogReload");
+if (btnReload) btnReload.addEventListener("click", async function(){
+  // Cloud neu laden + danach rendern
+  try {
+    if (typeof wpLogLoad === "function") await wpLogLoad();
+  } catch (e) {
+    console.warn("wpLogLoad beim Reload:", e);
+  }
+  renderWpLogTable();
+});
+
 
   var btnClear = _byId("wpLogClear");
   if (btnClear) btnClear.addEventListener("click", function(){
@@ -6277,47 +6293,53 @@ var elTo   = _byId("wpLog_to");   if (elTo)   elTo.value   = _toISO(today);
 
 
 var saveBtn = _byId("wpSaveTask");
-if (saveBtn) saveBtn.addEventListener("click", function(){
+if (saveBtn) saveBtn.addEventListener("click", async function(){
   var entry = _collectEntryFromForm({useTodayIfEmpty:true});
-  wpLogExecution(entry);
+  await wpLogExecution(entry);
+  
+
   var pnl=_byId("wpLogPanel");
   if (pnl && pnl.style.display === "block") renderWpLogTable();
   alert("Wartung gespeichert!");
 });
 
 var doneBtn = _byId("wpMarkDoneToday");
-if (doneBtn) doneBtn.addEventListener("click", function () {
+if (doneBtn) doneBtn.addEventListener("click", async function () {
   // 🔒 Doppel-/Mehrfachklick verhindern, solange wir verarbeiten
   if (doneBtn.dataset.busy === "1") return;
   doneBtn.dataset.busy = "1";
 
-  var todayISO = _toISO(new Date());
-  var lastEl   = _byId("wpLastDate");
+  try {
+    var todayISO = _toISO(new Date());
+    var lastEl   = _byId("wpLastDate");
 
-  // ⛔ Bereits heute eingetragen? Dann nichts nochmal machen
-  if (lastEl && lastEl.value === todayISO) {
+    // ⛔ Bereits heute eingetragen? Dann nichts nochmal machen
+    if (lastEl && lastEl.value === todayISO) {
+      alert("Diese Aufgabe wurde heute bereits als durchgeführt markiert.");
+      return;
+    }
+
+    // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
+    if (lastEl) lastEl.value = todayISO;
+
+    // Fälligkeit sauber über die neue Logik berechnen
+    if (typeof recomputeNextDue === "function") {
+      recomputeNextDue();
+    }
+
+    // ✅ Eintrag ins Log schreiben und warten bis fertig
+    var entry = _collectEntryFromForm({ useTodayIfEmpty: true });
+    await wpLogExecution(entry);
+
+    var pnl = _byId("wpLogPanel");
+    if (pnl && pnl.style.display === "block") renderWpLogTable();
+  } catch (e) {
+    console.error("wpMarkDoneToday:", e);
+    alert("Speichern fehlgeschlagen. Bitte erneut versuchen.");
+  } finally {
+    // 🔓 Button wieder freigeben (auch bei Fehler/Return)
     doneBtn.dataset.busy = "0";
-    alert("Diese Aufgabe wurde heute bereits als durchgeführt markiert.");
-    return;
   }
-
-  // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
-  if (lastEl) lastEl.value = todayISO;
-
-  // Fälligkeit sauber über die neue Logik berechnen
-  if (typeof recomputeNextDue === "function") {
-    recomputeNextDue();
-  }
-
-  // Eintrag wie bisher ins Log schreiben (lokale Logik)
-  var entry = _collectEntryFromForm({ useTodayIfEmpty: true });
-  wpLogExecution(entry);
-
-  var pnl = _byId("wpLogPanel");
-  if (pnl && pnl.style.display === "block") renderWpLogTable();
-
-  // 🔓 Button wieder freigeben
-  doneBtn.dataset.busy = "0";
 });
 
 document.addEventListener("DOMContentLoaded", () => {
