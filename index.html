@@ -390,15 +390,15 @@ async function getShareRootEndpoint() {
   }
 </script>
 
-<!-- 🔧 Einmaliger Helper-Block -->
-<!-- … dein Config-Block + displayNameFromUser … -->
+
 
 <!-- 🔧 Einmaliger Helper-Block (IM HEAD!) -->
 <script>
-  // Globaler DOM-Helfer (für alle Blöcke verfügbar)
   window.byId = window.byId || function(id){ return document.getElementById(id); };
 
-  // Alte/Neue Funktionsnamen kompatibel halten
+  // ✅ Fallback für _wpEl (Wartungslog nutzt das)
+  window._wpEl = window._wpEl || function (id) { return document.getElementById(id); };
+
   window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
     try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
   };
