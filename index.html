@@ -5413,60 +5413,122 @@ const id = (selTask && selTask.value) ? selTask.value : "";
 }
 
 /* ---------- Statusfelder aktualisieren ---------- */
-function wpStatusUpdateForTask(task){
-  const { interval, last, next, pill, nip, selMaschine } = wpEls();
+function wpStatusUpdateForTask(task) {
+  const els = wpEls();
+  const interval    = els.interval;
+  const last        = els.last;
+  const next        = els.next;
+  const pill        = els.pill;
+  const nip         = els.nip;
+  const selMaschine = els.selMaschine;
 
-  const clear = () => {
+  function clear() {
     if (interval) interval.value = "";
-    if (last)     last.value = "";
-    if (next)     next.value = "";
-    if (nip)      nip.value = "";
+    if (last)     last.value     = "";
+    if (next)     next.value     = "";
+    if (nip)      nip.value      = "";
     if (pill) {
-      pill.textContent = "–";
+      pill.textContent     = "–";
       pill.style.background = "#e9ecef";
-      pill.style.color = "#000";
-    }
-  };
-
-  // Wenn kein Task gewählt ist → Felder leeren
-  if (!task) { clear(); return; }
-
-  // Intervall aus dem Task lesen
-  let inter = toInt((task && task.intervalDays), null);
-
-  // Falls leer/0: aus Mail-Regeln ableiten, sonst 28 Tage
-  if (inter === null || inter === 0) {
-    try {
-      const mVal  = (selMaschine && selMaschine.value) ? selMaschine.value : "";
-      const tName = (task && task.name) ? task.name : "";
-      inter = wpMailRuleInterval(mVal, tName) || 28;
-    } catch (e) {
-      inter = 28;
+      pill.style.color      = "#000";
     }
   }
-  if (interval) interval.value = (inter == null ? "" : String(inter));
 
-  // Letztes Datum sicher lesen
-  const lastIso = (task && isIsoDate(task.lastDateISO)) ? task.lastDateISO : "";
+  if (!task) {
+    clear();
+    return;
+  }
+
+  // Helper für int-Werte
+  function toInt(v) {
+    var n = parseInt(v, 10);
+    return (Number.isFinite(n) && n > 0) ? n : "";
+  }
+
+  // 1) Intervall übernehmen
+  var inter = toInt(task.intervalDays);
+  if (interval) interval.value = inter || "";
+
+  // 2) Letztes Datum: zuerst aus Plan, dann wenn möglich aus Wartungslog
+  var lastIso = (task.lastDateISO && isIsoDate(task.lastDateISO))
+    ? task.lastDateISO
+    : "";
+
+  try {
+    var list = Array.isArray(window.wartungslog) ? window.wartungslog : [];
+    if (list.length && selMaschine) {
+      var mVal  = (selMaschine.value || "").trim();
+      var tName = (task.name || "").trim();
+      var best  = lastIso;
+
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i] || {};
+        var em = (e.machine  || "").trim();
+        var et = (e.taskName || "").trim();
+        if (em === mVal && et === tName) {
+          var d = (e.dateISO || "").trim();
+          if (d && (!best || d > best)) best = d;  // neuestes Datum merken
+        }
+      }
+      if (best) lastIso = best;
+    }
+  } catch (err) {
+    console.warn("wpStatusUpdateForTask: wartungslog lookup failed", err);
+  }
+
   if (last) last.value = lastIso;
 
-  // Nächstes Fälligkeitsdatum berechnen
-  const nextVal = (lastIso && inter) ? wpComputeNext(lastIso, inter) : "";
-  if (next) next.value = nextVal;
+  // 3) Nächstes Fälligkeitsdatum berechnen
+  var nextVal = "";
+  if (lastIso && inter) {
+    if (typeof recomputeNextDue === "function") {
+      // nutzt die Felder wpLastDate + wpIntervalDays
+      recomputeNextDue();
+      if (next) nextVal = next.value || "";
+    } else {
+      nextVal = wpComputeNext(lastIso, inter);
+      if (next) next.value = nextVal;
+    }
+  } else {
+    if (next) next.value = "";
+  }
 
-  // Schmiernippel übernehmen (ohne ??)
-  let n = task ? task.nipples : undefined;
-  n = (n === null || n === undefined || n === "") ? "" : toInt(n, "");
-  if (nip) nip.value = n;
+  // 4) Schmiernippel übernehmen
+  var n = toInt(task.nipples);
+  if (nip) nip.value = n ? String(n) : "";
 
-  // Status/Pill aktualisieren
-  const st = wpStatus(nextVal || "");
+  // 5) Status-Pill (OK / Heute / Überfällig)
   if (pill) {
-    pill.textContent = st.label;
-    pill.style.background = st.bg;
-    pill.style.color = st.fg;
+    var label = "–";
+    var bg    = "#e9ecef";
+    var col   = "#000";
+
+    if (nextVal) {
+      var today = (typeof todayISO === "function")
+        ? todayISO()
+        : _toISO(new Date());
+
+      if (nextVal < today) {
+        label = "Überfällig";
+        bg    = "#f8d7da";
+        col   = "#721c24";
+      } else if (nextVal === today) {
+        label = "Heute fällig";
+        bg    = "#fff3cd";
+        col   = "#856404";
+      } else {
+        label = "OK";
+        bg    = "#d4edda";
+        col   = "#155724";
+      }
+    }
+
+    pill.textContent     = label;
+    pill.style.background = bg;
+    pill.style.color      = col;
   }
 }
+
 
 
 function wpOverdueTasks(machineName){
