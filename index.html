@@ -3314,35 +3314,52 @@ function validateBeforeFinish(){
 
 <!-- 🔽 Hier unten startet dein großes Script-Block -->
 <script>
-  // --- Stammdaten (Maschinen & Anlagenteile) --- //
-  const MASTER_FILE = "Stammdaten-Reparatur.json";
-  let masterData = { version: 1, maschinen: [], anlagenteile: [] };
+// --- Stammdaten (Maschinen & Anlagenteile) --- //
+const MASTER_FILE = "Stammdaten-Reparatur.json";
+let masterData = { version: 1, maschinen: [], anlagenteile: [] };
 
-  // Local-Cache laden
-  function loadMasterFromLocal() {
-    try {
-      const s = localStorage.getItem("TE15_MASTER");
-      if (s) masterData = JSON.parse(s);
-    } catch {}
+// Local-Cache laden
+function loadMasterFromLocal() {
+  try {
+    const s = localStorage.getItem("TE15_MASTER");
+    if (s) masterData = JSON.parse(s);
+  } catch {}
+}
+
+// Local-Cache speichern
+function saveMasterToLocal() {
+  try {
+    localStorage.setItem("TE15_MASTER", JSON.stringify(masterData));
+  } catch {}
+}
+
+// Stammdaten bewusst leeren + Cache überschreiben
+function setEmptyMaster() {
+  masterData = { version: 1, maschinen: [], anlagenteile: [] };
+  saveMasterToLocal();
+}
+
+// Hilfsfunktion: Listen mergen (Strings, Duplikate raus, sortiert)
+function mergeStringLists() {
+  const all = [];
+  for (const arr of arguments) {
+    if (Array.isArray(arr)) {
+      for (const v of arr) {
+        const s = String(v || "").trim();
+        if (s) all.push(s);
+      }
+    }
   }
+  const set = new Set(all.map(s => s));
+  return Array.from(set).sort((a, b) =>
+    a.localeCompare(b, "de", { sensitivity: "base" })
+  );
+}
 
-  // Local-Cache speichern
-  function saveMasterToLocal() {
-    try {
-      localStorage.setItem("TE15_MASTER", JSON.stringify(masterData));
-    } catch {}
-  }
-
-  // Stammdaten bewusst leeren + Cache überschreiben
-  function setEmptyMaster() {
-    masterData = { version: 1, maschinen: [], anlagenteile: [] };
-    saveMasterToLocal();
-  }
-
-// Laden (OneDrive -> bei fehlender Datei: Local-Fallback + Merge)
+// 🔽 Laden (Cloud + lokaler Cache → Merge)
 async function loadMasterData() {
   try {
-    // 1) Immer zuerst lokalen Cache laden (falls vorhanden)
+    // 1) Lokalen Cache holen (falls vorhanden)
     let localCopy = null;
     try {
       const s = localStorage.getItem("TE15_MASTER");
@@ -3351,7 +3368,7 @@ async function loadMasterData() {
       console.warn("loadMasterData() – lokaler Cache defekt:", e);
     }
 
-    // Wenn kein Token -> nur lokale Daten nutzen
+    // 2) Ohne Token: Nur lokale Daten
     if (!accessToken) {
       if (localCopy && typeof localCopy === "object") {
         masterData = localCopy;
@@ -3361,22 +3378,14 @@ async function loadMasterData() {
       return;
     }
 
-    await resolveShareLinkToFolder();
-
-    // Prüfen, ob die Master-Datei existiert
-    const listUrl =
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-      `/children?$select=id,name`;
-    const listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    if (!listRes.ok) throw new Error("children list failed");
-
-    const list = await listRes.json();
-    const item = (list.value || []).find(x => x.name === MASTER_FILE);
-
-    // ❗ Datei existiert nicht -> Stammdaten leeren + ggf. nur lokalen Cache nehmen
-    if (!item) {
+    // 3) Zielordner sicherstellen
+    try {
+      await resolveShareLinkToFolder();
+    } catch (e) {
+      console.warn("loadMasterData() – resolveShareLinkToFolder:", e);
+    }
+    if (!TARGET.driveId || !TARGET.parentItemId) {
+      console.warn("loadMasterData() – kein TARGET, nutze nur lokale Daten");
       if (localCopy && typeof localCopy === "object") {
         masterData = localCopy;
         saveMasterToLocal();
@@ -3386,161 +3395,151 @@ async function loadMasterData() {
       return;
     }
 
-    // Datei existiert -> Inhalt laden
-    const fileRes = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const baseUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}`;
 
-    if (!fileRes.ok) {
-      console.warn("loadMasterData() – Datei nicht lesbar, nutze lokalen Cache");
-      if (localCopy && typeof localCopy === "object") {
-        masterData = localCopy;
-        saveMasterToLocal();
+    // 4) Cloud-Inhalt versuchen zu laden
+    let cloudData = null;
+    try {
+      const res = await fetch(baseUrl + ":/content", { headers });
+      if (res.status === 404) {
+        // Datei existiert noch nicht → nur lokaler Cache
+        console.info("loadMasterData() – Master-Datei existiert noch nicht (404).");
+      } else if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === "object") {
+          cloudData = json;
+        }
       } else {
-        setEmptyMaster();
+        console.warn("loadMasterData() – HTTP-Fehler:", res.status);
       }
-      return;
+    } catch (e) {
+      console.warn("loadMasterData() – Fehler beim Lesen aus Cloud:", e);
     }
 
-    // 2) Cloud-Daten laden
-    const cloudData = await fileRes.json();
-    if (!cloudData || typeof cloudData !== "object") {
-      console.warn("loadMasterData() – ungültige Cloud-Daten, nutze lokalen Cache");
-      if (localCopy && typeof localCopy === "object") {
-        masterData = localCopy;
-        saveMasterToLocal();
-      } else {
-        setEmptyMaster();
-      }
-      return;
-    }
+    // 5) Basisstruktur
+    const cloud = cloudData || {};
+    cloud.version      ??= 1;
+    cloud.maschinen    ??= [];
+    cloud.anlagenteile ??= [];
 
-    // 3) Safety: Basisstruktur
-    cloudData.version       ??= 1;
-    cloudData.maschinen     ??= [];
-    cloudData.anlagenteile  ??= [];
+    const local = localCopy || {};
+    local.version      ??= 1;
+    local.maschinen    ??= [];
+    local.anlagenteile ??= [];
 
-    // 4) Merge: lokale + Cloud-Listen zusammenführen (Duplikate entfernen)
-    const mergeList = (key) => {
-      const fromCloud = Array.isArray(cloudData[key]) ? cloudData[key] : [];
-      const fromLocal = (localCopy && Array.isArray(localCopy[key])) ? localCopy[key] : [];
-      const set = new Set(
-        [...fromCloud, ...fromLocal]
-          .map(v => String(v || "").trim())
-          .filter(v => v)
-      );
-      masterData[key] = Array.from(set).sort((a, b) =>
-        a.localeCompare(b, "de", { sensitivity: "base" })
-      );
+    // 6) Merge: Cloud + Lokal → masterData
+    masterData = {
+      version: cloud.version || local.version || 1,
+      maschinen: mergeStringLists(cloud.maschinen, local.maschinen),
+      anlagenteile: mergeStringLists(cloud.anlagenteile, local.anlagenteile)
     };
 
-    mergeList("maschinen");
-    mergeList("anlagenteile");
-    masterData.version = cloudData.version || 1;
-
-    // 5) Zusammengeführte Version wieder lokal cachen
+    // 7) Zusammengeführte Version cachen
     saveMasterToLocal();
   } catch (e) {
-    console.warn("loadMasterData() – Fehler, nutze lokalen Cache:", e);
-    // Netzwerk/Parsing-Fehler -> Local-Fallback (falls vorhanden)
+    console.warn("loadMasterData() – genereller Fehler, nutze lokalen Cache:", e);
     loadMasterFromLocal();
   }
 }
+
+// 🔽 Speichern (Cloud + Lokal + aktuelle masterData → Merge → Upload)
 async function saveMasterData() {
-  // 0) Immer lokal sichern
+  // 0) Immer lokale Kopie sichern
   saveMasterToLocal();
 
-  // Ohne Login oder Zielordner kein Cloud-Speichern
+  // Ohne Token: nur lokal speichern
   if (!accessToken) {
     console.warn("saveMasterData() – kein AccessToken, nur lokal gespeichert.");
     return;
   }
 
+  // 1) Zielordner sichern
   try {
-    // sicherstellen, dass TARGET gefüllt ist
-    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-      try {
-        await resolveShareLinkToFolder();
-      } catch (e) {
-        console.warn("saveMasterData() – resolveShareLinkToFolder() fehlgeschlagen:", e);
-      }
-    }
-    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
-      console.warn("saveMasterData() – TARGET fehlt, speichere nur lokal.");
-      return;
+    await resolveShareLinkToFolder();
+  } catch (e) {
+    console.warn("saveMasterData() – resolveShareLinkToFolder:", e);
+  }
+  if (!TARGET.driveId || !TARGET.parentItemId) {
+    console.warn("saveMasterData() – kein TARGET, speichere nur lokal.");
+    return;
+  }
+
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const baseUrl =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+    `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}`;
+
+  try {
+    // 2) Nochmals lokalen Cache lesen (falls sich etwas geändert hat)
+    let localCopy = null;
+    try {
+      const s = localStorage.getItem("TE15_MASTER");
+      if (s) localCopy = JSON.parse(s);
+    } catch (e) {
+      console.warn("saveMasterData() – lokaler Cache defekt:", e);
     }
 
-    const headers = { Authorization: `Bearer ${accessToken}` };
-
-    // 1) Prüfen, ob die Master-Datei bereits existiert
-    const listUrl =
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-      `/children?$select=id,name`;
-    const listRes = await fetch(listUrl, { headers });
-    if (!listRes.ok) {
-      console.warn("saveMasterData() – children list failed:", listRes.status);
-    }
-
+    // 3) Aktuelle Cloud-Version holen (wenn Datei existiert)
     let cloudData = null;
-    if (listRes.ok) {
-      const list = await listRes.json();
-      const item = (list.value || []).find(x => x.name === MASTER_FILE);
-
-      if (item) {
-        // 2) Aktuelle Cloud-Version laden
-        const fileRes = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
-          { headers }
-        );
-        if (fileRes.ok) {
-          try {
-            cloudData = await fileRes.json();
-          } catch (e) {
-            console.warn("saveMasterData() – Cloud-JSON nicht lesbar:", e);
-          }
+    try {
+      const res = await fetch(baseUrl + ":/content", { headers });
+      if (res.status === 404) {
+        console.info("saveMasterData() – Master-Datei existiert noch nicht, wird neu angelegt.");
+      } else if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === "object") {
+          cloudData = json;
         }
+      } else {
+        console.warn("saveMasterData() – Cloud-GET Fehler:", res.status);
       }
+    } catch (e) {
+      console.warn("saveMasterData() – Fehler beim Lesen aus Cloud:", e);
     }
 
-    // 3) Basisstruktur für Merge
-    const localData = masterData || {};
+    const cloud = cloudData || {};
+    cloud.version      ??= 1;
+    cloud.maschinen    ??= [];
+    cloud.anlagenteile ??= [];
+
+    const local = localCopy || {};
+    local.version      ??= 1;
+    local.maschinen    ??= [];
+    local.anlagenteile ??= [];
+
+    const current = masterData || {};
+    current.version      ??= 1;
+    current.maschinen    ??= [];
+    current.anlagenteile ??= [];
+
+    // 4) Merge: Cloud + Local + Current → merged
     const merged = {
-      version: (cloudData && cloudData.version) || localData.version || 1,
-      maschinen: [],
-      anlagenteile: []
+      version: cloud.version || local.version || current.version || 1,
+      maschinen: mergeStringLists(
+        cloud.maschinen,
+        local.maschinen,
+        current.maschinen
+      ),
+      anlagenteile: mergeStringLists(
+        cloud.anlagenteile,
+        local.anlagenteile,
+        current.anlagenteile
+      )
     };
 
-    const mergeList = (key) => {
-      const fromCloud = (cloudData && Array.isArray(cloudData[key])) ? cloudData[key] : [];
-      const fromLocal = Array.isArray(localData[key]) ? localData[key] : [];
-      const set = new Set(
-        [...fromCloud, ...fromLocal]
-          .map(v => String(v || "").trim())
-          .filter(v => v)
-      );
-      merged[key] = Array.from(set).sort((a, b) =>
-        a.localeCompare(b, "de", { sensitivity: "base" })
-      );
-    };
-
-    mergeList("maschinen");
-    mergeList("anlagenteile");
-
-    // 4) merged zurück in masterData + lokal updaten
+    // 5) merged → masterData + lokal schreiben
     masterData = merged;
     saveMasterToLocal();
 
-    // 5) In die Cloud schreiben (per Name, egal ob neu oder überschreiben)
-    const url =
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-      `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-
+    // 6) In Cloud hochladen (per Name, neu oder überschreiben)
     const blob = new Blob([JSON.stringify(masterData, null, 2)], {
       type: "application/json"
     });
 
-    const resp = await fetch(url, {
+    const resp = await fetch(baseUrl + ":/content", {
       method: "PUT",
       headers,
       body: blob
