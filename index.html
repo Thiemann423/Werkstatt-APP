@@ -985,13 +985,12 @@ function renderGlobalOverdueUI(due) {
       <label for="f_anlagenteil">Anlagenteil</label>
       <input type="text" id="f_anlagenteil" placeholder="z. B. Sensor" style="width:100%;padding:6px;">
     </div>
-    <!-- 🔎 NEU: Auftrags-ID-Filter -->
+    <!-- 🔎 Auftrags-ID-Filter -->
     <div>
       <label for="f_auftrag_id">Auftrags-ID</label>
       <input type="text" id="f_auftrag_id" placeholder="z. B. REP-2025..." style="width:100%;padding:6px;">
     </div>
   </div>
-
 
   <div style="margin-top:8px;">
     <label for="f_provisorium">Provisorium</label>
@@ -1011,36 +1010,25 @@ function renderGlobalOverdueUI(due) {
             style="padding:6px 10px;border:0;border-radius:6px;background:#f3f3f3;cursor:pointer;margin-left:6px;">
       ❌ Filter löschen
     </button>
- <button type="button" id="dashRangeBtn" data-mode="7"
-        style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
-  🗓️ Letzte 7 Tage
-</button>
-
+    <button type="button" id="dashRangeBtn" data-mode="7"
+            style="padding:6px 10px;border:0;border-radius:6px;background:#d9edf7;margin-left:6px;cursor:pointer;">
+      🗓️ Letzte 7 Tage
+    </button>
   </div>
 
+  <!-- 👇 hier NUR die Reparatur-Tabelle, kein wpLogTable mehr -->
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
     <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-      <!-- Sticky-Header bleibt innerhalb des Panels -->
-<table id="wpLogTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-    <tr>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-      <!-- 👇 neue Spalten -->
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
-    </tr>
-  </thead>
-
-  <tbody id="wpLogBody"></tbody>
-</table>
-
-
+      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Provisorium</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
+        </tr>
+      </thead>
       <tbody id="dashboardBody"></tbody>
     </table>
   </div>
@@ -1062,6 +1050,7 @@ thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
     </div>
   </div>
 </div>
+
 
 
 <!-- ============================== -->
