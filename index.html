@@ -1177,17 +1177,21 @@ function renderGlobalOverdueUI(due) {
   </div>
 
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;margin-top:10px;">
-    <table id="wpLogTable" style="width:100%;border-collapse:collapse;font-size:14px;">
       <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-        <tr>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-        </tr>
-      </thead>
+    <tr>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+      <!-- 👇 neue Spalten -->
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
+    </tr>
+  </thead>
+
       <tbody id="wpLogBody"></tbody>
     </table>
   </div>
