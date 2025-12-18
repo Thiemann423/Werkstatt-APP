@@ -6396,11 +6396,42 @@ if (doneBtn) doneBtn.addEventListener("click", async function () {
   try {
     var todayISO = _toISO(new Date());
     var lastEl   = _byId("wpLastDate");
+    var nextEl   = _byId("wpNextDue");
 
     // ⛔ Bereits heute eingetragen? Dann nichts nochmal machen
     if (lastEl && lastEl.value === todayISO) {
       alert("Diese Aufgabe wurde heute bereits als durchgeführt markiert.");
+      doneBtn.dataset.busy = "0";      // Busy-Flag wieder freigeben
       return;
+    }
+
+    // 👉 Bisheriges Fälligkeitsdatum merken (für Überfälligkeit + Audit)
+    var prevNext = (nextEl && nextEl.value) ? String(nextEl.value).trim() : "";
+    var isOverdue = false;
+    if (prevNext) {
+      // ISO-Strings kann man lexikografisch vergleichen
+      isOverdue = (prevNext < todayISO);
+    }
+
+    // 💬 Kommentar nur bei überfälliger Wartung erzwingen
+    var overdueComment = "";
+    if (isOverdue) {
+      overdueComment = prompt(
+        "⚠️ Diese Wartung ist ÜBERFÄLLIG.\nBitte kurz kommentieren, warum sie überfällig ist:",
+        ""
+      );
+      overdueComment = (overdueComment || "").trim();
+
+      if (!overdueComment) {
+        alert("Abgebrochen: Für überfällige Wartungen ist ein Kommentar Pflicht.");
+        doneBtn.dataset.busy = "0";
+        return;
+      }
+      if (overdueComment.length < 10) {
+        alert("Bitte etwas ausführlicher kommentieren (mind. 10 Zeichen).");
+        doneBtn.dataset.busy = "0";
+        return;
+      }
     }
 
     // Heutiges Datum in „Zuletzt durchgeführt“ schreiben
@@ -6411,8 +6442,11 @@ if (doneBtn) doneBtn.addEventListener("click", async function () {
       recomputeNextDue();
     }
 
-    // ✅ Eintrag ins Log schreiben und warten bis fertig
+    // ✅ Eintrag aus Formular holen und Kommentar anhängen
     var entry = _collectEntryFromForm({ useTodayIfEmpty: true });
+    entry.overdueComment = overdueComment || "";
+    entry.prevNextDue    = prevNext || "";
+
     await wpLogExecution(entry);
 
     var pnl = _byId("wpLogPanel");
@@ -6421,10 +6455,11 @@ if (doneBtn) doneBtn.addEventListener("click", async function () {
     console.error("wpMarkDoneToday:", e);
     alert("Speichern fehlgeschlagen. Bitte erneut versuchen.");
   } finally {
-    // 🔓 Button wieder freigeben (auch bei Fehler/Return)
+    // 🔓 Button wieder freigeben (auch bei Abbruch/Fehler)
     doneBtn.dataset.busy = "0";
   }
 });
+;
 
 document.addEventListener("DOMContentLoaded", () => {
   // UI-Events fürs Wartungs-Dashboard verdrahten
