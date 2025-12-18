@@ -1021,20 +1021,25 @@ function renderGlobalOverdueUI(due) {
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
     <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
       <!-- Sticky-Header bleibt innerhalb des Panels -->
-     <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-  <tr>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-    <!-- 👇 NEU -->
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
-    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
-  </tr>
-</thead>
+<table id="wpLogTable" style="width:100%;border-collapse:collapse;font-size:14px;">
+  <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+    <tr>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+      <!-- 👇 neue Spalten -->
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
+    </tr>
+  </thead>
+
+  <tbody id="wpLogBody"></tbody>
+</table>
+
 
       <tbody id="dashboardBody"></tbody>
     </table>
