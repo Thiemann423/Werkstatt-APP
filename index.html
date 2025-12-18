@@ -390,15 +390,15 @@ async function getShareRootEndpoint() {
   }
 </script>
 
-
+<!-- 🔧 Einmaliger Helper-Block -->
+<!-- … dein Config-Block + displayNameFromUser … -->
 
 <!-- 🔧 Einmaliger Helper-Block (IM HEAD!) -->
 <script>
+  // Globaler DOM-Helfer (für alle Blöcke verfügbar)
   window.byId = window.byId || function(id){ return document.getElementById(id); };
 
-  // ✅ Fallback für _wpEl (Wartungslog nutzt das)
-  window._wpEl = window._wpEl || function (id) { return document.getElementById(id); };
-
+  // Alte/Neue Funktionsnamen kompatibel halten
   window.wpRefreshOverdueUI = window.wpRefreshOverdueUI || function(){
     try { if (typeof refreshOverdueUI === "function") refreshOverdueUI(); } catch(e){}
   };
@@ -2116,6 +2116,7 @@ window.addEventListener("load", function(){
   </div>
 </div>
 
+
 <style>
   .page-break {
     page-break-before: always;
@@ -2141,50 +2142,47 @@ window.addEventListener("load", function(){
     cursor: pointer;
     border-radius: 5px;
   }
-  .preview-container img {
-    max-width: 200px;
-    max-height: 200px;
-    border: 1px solid #ccc;
-  }
+/* korrekt nur für Thumbnails der Vorschau */
+.preview-container img {
+  max-width: 200px;
+  max-height: 200px;
+  border: 1px solid #ccc;
+}
+
 </style>
 
 <script>
-  const fileInput = document.getElementById('fileInput');
-  const previewContainer = document.getElementById('previewContainer');
-  let uploadedFiles = [];
-
-  fileInput.addEventListener('change', function(event) {
-    const files = Array.from(event.target.files);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const wrapper = document.createElement('div');
-        wrapper.classList.add('image-wrapper');
-
-        const img = document.createElement('img');
-        img.src = e.target.result;
-        img.alt = file.name;
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.classList.add('delete-button');
-        deleteBtn.textContent = 'Löschen';
-        deleteBtn.addEventListener('click', () => {
-          wrapper.remove();
-          uploadedFiles = uploadedFiles.filter(f => f !== file);
-          console.log("Datei gelöscht:", file.name);
+    const fileInput = document.getElementById('fileInput');
+    const previewContainer = document.getElementById('previewContainer');
+    let uploadedFiles = [];
+    fileInput.addEventListener('change', function(event) {
+        const files = Array.from(event.target.files);
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('image-wrapper');
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.alt = file.name;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.classList.add('delete-button');
+                deleteBtn.textContent = 'Löschen';
+                deleteBtn.addEventListener('click', () => {
+                    wrapper.remove();
+                    uploadedFiles = uploadedFiles.filter(f => f !== file);
+                    console.log("Datei gelöscht:", file.name);
+                });
+                wrapper.appendChild(img);
+                wrapper.appendChild(deleteBtn);
+                previewContainer.appendChild(wrapper);
+                uploadedFiles.push(file);
+            };
+            reader.readAsDataURL(file);
         });
-
-        wrapper.appendChild(img);
-        wrapper.appendChild(deleteBtn);
-        previewContainer.appendChild(wrapper);
-        uploadedFiles.push(file);
-      };
-      reader.readAsDataURL(file);
+        fileInput.value = '';
     });
-    fileInput.value = '';
-  });
 </script>
-
 
 <div class="section">
   <label for="ort_datum">Ort / Datum:</label>
@@ -3150,13 +3148,10 @@ async function signInAndAcquireToken(
 async function signOut(){
   try{
     const acc = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
-
-    // ❌ NICHT löschen – sonst ist bei Cloud-Problemen alles weg
-    // localStorage.removeItem("TE15_MASTER");
-    // localStorage.removeItem("TARGET_CACHE");
-
+    // 👉 lokalen Cache zu Stammdaten wegräumen
+    localStorage.removeItem("TE15_MASTER");
+    localStorage.removeItem("TARGET_CACHE");
     accessToken = "";
-    window.accessToken = "";
 
     if (acc) {
       await msalInstance.logoutRedirect({ account: acc });
@@ -3166,7 +3161,6 @@ async function signOut(){
     console.error("logout:", e);
   }
 }
-
 
 /* DOMContentLoaded: erst lokal laden & bauen, dann (still) anmelden und ggf. neu bauen */
 document.addEventListener("DOMContentLoaded", async () => {
@@ -3457,45 +3451,31 @@ async function saveMasterData() {
   // immer lokal sichern
   saveMasterToLocal();
 
-  // ✅ Wenn eingeloggt, aber TARGET noch fehlt: jetzt auflösen
-  try {
-    if (accessToken && (!TARGET.driveId || !TARGET.parentItemId)) {
-      await resolveShareLinkToFolder();
-    }
-  } catch (e) {
-    console.warn("saveMasterData() – TARGET konnte nicht aufgelöst werden:", e);
-  }
-
   if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) {
     console.warn("saveMasterData() – kein Graph, nur lokal gespeichert.");
     return;
   }
 
-  const url =
+  const url  =
     `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
     `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-
   const blob = new Blob([JSON.stringify(masterData, null, 2)], {
     type: "application/json"
   });
 
-try {
-  const resp = await fetch(url, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: blob
-  });
-
-  if (resp.ok) {
-    console.log("[MASTER] Upload OK");
-  } else {
-    console.warn("[MASTER] Upload FAIL", resp.status, await resp.text());
+  try {
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: blob
+    });
+    if (!resp.ok) {
+      console.warn("saveMasterData() – Upload fehlgeschlagen:", resp.status, await resp.text());
+    }
+  } catch (e) {
+    console.warn("saveMasterData() – Upload-Fehler:", e);
   }
-} catch (e) {
-  console.warn("[MASTER] Upload-Fehler:", e);
 }
-
-
 
 
 /* === Neu: Sortier-Helfer (deutsche Sortierung, numerisch) === */
