@@ -3448,34 +3448,111 @@ async function loadMasterData() {
   }
 }
 async function saveMasterData() {
-  // immer lokal sichern
+  // 0) Immer lokal sichern
   saveMasterToLocal();
 
-  if (!accessToken || !TARGET.driveId || !TARGET.parentItemId) {
-    console.warn("saveMasterData() – kein Graph, nur lokal gespeichert.");
+  // Ohne Login oder Zielordner kein Cloud-Speichern
+  if (!accessToken) {
+    console.warn("saveMasterData() – kein AccessToken, nur lokal gespeichert.");
     return;
   }
 
-  const url  =
-    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
-    `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
-  const blob = new Blob([JSON.stringify(masterData, null, 2)], {
-    type: "application/json"
-  });
-
   try {
+    // sicherstellen, dass TARGET gefüllt ist
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      try {
+        await resolveShareLinkToFolder();
+      } catch (e) {
+        console.warn("saveMasterData() – resolveShareLinkToFolder() fehlgeschlagen:", e);
+      }
+    }
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      console.warn("saveMasterData() – TARGET fehlt, speichere nur lokal.");
+      return;
+    }
+
+    const headers = { Authorization: `Bearer ${accessToken}` };
+
+    // 1) Prüfen, ob die Master-Datei bereits existiert
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+      `/children?$select=id,name`;
+    const listRes = await fetch(listUrl, { headers });
+    if (!listRes.ok) {
+      console.warn("saveMasterData() – children list failed:", listRes.status);
+    }
+
+    let cloudData = null;
+    if (listRes.ok) {
+      const list = await listRes.json();
+      const item = (list.value || []).find(x => x.name === MASTER_FILE);
+
+      if (item) {
+        // 2) Aktuelle Cloud-Version laden
+        const fileRes = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${item.id}/content`,
+          { headers }
+        );
+        if (fileRes.ok) {
+          try {
+            cloudData = await fileRes.json();
+          } catch (e) {
+            console.warn("saveMasterData() – Cloud-JSON nicht lesbar:", e);
+          }
+        }
+      }
+    }
+
+    // 3) Basisstruktur für Merge
+    const localData = masterData || {};
+    const merged = {
+      version: (cloudData && cloudData.version) || localData.version || 1,
+      maschinen: [],
+      anlagenteile: []
+    };
+
+    const mergeList = (key) => {
+      const fromCloud = (cloudData && Array.isArray(cloudData[key])) ? cloudData[key] : [];
+      const fromLocal = Array.isArray(localData[key]) ? localData[key] : [];
+      const set = new Set(
+        [...fromCloud, ...fromLocal]
+          .map(v => String(v || "").trim())
+          .filter(v => v)
+      );
+      merged[key] = Array.from(set).sort((a, b) =>
+        a.localeCompare(b, "de", { sensitivity: "base" })
+      );
+    };
+
+    mergeList("maschinen");
+    mergeList("anlagenteile");
+
+    // 4) merged zurück in masterData + lokal updaten
+    masterData = merged;
+    saveMasterToLocal();
+
+    // 5) In die Cloud schreiben (per Name, egal ob neu oder überschreiben)
+    const url =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}` +
+      `/items/${TARGET.parentItemId}:/${encodeURIComponent(MASTER_FILE)}:/content`;
+
+    const blob = new Blob([JSON.stringify(masterData, null, 2)], {
+      type: "application/json"
+    });
+
     const resp = await fetch(url, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers,
       body: blob
     });
     if (!resp.ok) {
       console.warn("saveMasterData() – Upload fehlgeschlagen:", resp.status, await resp.text());
     }
   } catch (e) {
-    console.warn("saveMasterData() – Upload-Fehler:", e);
+    console.warn("saveMasterData() – Fehler beim Speichern (Cloud):", e);
   }
 }
+
 
 
 /* === Neu: Sortier-Helfer (deutsche Sortierung, numerisch) === */
