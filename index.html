@@ -2116,7 +2116,6 @@ window.addEventListener("load", function(){
   </div>
 </div>
 
-
 <style>
   .page-break {
     page-break-before: always;
@@ -2161,6 +2160,7 @@ window.addEventListener("load", function(){
       reader.onload = function(e) {
         const wrapper = document.createElement('div');
         wrapper.classList.add('image-wrapper');
+
         const img = document.createElement('img');
         img.src = e.target.result;
         img.alt = file.name;
