@@ -1182,27 +1182,27 @@ thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
   </div>
 
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;margin-top:10px;">
+    <table id="wpLogTable" style="width:100%;border-collapse:collapse;font-size:14px;">
       <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-    <tr>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-      <!-- 👇 neue Spalten -->
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
-      <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
-    </tr>
-  </thead>
-
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
+        </tr>
+      </thead>
       <tbody id="wpLogBody"></tbody>
     </table>
   </div>
 
   <div id="wpLogEmpty" style="display:none;padding:8px;color:#666;">Keine Einträge gefunden.</div>
 </div>
+
 
 
 
@@ -1346,24 +1346,27 @@ async function _saveAll(list) {
 
 // ✅ LADEN – cloud-first + async
 async function loadWpLog() {
-  var tbody = document.getElementById("wpLogBody");   // <tbody id="wpLogBody">
-  var empty = document.getElementById("wpLogEmpty");  // z.B. <tr id="wpLogEmpty"><td colspan="6">Keine Einträge</td></tr>
+  var tbody = document.getElementById("wpLogBody");
+  var empty = document.getElementById("wpLogEmpty");
   if (!tbody) return;
 
-  // kleine Helper
-  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  // HTML escapen
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[m];
+    });
+  }
+
   var norm = (typeof _wpNorm === "function")
     ? _wpNorm
-    : function(s){ s = (s==null?"":String(s)); return s.toLowerCase().trim(); };
+    : function (s) { return String(s == null ? "" : s).toLowerCase().trim(); };
 
-  // 🔧 Filter direkt aus den Inputs (kein getWpFilters nötig)
-  var from="", to="", mach="", task="", tech="";
-
+  // 🔧 Filter einlesen
+  var from = "", to = "", mach = "", task = "", tech = "";
   try {
-    // Wenn du _wpEl bereits eingebaut hast, nutz es – sonst fällt es auf getElementById zurück
     var getEl = (typeof _wpEl === "function")
       ? _wpEl
-      : function(id){ return document.getElementById(id); };
+      : function (id) { return document.getElementById(id); };
 
     var fromEl = getEl("wpLog_from");
     var toEl   = getEl("wpLog_to");
@@ -1377,153 +1380,154 @@ async function loadWpLog() {
     mach = norm(mEl    && mEl.value    ? mEl.value    : "");
     task = norm(tEl    && tEl.value    ? tEl.value    : "");
     tech = norm(techEl && techEl.value ? techEl.value : "");
-  } catch(e) {}
+  } catch (_) { }
 
-
-  // Daten laden (CLOUD-first + Fallback)
+  // Daten laden
   var raw = [];
-  try { raw = await _loadAll(); } catch(_) {}
+  try { raw = await _loadAll(); } catch (_) { }
   if (!Array.isArray(raw)) raw = [];
 
   // 🔎 Filtern
   var list = [];
-  for (var i=0; i<raw.length; i++){
+  for (var i = 0; i < raw.length; i++) {
     var e = raw[i] || {};
     var dateISO = e.dateISO || "";
 
     if (from && dateISO < from) continue;
     if (to   && dateISO > to)   continue;
 
-    if (mach){
-      var em = norm(e.machine || "");
-      if (em.indexOf(mach) === -1) continue;
-    }
-    if (task){
-      var et = norm(e.taskName || "");
-      if (et.indexOf(task) === -1) continue;
-    }
-    if (tech){
-      // Techniker-Suche über mehrere Felder + Fallback auf aktuellen User
-      var u = (typeof getSignedInUser === "function") ? getSignedInUser() : { name:"", email:"", upn:"" };
-      var haystack = [
-        e.technician, e.technicianEmail, e.technicianUpn,
-        (!e.technician ? u.name : ""), (!e.technicianEmail ? u.email : ""), (!e.technicianUpn ? u.upn : "")
-      ];
-      var hay = norm(haystack.filter(Boolean).join(" "));
-      if (hay.indexOf(tech) === -1) continue;
-    }
+    var m = norm(e.machine    || "");
+    var t = norm(e.taskName   || "");
+    var h = norm(e.technician || "");
 
-    list.push(e);
+    if (mach && m.indexOf(mach) === -1) continue;
+    if (task && t.indexOf(task) === -1) continue;
+    if (tech && h.indexOf(tech) === -1) continue;
+
+    list.push({
+      dateISO: dateISO,
+      machine: e.machine || "",
+      taskName: e.taskName || "",
+      intervalDays: e.intervalDays,
+      nipples: e.nipples,
+      technician: e.technician || "",
+      overdueComment: e.overdueComment || "",
+      overdueCommentedAt: e.overdueCommentedAt || "",
+      overdueCommentedByName: e.overdueCommentedByName || "",
+      prevNextDue: e.prevNextDue || ""
+    });
   }
 
-  // ⬇️ Neueste zuerst (ISO-String-Vergleich)
-  list.sort(function(a,b){
-    var ad = (a && a.dateISO) ? a.dateISO : "";
-    var bd = (b && b.dateISO) ? b.dateISO : "";
-    return bd.localeCompare(ad);
+  // Sortierung: neueste oben, dann Maschine
+  list.sort(function (a, b) {
+    if (a.dateISO === b.dateISO) {
+      return (a.machine || "").localeCompare(b.machine || "");
+    }
+    return a.dateISO < b.dateISO ? 1 : -1;
   });
 
-// 🧱 Render (mit Escaping)
-var html = "";
-for (var j = 0; j < list.length; j++) {
-  var r = list[j] || {};
-  var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
-  var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
+  // Wenn nichts da ist
+  if (!list.length) {
+    tbody.innerHTML = "";
+    if (empty) empty.style.display = "block";
+    window.wartungslog = raw;
+    return;
+  }
 
-  // Kommentar / Audit-Daten
-  var cmt = (r.overdueComment && String(r.overdueComment).trim())
-    ? String(r.overdueComment).trim()
-    : "";
+  // 🧱 Render
+  var html = "";
+  for (var j = 0; j < list.length; j++) {
+    var r = list[j];
 
-  var who = (r.overdueCommentedByName && String(r.overdueCommentedByName).trim())
-    ? String(r.overdueCommentedByName).trim()
-    : (r.technician || "");
+    var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
+    var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
 
-  var whenIso = (r.overdueCommentedAt && String(r.overdueCommentedAt).trim())
-    ? String(r.overdueCommentedAt).trim()
-    : "";
+    // Kommentar / Audit-Daten
+    var cmt = (r.overdueComment && String(r.overdueComment).trim())
+      ? String(r.overdueComment).trim()
+      : "";
 
-  // ISO (UTC) -> lokale Zeit (de-DE)
-  var whenPretty = "";
-  if (whenIso) {
-    try {
-      whenPretty = new Date(whenIso).toLocaleString("de-DE", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    } catch (_) {
-      whenPretty = whenIso.slice(0, 16).replace("T", " ");
+    var who = (r.overdueCommentedByName && String(r.overdueCommentedByName).trim())
+      ? String(r.overdueCommentedByName).trim()
+      : (r.technician || "");
+
+    var whenIso = (r.overdueCommentedAt && String(r.overdueCommentedAt).trim())
+      ? String(r.overdueCommentedAt).trim()
+      : "";
+
+    var whenPretty = "";
+    if (whenIso) {
+      try {
+        whenPretty = new Date(whenIso).toLocaleString("de-DE", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+      } catch (_) {
+        whenPretty = whenIso.replace("T", " ").slice(0, 16);
+      }
     }
-  }
 
-  // Fälligkeit vor Durchführung (aus dem Log)
-  var prevNext = (r.prevNextDue && String(r.prevNextDue).trim())
-    ? String(r.prevNextDue).trim()
-    : "";
+    // Fälligkeit vorher
+    var prevNext = (r.prevNextDue && String(r.prevNextDue).trim())
+      ? String(r.prevNextDue).trim()
+      : "";
 
-  // war der Auftrag überfällig?  (Fälligkeit < Ausführungsdatum)
-  var wasOverdue = false;
-  if (prevNext && r.dateISO) {
-    wasOverdue = (prevNext < r.dateISO);
-  }
-
-  // Anzeige "Ja/Nein" mit Farbe
-  var overdueCell = wasOverdue
-    ? '<span style="color:#b02a37;font-weight:bold;">Ja</span>'
-    : '<span style="color:#198754;">Nein</span>';
-
-  // Kommentar-Spalte (sichtbar, nicht nur Tooltip)
-  var commentDisplay = "";
-  if (cmt) {
-    commentDisplay = esc(cmt);
-    if (who || whenPretty) {
-      commentDisplay += "<br><small>(" +
-        esc(who || "unbekannt") +
-        (whenPretty ? ", " + esc(whenPretty) : "") +
-        ")</small>";
+    var wasOverdue = false;
+    if (prevNext && r.dateISO) {
+      wasOverdue = (prevNext < r.dateISO);
     }
-  } else {
-    commentDisplay = "–";
+
+    var overdueCell = wasOverdue
+      ? '<span style="color:#b02a37;font-weight:bold;">Ja</span>'
+      : '<span style="color:#198754;">Nein</span>';
+
+    var commentDisplay;
+    if (cmt) {
+      commentDisplay = esc(cmt);
+      if (who || whenPretty) {
+        commentDisplay += "<br><small>(" +
+          esc(who || "unbekannt") +
+          (whenPretty ? ", " + esc(whenPretty) : "") +
+          ")</small>";
+      }
+    } else {
+      commentDisplay = "–";
+    }
+
+    var tooltip = "";
+    if (cmt) {
+      tooltip =
+        (who || "Unbekannt") +
+        (whenPretty ? " – " + whenPretty : "") +
+        ': "' + cmt + '"';
+    }
+    var cmtIcon = cmt
+      ? ' <span aria-label="Kommentar" title="' + esc(tooltip) + '" style="cursor:help;">💬</span>'
+      : "";
+
+    html += "<tr" + (wasOverdue ? ' style=\"background:#f8d7da;\"' : "") + ">" +
+      "<td>" + esc(r.dateISO || "") + cmtIcon + "</td>" +
+      "<td>" + esc(r.machine || "–") + "</td>" +
+      "<td>" + esc(r.taskName || "–") + "</td>" +
+      "<td>" + esc(inter) + "</td>" +
+      "<td>" + esc(nip) + "</td>" +
+      "<td>" + esc(r.technician || "–") + "</td>" +
+      "<td>" + esc(prevNext || "–") + "</td>" +
+      "<td>" + overdueCell + "</td>" +
+      "<td>" + commentDisplay + "</td>" +
+      "</tr>";
   }
 
-  // optional kleines Icon in der Datums-Spalte
-  var tooltip = "";
-  if (cmt) {
-    tooltip =
-      (who ? who : "Unbekannt") +
-      (whenPretty ? (" – " + whenPretty) : "") +
-      ': "' + cmt + '"';
-  }
-  var cmtIcon = cmt
-    ? (' <span aria-label="Kommentar" title="' + esc(tooltip) + '" style="cursor:help;">💬</span>')
-    : "";
+  tbody.innerHTML = html;
+  if (empty) empty.style.display = "none";
 
-  // Zeile rendern – überfällige Einträge leicht rot hinterlegen
-  html += "<tr" + (wasOverdue ? ' style="background:#f8d7da;"' : "") + ">"
-        +   "<td>" + esc(r.dateISO || "") + cmtIcon + "</td>"
-        +   "<td>" + esc(r.machine    || "–") + "</td>"
-        +   "<td>" + esc(r.taskName   || "–") + "</td>"
-        +   "<td>" + esc(inter)              + "</td>"
-        +   "<td>" + esc(nip)                + "</td>"
-        +   "<td>" + esc(r.technician || "–") + "</td>"
-        +   "<td>" + esc(prevNext || "–")     + "</td>"
-        +   "<td>" + overdueCell              + "</td>"
-        +   "<td>" + commentDisplay           + "</td>"
-        + "</tr>";
-}
-
-tbody.innerHTML = html;
-
-
-  // Empty-State ein/aus
-  if (empty) empty.style.display = list.length ? "none" : "table-row";
-
-  // global aktualisieren (kann anderswo genutzt werden)
+  // global für andere Funktionen
   window.wartungslog = raw;
 }
+
 
 
 
