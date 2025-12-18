@@ -1217,7 +1217,6 @@ thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
 const WP_WARTUNG_STORAGE_KEY = "TE15_WARTUNGSLOG";
 const WP_WARTUNG_CLOUD_FILENAME = "wartungslog.json";
 
-
 // lokalen Cache aktualisieren (localStorage + RAM)
 function _cacheLocal(list) {
   const payload = Array.isArray(list) ? list : [];
@@ -1238,14 +1237,13 @@ async function _loadAll() {
     }
   } catch (_) {}
 
-  // 1) ohne Login oder Zielordner nur lokalen Cache verwenden
+  // 1) ohne Login → nur lokalen Cache
   if (!window.accessToken) {
     console.log("[WP] _loadAll – kein AccessToken, nutze nur lokalen Cache:", list);
     return list;
   }
 
   try {
-    // sicherstellen, dass TARGET gesetzt ist
     if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
       await resolveShareLinkToFolder();
     }
@@ -1264,7 +1262,6 @@ async function _loadAll() {
     });
 
     if (res.status === 404) {
-      // Datei gibt es noch nicht → leere Liste, aber lokalen Cache aktualisieren
       console.log("[WP] _loadAll – wartungslog.json existiert noch nicht, starte leer.");
       list = [];
       _cacheLocal(list);
@@ -1298,7 +1295,7 @@ async function _saveAll(list) {
   _cacheLocal(payload);
   console.log("[WP] _saveAll – lokal gespeichert:", payload);
 
-  // 2) Cloud nur, wenn wir alles wissen
+  // 2) Cloud nur, wenn Token + Ziel vorhanden
   if (!window.accessToken) {
     console.warn("[WP] _saveAll – kein AccessToken, nur lokal gespeichert.");
     return false;
@@ -1341,10 +1338,7 @@ async function _saveAll(list) {
 }
 
 
-
-
-
-// ✅ LADEN – cloud-first + async
+// ✅ Tabelle im Wartungs-Dashboard aufbauen
 async function loadWpLog() {
   var tbody = document.getElementById("wpLogBody");
   var empty = document.getElementById("wpLogEmpty");
@@ -1418,57 +1412,34 @@ async function loadWpLog() {
     });
   }
 
-  // Sortierung: neueste oben, dann Maschine
+  // sortieren (neueste oben)
   list.sort(function (a, b) {
-    if (a.dateISO === b.dateISO) {
-      return (a.machine || "").localeCompare(b.machine || "");
-    }
-    return a.dateISO < b.dateISO ? 1 : -1;
+    var aa = a.dateISO || "";
+    var bb = b.dateISO || "";
+    return aa < bb ? 1 : aa > bb ? -1 : 0;
   });
 
-  // Wenn nichts da ist
   if (!list.length) {
     tbody.innerHTML = "";
-    if (empty) empty.style.display = "block";
-    window.wartungslog = raw;
+    if (empty) empty.style.display = "table-row";
     return;
   }
 
-  // 🧱 Render
   var html = "";
   for (var j = 0; j < list.length; j++) {
     var r = list[j];
 
-    var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
-    var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
+    var inter = (r.intervalDays != null && r.intervalDays !== "")
+      ? String(r.intervalDays)
+      : "–";
 
-    // Kommentar / Audit-Daten
-    var cmt = (r.overdueComment && String(r.overdueComment).trim())
-      ? String(r.overdueComment).trim()
-      : "";
+    var nip = (r.nipples != null && r.nipples !== "")
+      ? String(r.nipples)
+      : "–";
 
-    var who = (r.overdueCommentedByName && String(r.overdueCommentedByName).trim())
-      ? String(r.overdueCommentedByName).trim()
-      : (r.technician || "");
-
-    var whenIso = (r.overdueCommentedAt && String(r.overdueCommentedAt).trim())
-      ? String(r.overdueCommentedAt).trim()
-      : "";
-
-    var whenPretty = "";
-    if (whenIso) {
-      try {
-        whenPretty = new Date(whenIso).toLocaleString("de-DE", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit"
-        });
-      } catch (_) {
-        whenPretty = whenIso.replace("T", " ").slice(0, 16);
-      }
-    }
+    var cmt = (r.overdueComment || "").trim();
+    var who = (r.overdueCommentedByName || "").trim();
+    var whenPretty = (r.overdueCommentedAt || "").trim();
 
     // Fälligkeit vorher
     var prevNext = (r.prevNextDue && String(r.prevNextDue).trim())
@@ -1508,7 +1479,7 @@ async function loadWpLog() {
       ? ' <span aria-label="Kommentar" title="' + esc(tooltip) + '" style="cursor:help;">💬</span>'
       : "";
 
-    html += "<tr" + (wasOverdue ? ' style=\"background:#f8d7da;\"' : "") + ">" +
+    html += "<tr" + (wasOverdue ? ' style="background:#f8d7da;"' : "") + ">" +
       "<td>" + esc(r.dateISO || "") + cmtIcon + "</td>" +
       "<td>" + esc(r.machine || "–") + "</td>" +
       "<td>" + esc(r.taskName || "–") + "</td>" +
@@ -1527,9 +1498,6 @@ async function loadWpLog() {
   // global für andere Funktionen
   window.wartungslog = raw;
 }
-
-
-
 
 /* 🧼 Filter löschen */
 function clearWpFilters() {
@@ -1557,73 +1525,25 @@ function setWpRange(btn) {
   var from  = new Date(today);
   from.setDate(today.getDate() - days + 1);
 
-var toStr  = _toISO(today);
-var fromStr = _toISO(from);
+  // robustes toISO (nutzt _toISO oder toISO, falls vorhanden)
+  function safeISO(d){
+    if (typeof _toISO === "function") return _toISO(d);
+    if (typeof toISO  === "function") return toISO(d);
+    return d.toISOString().slice(0,10);
+  }
 
+  var toStr   = safeISO(today);
+  var fromStr = safeISO(from);
 
-  var fromEl = document.getElementById("wpLog_from");
-  var toEl   = document.getElementById("wpLog_to");
-  if (fromEl) fromEl.value = fromStr;
-  if (toEl)   toEl.value   = toStr;
+  var f = document.getElementById("wpLog_from");
+  var t = document.getElementById("wpLog_to");
+  if (f) f.value = fromStr;
+  if (t) t.value = toStr;
 
-  if (typeof loadWpLog === "function") loadWpLog();
+  loadWpLog();
 }
-
-/* 🔌 Verdrahten (wenn DOM geladen ist) */
-window.addEventListener("load", function () {
-  try {
-    var u = (typeof getSignedInUser === "function") ? getSignedInUser() : null;
-    var techEl = document.getElementById("techniker1");
-    if (techEl && u) {
-      var name = (typeof displayNameFromUser === "function") ? displayNameFromUser(u) : (u.name || "");
-      if (name && !techEl.value) techEl.value = name;
-      if (name) { techEl.readOnly = true; techEl.classList && techEl.classList.add("readonly"); }
-    }
-  } catch (_) {}
-
-  // 💾 Speichern aus dem Wartungs-Panel
-  var saveBtn = document.getElementById("wpSaveTask");
-  if (saveBtn && typeof saveWpTask === "function") {
-    saveBtn.addEventListener("click", async function () {
-      await saveWpTask();
-    });
-  }
-
-  // 🔄 Wartungs-Log Panel: Buttons
-  var reloadBtn = document.getElementById("wpLogReload");
-  if (reloadBtn) reloadBtn.addEventListener("click", function () {
-    if (typeof loadWpLog === "function") loadWpLog();
-  });
-
-  var clearBtn = document.getElementById("wpLogClear");
-  if (clearBtn) clearBtn.addEventListener("click", function () {
-    if (typeof clearWpFilters === "function") clearWpFilters();
-  });
-
-  var rangeBtn = document.getElementById("wpLogRangeBtn");
-  if (rangeBtn) {
-    rangeBtn.addEventListener("click", function (e) {
-      setWpRange(e.currentTarget || rangeBtn);
-    });
-  }
-
-  // 🔍 Filterfelder reagieren live
-  var ids = ["wpLog_from", "wpLog_to", "wpLog_machine", "wpLog_task", "wpLog_tech"];
-  for (var i = 0; i < ids.length; i++) {
-    var el = document.getElementById(ids[i]);
-    if (el) el.addEventListener("input", function () {
-      if (typeof loadWpLog === "function") loadWpLog();
-    });
-  }
-
-  // ▶️ Falls Panel beim Start schon sichtbar ist: direkt laden
-  var panel = document.getElementById("wpLogPanel");
-  if (panel && panel.style.display !== "none") {
-    if (typeof loadWpLog === "function") loadWpLog();
-  }
-});
-
 </script>
+
 <!-- ✅ END: Wartungs-Dashboard (Log) + Logik -->
 
 
@@ -7505,17 +7425,23 @@ setInterval(async function(){
 window.addEventListener("load", async function () {
   try {
     if (typeof _loadAll === "function") {
-      const data = await _loadAll();                    // aus Cloud oder localStorage
+      const data = await _loadAll();
       window.wartungslog = Array.isArray(data) ? data.slice() : [];
       console.log("[WP] wartungslog beim Start gesetzt:", window.wartungslog);
     } else {
       console.warn("[WP] _loadAll ist nicht definiert – kann wartungslog nicht initialisieren.");
+    }
+
+    // ➕ Tabelle nachladen, wenn das Dashboard da ist
+    if (document.getElementById("wpLogBody") && typeof loadWpLog === "function") {
+      loadWpLog();
     }
   } catch (e) {
     console.warn("[WP] Fehler beim Initialisieren von wartungslog:", e);
     window.wartungslog = [];
   }
 });
+
 </script>
 
 <!-- 📷 Bilder-Popup -->
