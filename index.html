@@ -1021,17 +1021,21 @@ function renderGlobalOverdueUI(due) {
   <div style="overflow:auto;max-height:50vh;border:1px solid #eee;border-radius:6px;">
     <table id="dashTable" style="width:100%;border-collapse:collapse;font-size:14px;">
       <!-- Sticky-Header bleibt innerhalb des Panels -->
-      <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
-        <tr>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Bearbeitet am</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Anlagenteil</th>
-          <!-- 🔽 NEU -->
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Provisorium</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Auftrags-ID</th>
-        </tr>
-      </thead>
+     <thead style="position:sticky;top:0;background:#fafafa;z-index:1;">
+  <tr>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Datum</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Maschine</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Aufgabe</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Intervall</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Schmiernippel</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Techniker</th>
+    <!-- 👇 NEU -->
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Fälligkeit (vorher)</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Überfällig?</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid #eee;">Kommentar zur Überfälligkeit</th>
+  </tr>
+</thead>
+
       <tbody id="dashboardBody"></tbody>
     </table>
   </div>
@@ -1412,12 +1416,12 @@ async function loadWpLog() {
 
 // 🧱 Render (mit Escaping)
 var html = "";
-for (var j=0; j<list.length; j++){
+for (var j = 0; j < list.length; j++) {
   var r = list[j] || {};
   var inter = (r.intervalDays !== "" && r.intervalDays != null) ? r.intervalDays : "–";
   var nip   = (r.nipples      !== "" && r.nipples      != null) ? r.nipples      : "–";
 
-  // 💬 Kommentar-Icon + Tooltip NUR am Icon (mit Wer + Wann)
+  // Kommentar / Audit-Daten
   var cmt = (r.overdueComment && String(r.overdueComment).trim())
     ? String(r.overdueComment).trim()
     : "";
@@ -1430,24 +1434,53 @@ for (var j=0; j<list.length; j++){
     ? String(r.overdueCommentedAt).trim()
     : "";
 
-// ISO (UTC) -> lokale Zeit (de-DE)
-var whenPretty = "";
-if (whenIso) {
-  try {
-    whenPretty = new Date(whenIso).toLocaleString("de-DE", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  } catch (_) {
-    // Fallback
-    whenPretty = whenIso.slice(0, 16).replace("T", " ");
+  // ISO (UTC) -> lokale Zeit (de-DE)
+  var whenPretty = "";
+  if (whenIso) {
+    try {
+      whenPretty = new Date(whenIso).toLocaleString("de-DE", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch (_) {
+      whenPretty = whenIso.slice(0, 16).replace("T", " ");
+    }
   }
-}
 
+  // Fälligkeit vor Durchführung (aus dem Log)
+  var prevNext = (r.prevNextDue && String(r.prevNextDue).trim())
+    ? String(r.prevNextDue).trim()
+    : "";
 
+  // war der Auftrag überfällig?  (Fälligkeit < Ausführungsdatum)
+  var wasOverdue = false;
+  if (prevNext && r.dateISO) {
+    wasOverdue = (prevNext < r.dateISO);
+  }
+
+  // Anzeige "Ja/Nein" mit Farbe
+  var overdueCell = wasOverdue
+    ? '<span style="color:#b02a37;font-weight:bold;">Ja</span>'
+    : '<span style="color:#198754;">Nein</span>';
+
+  // Kommentar-Spalte (sichtbar, nicht nur Tooltip)
+  var commentDisplay = "";
+  if (cmt) {
+    commentDisplay = esc(cmt);
+    if (who || whenPretty) {
+      commentDisplay += "<br><small>(" +
+        esc(who || "unbekannt") +
+        (whenPretty ? ", " + esc(whenPretty) : "") +
+        ")</small>";
+    }
+  } else {
+    commentDisplay = "–";
+  }
+
+  // optional kleines Icon in der Datums-Spalte
   var tooltip = "";
   if (cmt) {
     tooltip =
@@ -1455,23 +1488,26 @@ if (whenIso) {
       (whenPretty ? (" – " + whenPretty) : "") +
       ': "' + cmt + '"';
   }
-
   var cmtIcon = cmt
     ? (' <span aria-label="Kommentar" title="' + esc(tooltip) + '" style="cursor:help;">💬</span>')
     : "";
 
-  html += "<tr>"
+  // Zeile rendern – überfällige Einträge leicht rot hinterlegen
+  html += "<tr" + (wasOverdue ? ' style="background:#f8d7da;"' : "") + ">"
         +   "<td>" + esc(r.dateISO || "") + cmtIcon + "</td>"
         +   "<td>" + esc(r.machine    || "–") + "</td>"
         +   "<td>" + esc(r.taskName   || "–") + "</td>"
         +   "<td>" + esc(inter)              + "</td>"
         +   "<td>" + esc(nip)                + "</td>"
         +   "<td>" + esc(r.technician || "–") + "</td>"
+        +   "<td>" + esc(prevNext || "–")     + "</td>"
+        +   "<td>" + overdueCell              + "</td>"
+        +   "<td>" + commentDisplay           + "</td>"
         + "</tr>";
 }
 
+tbody.innerHTML = html;
 
-  tbody.innerHTML = html;
 
   // Empty-State ein/aus
   if (empty) empty.style.display = list.length ? "none" : "table-row";
