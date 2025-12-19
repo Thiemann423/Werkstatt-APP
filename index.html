@@ -602,11 +602,9 @@ async function getShareRootEndpoint() {
 (function () {
   // kleine Helfer
   const wpEls = function () {
-    // Falls die zentrale wpEls()-Funktion schon existiert, diese nutzen
     if (typeof window.wpEls === "function") {
       try { return window.wpEls(); } catch (_) {}
     }
-    // Fallback – minimal, falls ganz früh aufgerufen
     return {
       selMaschine:
         document.getElementById("maschine") ||
@@ -617,8 +615,12 @@ async function getShareRootEndpoint() {
     };
   };
 
+  // 👉 diese Zeile neu:
+  const getWpEls = wpEls;
+
   const wpNorm =
     window.wpNorm || (s => String(s || "").toLowerCase().trim());
+
 
 
   function toISO(d) {
