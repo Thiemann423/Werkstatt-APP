@@ -703,113 +703,124 @@ async function getShareRootEndpoint() {
     return out;
   }
 
-  // Banner + Alert befüllen
-  function renderGlobalOverdueUI(due) {
-    var banner  = document.getElementById("wpGlobalOverdueBanner");
-    var openBtn = document.getElementById("wpOpenFromBanner");
-    var alertBox = document.getElementById("wpGlobalAlert");
+function renderGlobalOverdueUI(due) {
+  var banner  = document.getElementById("wpGlobalOverdueBanner");
+  var openBtn = document.getElementById("wpOpenFromBanner");
+  var alertBox = document.getElementById("wpGlobalAlert");
 
-    // ===== Banner =====
-    if (banner) {
-      if (due && due.length) {
-        var msgEl = banner.querySelector("[data-msg]");
-        if (msgEl) {
-          var over = due.filter(d => d.status === "overdue").length;
-          var tod  = due.filter(d => d.status === "today").length;
-          msgEl.textContent = over
-            ? "Es gibt " + over + " überfällige und " + tod + " heute fällige Wartungen."
-            : "Es gibt " + tod + " heute fällige Wartungen.";
-        }
-        banner.style.display = "flex";
-      } else {
-        banner.style.display = "none";
-      }
-    }
-
-    // Button im Banner → wenn nur 1 Eintrag: direkt Maschine + Aufgabe öffnen
-    if (openBtn) {
-      openBtn.onclick = function () {
-        if (due && due.length === 1 && due[0]) {
-          var d = due[0];
-          if (typeof window.wpOpenMachineFromName === "function") {
-            window.wpOpenMachineFromName(d.machine || "", d.task || "");
-            return;
-          }
-        }
-        var tgl = document.getElementById("toggleWpLogBtn");
-        if (tgl) tgl.click();
-      };
-    }
-
-    // ===== Alert-Liste oben im roten Kasten =====
-    if (!alertBox) return;
-
+  // ---------- Banner oben unter dem grünen Wartungs-Button ----------
+  if (banner) {
     if (due && due.length) {
-      var items = due
-        .slice(0, 8)
-        .map(function (d) {
-          var label = [d.machine || "", d.task || ""].filter(Boolean).join(" – ");
-          var when = d.nextDue
-            ? " (" + d.nextDue + (d.status === "overdue" ? " überfällig" : " heute") + ")"
-            : "";
+      var msgEl = banner.querySelector("[data-msg]");
+      if (msgEl) {
+        var over = due.filter(d => d.status === "overdue").length;
+        var tod  = due.filter(d => d.status === "today").length;
+        msgEl.textContent = over
+          ? "Es gibt " + over + " überfällige und " + tod + " heute fällige Wartungen."
+          : "Es gibt " + tod + " heute fällige Wartungen.";
+      }
+      banner.style.display = "flex";
+    } else {
+      banner.style.display = "none";
+    }
+  }
 
-          var needsComment = (d.status === "overdue");
-          var commentHint = needsComment
-            ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>'
-            : "";
+  // ---------- Button im Banner ----------
+  if (openBtn) {
+    openBtn.onclick = function () {
+      // Wenn genau 1 Eintrag vorliegt → direkt Maschine + Aufgabe öffnen
+      if (due && due.length === 1 && due[0]) {
+        var d = due[0];
+        if (typeof window.wpOpenMachineFromName === "function") {
+          window.wpOpenMachineFromName(d.machine || "", d.task || "");
+          return;
+        }
+      }
+      // sonst einfach Wartungs-Dashboard öffnen
+      var tgl = document.getElementById("toggleWpLogBtn");
+      if (tgl) tgl.click();
+    };
+  }
 
-          return (
-            '<li>' +
-              '<button ' +
-                'data-machine="' + encodeURIComponent(d.machine || "") + '" ' +
-                'data-task="' + encodeURIComponent(d.task || "") + '" ' +
-                'data-needs-comment="' + (needsComment ? "1" : "0") + '" ' +
-                'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
-                label + when + commentHint +
-              '</button>' +
-            '</li>'
-          );
-        })
-        .join("");
+  // ---------- Liste im roten Kasten ----------
+  if (!alertBox) return;
 
-      alertBox.innerHTML =
-        "<strong>⚠️ Wartung fällig:</strong>" +
-        '<ul style="margin:6px 0 0 18px;list-style:disc;">' +
-        items +
-        "</ul>";
-      alertBox.style.display = "block";
+  if (due && due.length) {
+    var items = due
+      .slice(0, 8)
+      .map(function (d) {
+        var label = [d.machine || "", d.task || ""]
+          .filter(Boolean)
+          .join(" – ");
 
-      // Klick auf einen Eintrag → Wartungs-Panel öffnen + Maschine + Aufgabe setzen
-      var btns = alertBox.querySelectorAll("button[data-machine]");
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].addEventListener("click", function () {
-          var machine = decodeURIComponent(this.getAttribute("data-machine") || "");
-          var task    = decodeURIComponent(this.getAttribute("data-task") || "");
+        var when = d.nextDue
+          ? " (" + d.nextDue + (d.status === "overdue" ? " überfällig" : " heute") + ")"
+          : "";
 
-          if (typeof window.wpOpenMachineFromName === "function") {
-            window.wpOpenMachineFromName(machine, task);
-            return;
-          }
+        var needsComment = (d.status === "overdue");
+        var commentHint = needsComment
+          ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>'
+          : "";
 
-          // ganz einfacher Fallback, falls wpOpenMachineFromName mal nicht existiert
+        return (
+          '<li>' +
+            '<button ' +
+              'data-machine="' + encodeURIComponent(d.machine || "") + '" ' +
+              'data-task="'    + encodeURIComponent(d.task    || "") + '" ' +
+              'data-needs-comment="' + (needsComment ? "1" : "0") + '" ' +
+              'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
+              label + when + commentHint +
+            '</button>' +
+          '</li>'
+        );
+      })
+      .join("");
+
+    alertBox.innerHTML =
+      "<strong>⚠️ Wartung fällig:</strong>" +
+      '<ul style="margin:6px 0 0 18px;list-style:disc;">' +
+      items +
+      "</ul>";
+    alertBox.style.display = "block";
+
+    // Klick auf einen Eintrag → Wartungs-Panel öffnen + Maschine + Aufgabe setzen
+    var btns = alertBox.querySelectorAll("button[data-machine]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function () {
+        var machine = decodeURIComponent(this.getAttribute("data-machine") || "");
+        var task    = decodeURIComponent(this.getAttribute("data-task")    || "");
+
+        if (typeof window.wpOpenMachineFromName === "function") {
+          window.wpOpenMachineFromName(machine, task);
+          return;
+        }
+
+        // Fallback (nur Maschine), falls die Funktion mal nicht existiert
+        if (typeof getWpEls === "function") {
           var E = getWpEls();
           if (E.selMaschine && machine) {
+            var mNorm = (window.wpNorm || (s => String(s || "").toLowerCase().trim()))(machine);
             for (var j = 0; j < E.selMaschine.options.length; j++) {
               var opt = E.selMaschine.options[j];
-              if (wpNorm(opt.text || opt.value) === wpNorm(machine)) {
+              var oNorm = (window.wpNorm || (s => String(s || "").toLowerCase().trim()))(
+                opt.text || opt.value
+              );
+              if (oNorm === mNorm) {
                 E.selMaschine.selectedIndex = j;
                 E.selMaschine.dispatchEvent(new Event("change"));
                 break;
               }
             }
           }
-        });
-      }
-    } else {
-      alertBox.style.display = "none";
-      alertBox.innerHTML = "";
+        }
+      });
     }
+  } else {
+    alertBox.style.display = "none";
+    alertBox.innerHTML = "";
   }
+}
+
 
   // ===== Start-Check beim Laden der Seite =====
   document.addEventListener("DOMContentLoaded", function () {
