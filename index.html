@@ -794,38 +794,63 @@ async function getShareRootEndpoint() {
     }
   };
 
-  // Öffnet Dashboard + wählt Maschine
-  function wpOpenMachineFromName(name) {
-    try {
-      const { selMaschine } = wpEls();
-      if (selMaschine) {
-        const norm = wpNorm(name);
-        const opt = Array.prototype
-          .slice.call(selMaschine.options || [])
+// Maschine (und optional Aufgabe) aus Banner/Alert öffnen
+window.wpOpenMachineFromName = function (name, taskName) {
+  try {
+    const els = (typeof wpEls === "function") ? wpEls() : {};
+    const selMaschine = els.selMaschine;
+    const selTask     = els.selTask;
+
+    // 1) Maschine wählen
+    if (selMaschine && name) {
+      const norm = wpNorm(name);
+      const opt = Array.prototype
+        .slice.call(selMaschine.options || [])
+        .find(o =>
+          wpNorm(o.value) === norm ||
+          wpNorm(o.textContent || "") === norm
+        );
+      if (opt) {
+        selMaschine.value = opt.value;
+        selMaschine.dispatchEvent(
+          new Event("change", { bubbles: true })
+        );
+      }
+    }
+
+    // 2) Wartungs-Panel öffnen (iPad-safe)
+    var wartungTab = document.querySelector('[data-wp-panel="wartung"]');
+    if (wartungTab) wartungTab.click();
+    if (!wartungTab) {
+      var tgl = document.getElementById("toggleWpLogBtn");
+      if (tgl) tgl.click();
+    }
+
+    // 3) Aufgabe/Schmierstelle auswählen
+    if (selTask && taskName) {
+      const normTask = wpNorm(taskName);
+      // kleiner Timeout, damit die Aufgabenliste nach Maschinenwechsel geladen ist
+      setTimeout(function () {
+        const taskOpt = Array.prototype
+          .slice.call(selTask.options || [])
           .find(o =>
-            wpNorm(o.value) === norm ||
-            wpNorm(o.textContent || "") === norm
+            wpNorm(o.textContent || "") === normTask ||
+            wpNorm(o.value || "") === normTask
           );
-        if (opt) {
-          selMaschine.value = opt.value;
-          selMaschine.dispatchEvent(
+        if (taskOpt) {
+          selTask.value = taskOpt.value;
+          selTask.dispatchEvent(
             new Event("change", { bubbles: true })
           );
         }
-      }
-      // Wartungs-Panel öffnen (iPad-safe)
-      var wartungTab = document.querySelector(
-        '[data-wp-panel="wartung"]'
-      );
-      if (wartungTab) wartungTab.click();
-      if (!wartungTab) {
-        var tgl = document.getElementById("toggleWpLogBtn");
-        if (tgl) tgl.click();
-      }
-    } catch (e) {
-      console.warn("wpOpenMachineFromName:", e);
+      }, 50);
     }
+  } catch (e) {
+    console.warn("wpOpenMachineFromName:", e);
   }
+};
+
+
 
   // Rote Badge am Kopf-Button
   function setWartungBadge(on) {
@@ -879,7 +904,8 @@ function renderGlobalOverdueUI(due) {
     openBtn.onclick = function () {
       if (due && due.length === 1 && due[0] && due[0].machine) {
         if (typeof wpOpenMachineFromName === "function") {
-          wpOpenMachineFromName(due[0].machine);
+          // 👉 Maschine + Aufgabe an die Öffnen-Funktion übergeben
+          wpOpenMachineFromName(due[0].machine, due[0].task || "");
           return;
         }
       }
@@ -899,14 +925,17 @@ function renderGlobalOverdueUI(due) {
             ? " (" + d.nextDue + (d.status === "overdue" ? " überfällig" : " heute") + ")"
             : "";
 
-          // ✅ NEU: Kennzeichnung für überfällig + Kommentarpflicht
+          // Kennzeichnung für überfällig + Kommentarpflicht
           var needsComment = (d.status === "overdue");
-          var commentHint = needsComment ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>' : "";
+          var commentHint = needsComment
+            ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>'
+            : "";
 
           return (
-            '<li><button data-goto="' +
-            encodeURIComponent(d.machine || "") +
-            '" data-needs-comment="' + (needsComment ? "1" : "0") + '"' +
+            '<li><button' +
+            ' data-goto="' + encodeURIComponent(d.machine || "") + '"' +
+            ' data-task="' + encodeURIComponent(d.task || "") + '"' +
+            ' data-needs-comment="' + (needsComment ? "1" : "0") + '"' +
             ' style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
             label +
             when +
@@ -927,8 +956,10 @@ function renderGlobalOverdueUI(due) {
       for (var i = 0; i < btns.length; i++) {
         btns[i].addEventListener("click", function () {
           var name = decodeURIComponent(this.getAttribute("data-goto") || "");
+          var task = decodeURIComponent(this.getAttribute("data-task") || "");
           if (name && typeof wpOpenMachineFromName === "function") {
-            wpOpenMachineFromName(name);
+            // 👉 auch hier Maschine + Aufgabe übergeben
+            wpOpenMachineFromName(name, task);
           }
         });
       }
@@ -938,6 +969,7 @@ function renderGlobalOverdueUI(due) {
     }
   }
 }
+
 
 
   // Start-Check (ohne Dashboard)
