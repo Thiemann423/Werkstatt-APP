@@ -600,21 +600,26 @@ async function getShareRootEndpoint() {
 <script>
 /* ===== Globaler Wartungs-Hinweis ohne geöffnetes Dashboard ===== */
 (function () {
-
-  // Immer die "echten" Wartungs-Elemente holen
-  function getWpEls() {
+  // kleine Helfer
+  const wpEls = function () {
+    // Falls die zentrale wpEls()-Funktion schon existiert, diese nutzen
     if (typeof window.wpEls === "function") {
       try { return window.wpEls(); } catch (_) {}
     }
-    // Fallback, falls wpEls noch nicht definiert ist
+    // Fallback – minimal, falls ganz früh aufgerufen
     return {
       selMaschine:
         document.getElementById("maschine") ||
-        document.querySelector('[name="maschine"], select[data-maschine]')
+        document.querySelector('#maschine, [name="maschine"], select[data-maschine]'),
+      selTask:
+        document.getElementById("wpTaskSelect") ||
+        document.querySelector('#wpTaskSelect')
     };
-  }
+  };
 
-  const wpNorm = window.wpNorm || (s => String(s || "").toLowerCase().trim());
+  const wpNorm =
+    window.wpNorm || (s => String(s || "").toLowerCase().trim());
+
 
   function toISO(d) {
     if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
