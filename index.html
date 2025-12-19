@@ -600,16 +600,21 @@ async function getShareRootEndpoint() {
 <script>
 /* ===== Globaler Wartungs-Hinweis ohne geöffnetes Dashboard ===== */
 (function () {
-  // kleine Helfer
-  const wpEls = window.wpEls || function () {
+
+  // Immer die "echten" Wartungs-Elemente holen
+  function getWpEls() {
+    if (typeof window.wpEls === "function") {
+      try { return window.wpEls(); } catch (_) {}
+    }
+    // Fallback, falls wpEls noch nicht definiert ist
     return {
       selMaschine:
-        document.getElementById("selMaschine") ||
-        document.querySelector('#selMaschine, [name="maschine"], select[data-maschine]')
+        document.getElementById("maschine") ||
+        document.querySelector('[name="maschine"], select[data-maschine]')
     };
-  };
-  const wpNorm =
-    window.wpNorm || (s => String(s || "").toLowerCase().trim());
+  }
+
+  const wpNorm = window.wpNorm || (s => String(s || "").toLowerCase().trim());
 
   function toISO(d) {
     if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -636,7 +641,7 @@ async function getShareRootEndpoint() {
     // 1. Neue Logik: computeDueMap benutzen, wenn vorhanden
     if (typeof window.computeDueMap === "function") {
       try {
-        const map = await window.computeDueMap();   // <-- WICHTIG: await!
+        const map = await window.computeDueMap();
         const out = [];
         for (const [, v] of map) {
           if (v.status === "today" || v.status === "overdue") {
@@ -657,6 +662,7 @@ async function getShareRootEndpoint() {
     // 2. Fallback: nur mit window.wartungslog arbeiten
     const list   = Array.isArray(window.wartungslog) ? window.wartungslog : [];
     const latest = new Map();
+
     for (const e of list) {
       const key  = `${(e.machine || "").trim()}||${(e.taskName || "").trim()}`;
       const last = (e.dateISO || "").trim();
@@ -664,258 +670,73 @@ async function getShareRootEndpoint() {
         latest.set(key, e);
       }
     }
+
     const today = toISO(new Date());
     const out   = [];
+
     latest.forEach(e => {
       const intv = (e.intervalDays === "" || e.intervalDays == null) ? 0 : Number(e.intervalDays);
       const next = (e.dateISO && intv) ? addDays(e.dateISO, intv) : "";
       if (!next) return;
-      const status = cmpISO(next, today) < 0 ? "overdue"
-                   : cmpISO(next, today) === 0 ? "today"
-                   : "ok";
-      if (status !== "ok") {
+
+      const status = cmpISO(next, today) < 0
+        ? "overdue"
+        : (cmpISO(next, today) === 0 ? "today" : "future");
+
+      if (status === "today" || status === "overdue") {
         out.push({
           machine: e.machine || "",
           task:    e.taskName || "",
           nextDue: next,
-          status
+          status:  status
         });
       }
     });
+
     return out;
   }
 
-  // --- Mail-Versand für überfällige Wartungen -----------------
-  window.wpSendOverdueMail = async function (dueList) {
-    try {
-      if (!window.accessToken) {
-        console.warn("[WP] Kein Access Token, Mail kann nicht gesendet werden.");
-        return;
-      }
-      if (!Array.isArray(dueList) || !dueList.length) return;
+  // Banner + Alert befüllen
+  function renderGlobalOverdueUI(due) {
+    var banner  = document.getElementById("wpGlobalOverdueBanner");
+    var openBtn = document.getElementById("wpOpenFromBanner");
+    var alertBox = document.getElementById("wpGlobalAlert");
 
-      // einfache HTML-Tabelle bauen
-      let rows = dueList.map(v => {
-        const machine = v.machine || v.maschine || "";
-        const task    = v.taskName || v.task || "";
-        const nextDue = v.nextDue || "";
-        const status  = v.status || "";
-        return `<tr>
-          <td>${machine}</td>
-          <td>${task}</td>
-          <td>${nextDue}</td>
-          <td>${status}</td>
-        </tr>`;
-      }).join("");
-
-      const bodyHtml = `
-        <p>Hinweis aus der Werkstatt-App:</p>
-        <p>Es liegen Wartungen an, die heute fällig oder bereits überfällig sind.</p>
-        <table border="1" cellspacing="0" cellpadding="4">
-          <thead>
-            <tr>
-              <th>Maschine</th>
-              <th>Aufgabe</th>
-              <th>Fällig am</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <p>Bitte im Wartungs-Dashboard prüfen.</p>
-      `;
-
-      const mail = {
-        message: {
-          subject: `Wartungs-Hinweis: ${dueList.length} Aufgabe(n) fällig/überfällig`,
-          body: {
-            contentType: "HTML",
-            content: bodyHtml
-          },
-          toRecipients: [
-            { emailAddress: { address: "mike.hafermalz@petri-feinkost.de" } },
-            { emailAddress: { address: "merten.thiemann@petri-feinkost.de" } }
-          ]
-        },
-        saveToSentItems: true
-      };
-
-      const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer " + window.accessToken,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(mail)
-      });
-
-      if (!res.ok) {
-        console.error("[WP] sendMail fehlgeschlagen:", res.status, await res.text());
+    // ===== Banner =====
+    if (banner) {
+      if (due && due.length) {
+        var msgEl = banner.querySelector("[data-msg]");
+        if (msgEl) {
+          var over = due.filter(d => d.status === "overdue").length;
+          var tod  = due.filter(d => d.status === "today").length;
+          msgEl.textContent = over
+            ? "Es gibt " + over + " überfällige und " + tod + " heute fällige Wartungen."
+            : "Es gibt " + tod + " heute fällige Wartungen.";
+        }
+        banner.style.display = "flex";
       } else {
-        console.log("[WP] Warn-Mail erfolgreich gesendet.");
-      }
-    } catch (e) {
-      console.error("[WP] Fehler beim Mailversand:", e);
-    }
-  };
-
-  // --- Öffentliche Funktion: prüfen + optional Mail senden ----
-  window.wpCheckOverdueAndNotify = async function (opts) {
-    opts = opts || {};
-    const sendMail = !!opts.sendMail;
-
-    let dueList = [];
-    try {
-      dueList = await getDueList();
-    } catch (e) {
-      console.warn("[WP] getDueList Fehler:", e);
-      dueList = [];
-    }
-
-    if (!Array.isArray(dueList) || !dueList.length) {
-      console.log("[WP] Keine fälligen Wartungen, keine Mail nötig.");
-      return;
-    }
-
-    // Nur einmal pro Tag pro Browser mailen
-    const today = (new Date()).toISOString().slice(0, 10);
-    const LS_KEY = "WP_LAST_OVERDUE_MAIL_DATE";
-    let lastDate = null;
-    try { lastDate = localStorage.getItem(LS_KEY); } catch (_) {}
-
-    if (sendMail && lastDate === today) {
-      console.log("[WP] Warn-Mail heute bereits gesendet.");
-      return;
-    }
-
-    if (sendMail) {
-      await window.wpSendOverdueMail(dueList);
-      try { localStorage.setItem(LS_KEY, today); } catch (_) {}
-    }
-  };
-
-// Maschine (und optional Aufgabe) aus Banner/Alert öffnen
-window.wpOpenMachineFromName = function (name, taskName) {
-  try {
-    const els = (typeof wpEls === "function") ? wpEls() : {};
-    const selMaschine = els.selMaschine;
-    const selTask     = els.selTask;
-
-    // 1) Maschine wählen
-    if (selMaschine && name) {
-      const norm = wpNorm(name);
-      const opt = Array.prototype
-        .slice.call(selMaschine.options || [])
-        .find(o =>
-          wpNorm(o.value) === norm ||
-          wpNorm(o.textContent || "") === norm
-        );
-      if (opt) {
-        selMaschine.value = opt.value;
-        selMaschine.dispatchEvent(
-          new Event("change", { bubbles: true })
-        );
+        banner.style.display = "none";
       }
     }
 
-    // 2) Wartungs-Panel öffnen (iPad-safe)
-    var wartungTab = document.querySelector('[data-wp-panel="wartung"]');
-    if (wartungTab) wartungTab.click();
-    if (!wartungTab) {
-      var tgl = document.getElementById("toggleWpLogBtn");
-      if (tgl) tgl.click();
-    }
-
-    // 3) Aufgabe/Schmierstelle auswählen
-    if (selTask && taskName) {
-      const normTask = wpNorm(taskName);
-      // kleiner Timeout, damit die Aufgabenliste nach Maschinenwechsel geladen ist
-      setTimeout(function () {
-        const taskOpt = Array.prototype
-          .slice.call(selTask.options || [])
-          .find(o =>
-            wpNorm(o.textContent || "") === normTask ||
-            wpNorm(o.value || "") === normTask
-          );
-        if (taskOpt) {
-          selTask.value = taskOpt.value;
-          selTask.dispatchEvent(
-            new Event("change", { bubbles: true })
-          );
+    // Button im Banner → wenn nur 1 Eintrag: direkt Maschine + Aufgabe öffnen
+    if (openBtn) {
+      openBtn.onclick = function () {
+        if (due && due.length === 1 && due[0]) {
+          var d = due[0];
+          if (typeof window.wpOpenMachineFromName === "function") {
+            window.wpOpenMachineFromName(d.machine || "", d.task || "");
+            return;
+          }
         }
-      }, 50);
+        var tgl = document.getElementById("toggleWpLogBtn");
+        if (tgl) tgl.click();
+      };
     }
-  } catch (e) {
-    console.warn("wpOpenMachineFromName:", e);
-  }
-};
 
+    // ===== Alert-Liste oben im roten Kasten =====
+    if (!alertBox) return;
 
-
-  // Rote Badge am Kopf-Button
-  function setWartungBadge(on) {
-    const btn = document.getElementById("wartungToggleHead");
-    if (!btn) return;
-    let dot = btn.querySelector(".wp-badge-dot");
-    if (on && !dot) {
-      dot = document.createElement("span");
-      dot.className = "wp-badge-dot";
-      Object.assign(dot.style, {
-        display: "inline-block",
-        width: "10px",
-        height: "10px",
-        background: "#dc3545",
-        borderRadius: "999px",
-        marginLeft: "8px",
-        verticalAlign: "middle"
-      });
-      btn.appendChild(dot);
-    }
-    if (!on && dot) {
-      dot.remove();
-    }
-  }
-
-// Banner + Alert befüllen
-function renderGlobalOverdueUI(due) {
-  var banner = document.getElementById("wpGlobalOverdueBanner");
-  var openBtn = document.getElementById("wpOpenFromBanner");
-  var alertBox = document.getElementById("wpGlobalAlert");
-
-  // Banner
-  if (banner) {
-    if (due && due.length) {
-      var msgEl = banner.querySelector("[data-msg]");
-      if (msgEl) {
-        var over = due.filter(d => d.status === "overdue").length;
-        var tod = due.filter(d => d.status === "today").length;
-        msgEl.textContent = over
-          ? "Es gibt " + over + " überfällige und " + tod + " heute fällige Wartungen."
-          : "Es gibt " + tod + " heute fällige Wartungen.";
-      }
-      banner.style.display = "flex";
-    } else {
-      banner.style.display = "none";
-    }
-  }
-
-  // Button im Banner
-  if (openBtn) {
-    openBtn.onclick = function () {
-      if (due && due.length === 1 && due[0] && due[0].machine) {
-        if (typeof wpOpenMachineFromName === "function") {
-          // 👉 Maschine + Aufgabe an die Öffnen-Funktion übergeben
-          wpOpenMachineFromName(due[0].machine, due[0].task || "");
-          return;
-        }
-      }
-      var tgl = document.getElementById("toggleWpLogBtn");
-      if (tgl) tgl.click();
-    };
-  }
-
-  // Alert-Liste
-  if (alertBox) {
     if (due && due.length) {
       var items = due
         .slice(0, 8)
@@ -925,22 +746,21 @@ function renderGlobalOverdueUI(due) {
             ? " (" + d.nextDue + (d.status === "overdue" ? " überfällig" : " heute") + ")"
             : "";
 
-          // Kennzeichnung für überfällig + Kommentarpflicht
           var needsComment = (d.status === "overdue");
           var commentHint = needsComment
             ? ' <strong style="color:#842029;">– Kommentar erforderlich</strong>'
             : "";
 
           return (
-            '<li><button' +
-            ' data-goto="' + encodeURIComponent(d.machine || "") + '"' +
-            ' data-task="' + encodeURIComponent(d.task || "") + '"' +
-            ' data-needs-comment="' + (needsComment ? "1" : "0") + '"' +
-            ' style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
-            label +
-            when +
-            commentHint +
-            "</button></li>"
+            '<li>' +
+              '<button ' +
+                'data-machine="' + encodeURIComponent(d.machine || "") + '" ' +
+                'data-task="' + encodeURIComponent(d.task || "") + '" ' +
+                'data-needs-comment="' + (needsComment ? "1" : "0") + '" ' +
+                'style="all:unset;cursor:pointer;text-decoration:underline;color:#842029;">' +
+                label + when + commentHint +
+              '</button>' +
+            '</li>'
           );
         })
         .join("");
@@ -952,14 +772,29 @@ function renderGlobalOverdueUI(due) {
         "</ul>";
       alertBox.style.display = "block";
 
-      var btns = alertBox.querySelectorAll("button[data-goto]");
+      // Klick auf einen Eintrag → Wartungs-Panel öffnen + Maschine + Aufgabe setzen
+      var btns = alertBox.querySelectorAll("button[data-machine]");
       for (var i = 0; i < btns.length; i++) {
         btns[i].addEventListener("click", function () {
-          var name = decodeURIComponent(this.getAttribute("data-goto") || "");
-          var task = decodeURIComponent(this.getAttribute("data-task") || "");
-          if (name && typeof wpOpenMachineFromName === "function") {
-            // 👉 auch hier Maschine + Aufgabe übergeben
-            wpOpenMachineFromName(name, task);
+          var machine = decodeURIComponent(this.getAttribute("data-machine") || "");
+          var task    = decodeURIComponent(this.getAttribute("data-task") || "");
+
+          if (typeof window.wpOpenMachineFromName === "function") {
+            window.wpOpenMachineFromName(machine, task);
+            return;
+          }
+
+          // ganz einfacher Fallback, falls wpOpenMachineFromName mal nicht existiert
+          var E = getWpEls();
+          if (E.selMaschine && machine) {
+            for (var j = 0; j < E.selMaschine.options.length; j++) {
+              var opt = E.selMaschine.options[j];
+              if (wpNorm(opt.text || opt.value) === wpNorm(machine)) {
+                E.selMaschine.selectedIndex = j;
+                E.selMaschine.dispatchEvent(new Event("change"));
+                break;
+              }
+            }
           }
         });
       }
@@ -968,33 +803,32 @@ function renderGlobalOverdueUI(due) {
       alertBox.innerHTML = "";
     }
   }
-}
 
-
-
-  // Start-Check (ohne Dashboard)
+  // ===== Start-Check beim Laden der Seite =====
   document.addEventListener("DOMContentLoaded", function () {
     (async function () {
       try {
         // wenn möglich, Log aus der Cloud holen
         if (typeof window.wpLogLoad === "function") {
-          try {
-            await window.wpLogLoad();
-          } catch (e) {
+          try { await window.wpLogLoad(); } catch (e) {
             console.warn("wpLogLoad im Start-Check:", e);
           }
         }
 
         const due = await getDueList();
-        setWartungBadge(!!(due && due.length));
+        if (typeof window.setWartungBadge === "function") {
+          window.setWartungBadge(!!(due && due.length));
+        }
         renderGlobalOverdueUI(due);
       } catch (e) {
         console.warn("Globaler Wartungs-Check:", e);
       }
     })();
   });
+
 })();
 </script>
+
 
 
   
