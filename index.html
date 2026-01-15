@@ -2064,31 +2064,83 @@ function initSignaturePad(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
 
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-  function resizeCanvas() {
-    const ratio = window.devicePixelRatio || 1;
-    const rect  = canvas.getBoundingClientRect();
-    canvas.width  = rect.width * ratio;
-    canvas.height = rect.height * ratio;
+  // Cache pro Canvas (optional, aber sehr praktisch)
+  const STORAGE_KEY = "SIG_CACHE_" + canvasId;
+
+  function saveToStorage() {
+    try {
+      if (canvas.dataset.signed === "1") {
+        localStorage.setItem(STORAGE_KEY, canvas.toDataURL("image/png"));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function restoreFromStorage() {
+    try {
+      const dataUrl = localStorage.getItem(STORAGE_KEY);
+      if (!dataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const rect = canvas.getBoundingClientRect();
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        canvas.dataset.signed = "1";
+      };
+      img.src = dataUrl;
+    } catch (_) {}
+  }
+
+  function applyDrawingStyle(ratio) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // wichtig: reset
     ctx.scale(ratio, ratio);
 
     ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctx.strokeStyle = '#000';
+    ctx.lineCap     = "round";
+    ctx.lineJoin    = "round";
+    ctx.strokeStyle = "#000";
   }
 
+  function resizeCanvas() {
+    // Snapshot VOR dem Resize (Canvas wird gleich geleert)
+    const hadSignature = canvas.dataset.signed === "1";
+    const snapshot = hadSignature ? canvas.toDataURL("image/png") : null;
+
+    const ratio = window.devicePixelRatio || 1;
+    const rect  = canvas.getBoundingClientRect();
+
+    canvas.width  = Math.max(1, Math.round(rect.width  * ratio));
+    canvas.height = Math.max(1, Math.round(rect.height * ratio));
+
+    applyDrawingStyle(ratio);
+
+    // Snapshot NACH dem Resize zurückzeichnen (in CSS-Pixeln)
+    if (snapshot) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = snapshot;
+    } else {
+      // falls es keinen Snapshot gibt, evtl. cached wiederherstellen
+      restoreFromStorage();
+    }
+  }
+
+  // Initial
+  canvas.dataset.signed = canvas.dataset.signed || "0";
   resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
+
+  // iPad Rotation/Resize
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 150));
 
   let drawing = false;
-  // Flag: 0 = keine Unterschrift, 1 = unterschrieben
-  canvas.dataset.signed = canvas.dataset.signed || "0";
 
   function clearCanvasError() {
-    canvas.classList.remove('field-error');
-    if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains('error-text')) {
+    canvas.classList.remove("field-error");
+    if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains("error-text")) {
       canvas.nextElementSibling.remove();
     }
   }
@@ -2096,11 +2148,12 @@ function initSignaturePad(canvasId) {
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     drawing = true;
+
     const r = canvas.getBoundingClientRect();
     ctx.beginPath();
     ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
 
-    canvas.dataset.signed = "1";   // 👉 jetzt gilt als unterschrieben
+    canvas.dataset.signed = "1";
     clearCanvasError();
   }, { passive: false });
 
@@ -2111,16 +2164,26 @@ function initSignaturePad(canvasId) {
     ctx.stroke();
   });
 
-  canvas.addEventListener("pointerup",   () => { drawing = false; });
-  canvas.addEventListener("pointerleave",() => { drawing = false; });
+  function endStroke() {
+    if (!drawing) return;
+    drawing = false;
+    // nach jeder Unterschrift sichern, damit Drehen nichts löscht
+    saveToStorage();
+  }
+
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointerleave", endStroke);
+
+  // Falls beim Laden schon was im Cache ist:
+  restoreFromStorage();
 }
 
 window.addEventListener("load", () => {
   initSignaturePad("unterschrift_abnahme");
   initSignaturePad("unterschrift_technik");
 });
-
 </script>
+
 
 
 
@@ -2131,15 +2194,22 @@ function clearSignature(index) {
   if (!canvas) return;
 
   const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);   // wichtig, falls vorher skaliert wurde
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvas.dataset.signed = "0";          // 👉 Unterschrift wieder „weg“
-  canvas.classList.remove('field-error');
-  if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains('error-text')) {
+
+  canvas.dataset.signed = "0";
+  canvas.classList.remove("field-error");
+
+  if (canvas.nextElementSibling && canvas.nextElementSibling.classList?.contains("error-text")) {
     canvas.nextElementSibling.remove();
   }
-}
 
+  try {
+    localStorage.removeItem("SIG_CACHE_" + canvas.id);
+  } catch (_) {}
+}
 </script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   // 🟢 Zeitberechnung
