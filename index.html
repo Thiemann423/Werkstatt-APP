@@ -6120,6 +6120,21 @@ async function wpLogExecution(entry) {
     ? String(src.prevNextDue).trim()
     : "";
 
+  // >>> HIER EINBAUEN: zentrale Audit-Validierung <<<
+  function isIsoDate(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||"")); }
+
+  const execDate = String(dateISO || "").trim();
+  const prevDue  = String(prevNextDue || "").trim();
+  const cmt      = String(overdueComment || "").trim();
+
+  const wasOverdue = isIsoDate(execDate) && isIsoDate(prevDue) && (prevDue < execDate);
+
+  if (wasOverdue) {
+    if (!cmt) throw new Error("Kommentar_Pflicht: überfällige Wartung ohne Kommentar.");
+    if (cmt.length < 10) throw new Error("Kommentar_zu_kurz: mindestens 10 Zeichen.");
+  }
+;
+
   // 3) finaler Eintrag
   var e = {
     dateISO        : dateISO,
@@ -6398,17 +6413,58 @@ function bindWpLogUi(){
 
 
 
-
 var saveBtn = _byId("wpSaveTask");
-if (saveBtn) saveBtn.addEventListener("click", async function(){
-  var entry = _collectEntryFromForm({useTodayIfEmpty:true});
-  await wpLogExecution(entry);
-  
+if (saveBtn) saveBtn.addEventListener("click", async function () {
+  try {
+    // Datum, das aktuell als "Nächstes Fälligkeitsdatum" im Formular steht
+    // (= das alte/aktuelle Due vor dem Speichern; wichtig für Overdue-Prüfung)
+    var nextEl = _byId("wpNextDue");
+    var prevNext = (nextEl && nextEl.value) ? String(nextEl.value).trim() : "";
 
-  var pnl=_byId("wpLogPanel");
-  if (pnl && pnl.style.display === "block") renderWpLogTable();
-  alert("Wartung gespeichert!");
+    // Ausführung aus Form sammeln (falls leer -> heute)
+    var entry = _collectEntryFromForm({ useTodayIfEmpty: true });
+
+    // Overdue prüfen: prevNextDue (alt) < dateISO (neu/ausgeführt)
+    // ISO-Strings YYYY-MM-DD kann man lexikografisch vergleichen
+    var isOverdue = false;
+    if (prevNext && entry && entry.dateISO) {
+      isOverdue = (String(prevNext) < String(entry.dateISO));
+    }
+
+    // Wenn überfällig -> Kommentar erzwingen
+    if (isOverdue) {
+      var overdueComment = prompt(
+        "⚠️ Diese Wartung ist ÜBERFÄLLIG.\nBitte kommentieren, warum sie verspätet durchgeführt wurde:",
+        ""
+      );
+      overdueComment = (overdueComment || "").trim();
+
+      if (!overdueComment) {
+        alert("Abgebrochen: Kommentar ist Pflicht.");
+        return;
+      }
+      if (overdueComment.length < 10) {
+        alert("Bitte etwas ausführlicher (mind. 10 Zeichen).");
+        return;
+      }
+
+      entry.overdueComment = overdueComment;
+    }
+
+    // Für Audit: altes Fälligkeitsdatum mitspeichern
+    entry.prevNextDue = prevNext || "";
+
+    await wpLogExecution(entry);
+
+    var pnl = _byId("wpLogPanel");
+    if (pnl && pnl.style.display === "block") renderWpLogTable();
+    alert("Wartung gespeichert!");
+  } catch (e) {
+    console.error("wpSaveTask:", e);
+    alert(e && e.message ? e.message : "Speichern fehlgeschlagen.");
+  }
 });
+
 
 var doneBtn = _byId("wpMarkDoneToday");
 if (doneBtn) doneBtn.addEventListener("click", async function () {
