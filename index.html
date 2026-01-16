@@ -5863,64 +5863,7 @@ if (E.btnDel) E.btnDel.addEventListener('click', async function(){
   if (typeof wpUpdateGlobalBanner  === "function") wpUpdateGlobalBanner();
   if (typeof wpSyncPrintSummary    === "function") wpSyncPrintSummary(null);
 });
-if (E.btnDone) E.btnDone.addEventListener("click", async function () {
-  const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
-  if (!t) { alert("Bitte eine Aufgabe wählen."); return; }
 
-  // Überfälligkeit auf Basis des bisherigen Standes prüfen (BEVOR wir lastDateISO überschreiben)
-  const today = wpTodayISO();
-  const prevLast = (t.lastDateISO || "").trim();
-  const prevNext = (prevLast && t.intervalDays) ? wpComputeNext(prevLast, t.intervalDays) : "";
-  const isOverdue = (prevNext && prevNext < today);
-
-  let overdueComment = "";
-  if (isOverdue) {
-    overdueComment = prompt(
-      "⚠️ Diese Wartung ist ÜBERFÄLLIG.\nBitte kurz kommentieren, warum sie überfällig ist:",
-      ""
-    );
-
-    overdueComment = (overdueComment || "").trim();
-
-    if (!overdueComment) {
-      alert("Abgebrochen: Für überfällige Wartungen ist ein Kommentar Pflicht.");
-      return;
-    }
-
-    // optional: Mindestlänge
-    if (overdueComment.length < 10) {
-      alert("Bitte etwas ausführlicher kommentieren (mind. 10 Zeichen).");
-      return;
-    }
-  }
-
-  // Heute erst JETZT setzen
-  t.lastDateISO = today;
-
-  try {
-    if (typeof wpLogExecution === "function") {
-      await wpLogExecution({
-        dateISO       : t.lastDateISO,
-        machine       : (E.selMaschine && E.selMaschine.value) ? E.selMaschine.value : "",
-        taskName      : t.name,
-        intervalDays  : t.intervalDays,
-        nipples       : t.nipples,
-        technician    : (E.selTechniker1 && E.selTechniker1.value) ? E.selTechniker1.value : "",
-        overdueComment: overdueComment,  // ✅ neu
-        prevNextDue   : prevNext         // optional
-      });
-    }
-  } catch (e) {
-    console.error("[WP] Fehler bei 'Heute durchgeführt'", e);
-    alert("Speichern fehlgeschlagen. Bitte erneut versuchen.");
-    return; // ✅ wichtig
-  }
-
-  if (typeof wpRecalc === "function") wpRecalc();
-  if (typeof wpEvalWarning === "function") wpEvalWarning();
-  if (typeof wpUpdateGlobalBanner === "function") wpUpdateGlobalBanner();
-  if (typeof wpSyncPrintSummary === "function") wpSyncPrintSummary(t);
-});
 
 
 
@@ -6455,6 +6398,16 @@ if (saveBtn) saveBtn.addEventListener("click", async function () {
     entry.prevNextDue = prevNext || "";
 
     await wpLogExecution(entry);
+// ✅ Wartungsplan synchron halten (wichtig für "Wartung fällig")
+try {
+  const t = (typeof wpCurrentTask === "function") ? wpCurrentTask() : null;
+  if (t) {
+    t.lastDateISO = entry.dateISO;   // heute
+    if (typeof wpSave === "function") await wpSave();
+  }
+} catch (e) {
+  console.warn("Plan-Update fehlgeschlagen:", e);
+}
 
     var pnl = _byId("wpLogPanel");
     if (pnl && pnl.style.display === "block") renderWpLogTable();
