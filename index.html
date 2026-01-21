@@ -2210,6 +2210,15 @@ function clearSignature(index) {
   } catch (_) {}
 }
 </script>
+<script>
+function clearAllSignatures() {
+  const canvases = document.querySelectorAll("canvas.signature-pad");
+  canvases.forEach((_, index) => {
+    clearSignature(index);
+  });
+}
+</script>
+
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -3978,10 +3987,10 @@ doc.close();
     const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
-    // I) Upload & UI
-    const success = await uploadToOneDrive(filename, pdfBlob);
-    if (success) {
-      // ---- META-Datei für das Dashboard mitschreiben ----
+// I) Upload & UI
+const success = await uploadToOneDrive(filename, pdfBlob);
+if (success) {
+  // ---- META-Datei für das Dashboard mitschreiben ----
   const meta = {
     auftrags_id:        auftragId,
     pdfName:            filename,
@@ -3998,36 +4007,40 @@ doc.close();
     provisorium_art:    document.getElementById("provisorium_art")?.value || "",
     provisorium_von:    document.getElementById("provisorium_von")?.value || "",
     provisorium_bis:    document.getElementById("provisorium_bis")?.value || "",
-      provisorium_bezug_auftrag_id:
-    document.getElementById("provisorium_bezug_auftrag_id")?.value || "",
+    provisorium_bezug_auftrag_id:
+      document.getElementById("provisorium_bezug_auftrag_id")?.value || "",
   };
 
+  // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
+  if (!TARGET_META_ITEM_ID) {
+    try { await resolveShareLinkToFolder(); }
+    catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
+  }
 
-      // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
-      if (!TARGET_META_ITEM_ID) {
-        try { await resolveShareLinkToFolder(); }
-        catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
-      }
+  const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
 
-      const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+  // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
+  const metaOk = await uploadToOneDrive(
+    `${auftragId}.meta.json`,
+    metaBlob,
+    "application/json",
+    TARGET_META_ITEM_ID || TARGET.parentItemId
+  );
+  if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
 
-      // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
-      const metaOk = await uploadToOneDrive(
-        `${auftragId}.meta.json`,
-        metaBlob,
-        "application/json",
-        TARGET_META_ITEM_ID || TARGET.parentItemId
-      );
-      if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
+  // 🆕 NACH erfolgreichem Abschluss: Signaturen leeren (Canvas + SIG_CACHE_)
+  // Voraussetzung: clearAllSignatures() existiert bei dir (aus Schritt 2)
+  try { clearAllSignatures(); } catch (e) { console.warn("clearAllSignatures fehlgeschlagen:", e); }
 
-      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-      await deleteDraftFile?.();
-      document.getElementById("abschlussScreen").style.display = "flex";
+  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+  await deleteDraftFile?.();
+  document.getElementById("abschlussScreen").style.display = "flex";
 
-      try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
-    } else {
-      alert("⚠️ Fehler beim Hochladen in OneDrive.");
-    }
+  try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
+} else {
+  alert("⚠️ Fehler beim Hochladen in OneDrive.");
+}
+
   } catch (err) {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
     alert("❌ PDF konnte nicht erstellt oder hochgeladen werden.");
@@ -4042,18 +4055,36 @@ doc.close();
 // ====================
 // Sonstiges
 // ====================
+
+// 🆕 löscht nur die gespeicherten Signatur-Caches (SIG_CACHE_*)
+function clearSignatureStorage() {
+  try {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith("SIG_CACHE_"))
+      .forEach(key => localStorage.removeItem(key));
+  } catch (_) {}
+}
+
 function forceUpdate() {
   (async () => {
     try {
+      // 🆕 1) Signaturen sofort aus UI + localStorage entfernen
+      try { clearAllSignatures?.(); } catch (e) { console.warn("clearAllSignatures:", e); }
+      try { clearSignatureStorage(); } catch (e) { console.warn("clearSignatureStorage:", e); }
+
+      // 2) Service Worker entfernen
       if ('serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map(r => r.unregister()));
       }
+
+      // 3) Cache Storage löschen
       if (window.caches?.keys) {
         const names = await caches.keys();
         await Promise.all(names.map(n => caches.delete(n)));
       }
-      alert("✅ Cache & Service Worker gelöscht. Seite wird neu geladen.");
+
+      alert("✅ Cache, Service Worker & Signaturen gelöscht. Seite wird neu geladen.");
       const url = new URL(location.href);
       url.searchParams.set('_', Date.now());
       location.replace(url.toString());
@@ -4063,6 +4094,7 @@ function forceUpdate() {
     }
   })();
 }
+
 
 
 // 💾 ENTWURF SPEICHERN
