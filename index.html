@@ -2124,8 +2124,8 @@ function initSignaturePad(canvasId) {
       img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
       img.src = snapshot;
     } else {
-      // falls es keinen Snapshot gibt, evtl. cached wiederherstellen
-      restoreFromStorage();
+      // ❌ KEIN Restore aus localStorage
+      // Signaturen sind kein Entwurfsbestandteil → bewusst leer
     }
   }
 
@@ -2175,15 +2175,18 @@ function initSignaturePad(canvasId) {
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointerleave", endStroke);
 
-  // Falls beim Laden schon was im Cache ist:
-  restoreFromStorage();
-}
+  // ❌ WICHTIG: KEIN automatisches Restore beim Laden
+  // restoreFromStorage();
+} // <-- ✅ initSignaturePad ENDE
 
+
+// ✅ load-listener gehört AUSSERHALB der Funktion:
 window.addEventListener("load", () => {
   initSignaturePad("unterschrift_abnahme");
   initSignaturePad("unterschrift_technik");
 });
 </script>
+
 
 
 
