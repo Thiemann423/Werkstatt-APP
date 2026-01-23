@@ -6448,6 +6448,16 @@ function bindWpLogUi(){
   });
 }
 
+function _requireWpTaskSelected(){
+  var sel = _byId("wpTaskSelect"); // Schmierstelle / Aufgabe
+  var v = (sel && typeof sel.value !== "undefined") ? String(sel.value).trim() : "";
+  if (!v) {
+    alert('Bitte zuerst "Schmierstelle / Aufgabe" auswählen.');
+    try { sel && sel.focus && sel.focus(); } catch(e){}
+    return false;
+  }
+  return true;
+}
 
 
 var saveBtn = _byId("wpSaveTask");
@@ -6515,19 +6525,33 @@ try {
 
 var doneBtn = _byId("wpMarkDoneToday");
 if (doneBtn) doneBtn.addEventListener("click", async function () {
-  // 🔒 Doppel-/Mehrfachklick verhindern, solange wir verarbeiten
+  // 🔒 Doppel-/Mehrfachklick verhindern
   if (doneBtn.dataset.busy === "1") return;
   doneBtn.dataset.busy = "1";
 
   try {
+
+    // ✅ Pflichtfeld: Schmierstelle / Aufgabe
+    var taskSel = _byId("wpTaskSelect");
+    var taskVal = (taskSel && typeof taskSel.value !== "undefined")
+      ? String(taskSel.value).trim()
+      : "";
+
+    if (!taskVal) {
+      alert('Bitte zuerst "Schmierstelle / Aufgabe" auswählen.');
+      try { taskSel && taskSel.focus && taskSel.focus(); } catch(e){}
+      doneBtn.dataset.busy = "0";
+      return;
+    }
+
     var todayISO = _toISO(new Date());
     var lastEl   = _byId("wpLastDate");
     var nextEl   = _byId("wpNextDue");
 
-    // ⛔ Bereits heute eingetragen? Dann nichts nochmal machen
+    // ⛔ Bereits heute eingetragen?
     if (lastEl && lastEl.value === todayISO) {
       alert("Diese Aufgabe wurde heute bereits als durchgeführt markiert.");
-      doneBtn.dataset.busy = "0";      // Busy-Flag wieder freigeben
+      doneBtn.dataset.busy = "0";
       return;
     }
 
