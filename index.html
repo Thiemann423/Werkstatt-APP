@@ -1512,6 +1512,41 @@ const TECHNIKER_BASE = [
   "Stefan Wulf"
 ];
 
+/* 💾 Custom-Techniker dauerhaft speichern (bleibt auch nach Reload/Update) */
+const TECHNIKER_CUSTOM_KEY = "TE15_TECHNIKER_CUSTOM";
+
+function loadCustomTechniker(){
+  try {
+    const raw = localStorage.getItem(TECHNIKER_CUSTOM_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch(e){
+    return [];
+  }
+}
+
+function saveCustomTechniker(list){
+  try {
+    localStorage.setItem(TECHNIKER_CUSTOM_KEY, JSON.stringify(list || []));
+  } catch(e){}
+}
+
+function addCustomTechniker(name){
+  const v = String(name || "").trim();
+  if (!v) return;
+
+  // nicht speichern, wenn schon in Basisliste
+  if (Array.isArray(TECHNIKER_BASE) &&
+      TECHNIKER_BASE.some(x => String(x).toLowerCase() === v.toLowerCase())) {
+    return;
+  }
+
+  const cur = loadCustomTechniker();
+  if (cur.some(x => String(x).toLowerCase() === v.toLowerCase())) return;
+
+  cur.push(v);
+  saveCustomTechniker(cur);
+}
 
 /* Dropdown + Sonstige-Funktion aufbauen */
 function setupTechnikerSelect(selId, otherId){
@@ -1519,12 +1554,14 @@ function setupTechnikerSelect(selId, otherId){
   var other = document.getElementById(otherId);
   if (!sel) return;
 
-  // Basisliste absichern
-  var base = (typeof TECHNIKER_BASE !== "undefined" && Array.isArray(TECHNIKER_BASE)) ? TECHNIKER_BASE : [];
+  // Basisliste + Custom-Liste zusammenführen
+  var base   = (typeof TECHNIKER_BASE !== "undefined" && Array.isArray(TECHNIKER_BASE)) ? TECHNIKER_BASE : [];
+  var custom = loadCustomTechniker();
+  var all    = base.concat(custom);
 
   // Technikerliste befüllen (Duplikate vermeiden)
-  for (var i=0; i<base.length; i++){
-    var n = String(base[i] || "");
+  for (var i=0; i<all.length; i++){
+    var n = String(all[i] || "");
     if (!n) continue;
 
     var exists = false;
@@ -1544,10 +1581,16 @@ function setupTechnikerSelect(selId, otherId){
   }
 
   sel.addEventListener("change", function(){
+    // Wenn von "Sonstige" weg gewechselt wird und im Textfeld ein Name steht -> übernehmen + speichern
     if (sel.value !== "Sonstige" && other && other.value && other.value.trim()){
       var v = other.value.trim();
+
+      // ✅ dauerhaft merken
+      addCustomTechniker(v);
+
       if (typeof addOptionUnique === "function") addOptionUnique(sel, v, { autoselect:true });
       else { sel.add(new Option(v, v)); sel.value = v; }
+
       other.value = "";
     }
     toggleOther();
@@ -1557,8 +1600,13 @@ function setupTechnikerSelect(selId, otherId){
     other.addEventListener("blur", function(){
       var v = (other.value || "").trim();
       if (!v) return;
+
+      // ✅ dauerhaft merken
+      addCustomTechniker(v);
+
       if (typeof addOptionUnique === "function") addOptionUnique(sel, v, { autoselect:true });
       else { sel.add(new Option(v, v)); sel.value = v; }
+
       other.value = "";
       toggleOther();
     });
@@ -1572,6 +1620,7 @@ window.addEventListener("load", function(){
   setupTechnikerSelect("techniker2", "sonstiger_techniker2");
 });
 </script>
+
 
 
 
