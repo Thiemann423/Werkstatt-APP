@@ -14,31 +14,38 @@
       font-family: Arial, sans-serif;
       margin: 20px;
   }
+
   .header, .footer {
       display: flex;
       justify-content: space-between;
       align-items: center;
   }
+
   .header div, .footer div {
       margin: 5px;
   }
+
   .section {
       margin-bottom: 20px;
   }
+
   .section label {
       display: block;
       margin-bottom: 5px;
   }
+
   .section input, .section select, .section textarea {
       width: 100%;
       padding: 5px;
       margin-bottom: 10px;
   }
+
   .signature {
       border: 1px solid #000;
       height: 100px;
       margin-bottom: 20px;
   }
+
   /* Style für die Buttons */
   button#saveDraftJsonButton,
   button#loadDraftJsonButton,
@@ -53,15 +60,40 @@
       border-radius: 5px;
       transition: background-color 0.3s;
   }
+
   button#saveDraftJsonButton:hover,
   button#loadDraftJsonButton:hover,
   button#closeOrderButton:hover {
       background-color: #005ea0;
   }
 
-  /* ✅ Hier einfügen: Container für PDF */
+  /* === QM-Kopfzeile Formblatt === */
+  .qm-header{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:start;
+    margin-bottom:18px;
+  }
 
+  .qm-header-center{
+    grid-column:1 / -1;
+    text-align:center;
+    font-weight:bold;
+    margin-top:6px;
+  }
+
+  .qm-header-center .title{
+    font-size:20px;
+    margin-bottom:2px;
+  }
+
+  .qm-header-right{
+    text-align:right;
+    font-size:12px;
+    line-height:1.4;
+  }
 </style>
+
 <style>
   /* Druckfarben & Seitenumbrüche */
   @media print {
@@ -1397,48 +1429,68 @@ function setWpRange(btn) {
 <!-- ⬇️ WICHTIG: Ab hier ist alles im PDF-Container -->
 <div id="pdfExportContainer">
 
- <!-- ===== Stammdaten Kopfbereich (untereinander + Techniker-Dropdowns) ===== -->
-<div class="section" style="margin-bottom:16px;">
-  <div style="display:grid;grid-template-columns:1fr;gap:12px;">
+  <!-- ========================= -->
+  <!-- 🧾 QM-Kopfzeile Formblatt -->
+  <!-- ========================= -->
+  <div class="qm-header avoid-break">
 
-    <!-- Auftrags-ID -->
-    <div>
-      <label for="auftrag_id" style="font-weight:bold;">Auftrags-ID</label>
-      <input id="auftrag_id" name="auftrag_id" type="text" readonly
-             title="Wird automatisch vergeben"
-             style="padding:6px;width:100%;background:#f7f7f7;">
+    <!-- oben rechts -->
+    <div class="qm-header-right">
+      Gültig ab: 22.10.2025<br>
+      Version: 05
     </div>
 
-    <!-- Bearbeitet am -->
-    <div>
-      <label for="bearbeitet_am" style="font-weight:bold;">Bearbeitet am</label>
-      <input id="bearbeitet_am" name="bearbeitet_am" type="date" style="padding:6px;width:100%;">
-    </div>
-
-    <!-- Techniker 1 -->
-    <div>
-      <label for="techniker1" style="font-weight:bold;">Techniker 1</label>
-      <select id="techniker1" name="techniker1" style="padding:6px;width:100%;">
-        <option value="">Bitte auswählen</option>
-        <option value="Sonstige">Sonstige</option>
-      </select>
-      <input id="sonstiger_techniker1" type="text" placeholder="Bitte angeben…"
-             style="display:none;margin-top:6px;padding:6px;width:100%;">
-    </div>
-
-    <!-- Techniker 2 -->
-    <div>
-      <label for="techniker2" style="font-weight:bold;">Techniker 2 (optional)</label>
-      <select id="techniker2" name="techniker2" style="padding:6px;width:100%;">
-        <option value="">Bitte auswählen</option>
-        <option value="Sonstige">Sonstige</option>
-      </select>
-      <input id="sonstiger_techniker2" type="text" placeholder="Bitte angeben…"
-             style="display:none;margin-top:6px;padding:6px;width:100%;">
+    <!-- Mitte -->
+    <div class="qm-header-center">
+      <div class="title">Reparaturauftrag</div>
+      <div>Zuordnung zum QM-Dokument: TE15</div>
     </div>
 
   </div>
-</div>
+
+  <!-- ===== Stammdaten Kopfbereich (untereinander + Techniker-Dropdowns) ===== -->
+  <div class="section" style="margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;">
+
+      <!-- Auftrags-ID -->
+      <div>
+        <label for="auftrag_id" style="font-weight:bold;">Auftrags-ID</label>
+        <input id="auftrag_id" name="auftrag_id" type="text" readonly
+               title="Wird automatisch vergeben"
+               style="padding:6px;width:100%;background:#f7f7f7;">
+      </div>
+
+      <!-- Bearbeitet am -->
+      <div>
+        <label for="bearbeitet_am" style="font-weight:bold;">Bearbeitet am</label>
+        <input id="bearbeitet_am" name="bearbeitet_am" type="date" style="padding:6px;width:100%;">
+      </div>
+
+      <!-- Techniker 1 -->
+      <div>
+        <label for="techniker1" style="font-weight:bold;">Techniker 1</label>
+        <select id="techniker1" name="techniker1" style="padding:6px;width:100%;">
+          <option value="">Bitte auswählen</option>
+          <option value="Sonstige">Sonstige</option>
+        </select>
+        <input id="sonstiger_techniker1" type="text" placeholder="Bitte angeben…"
+               style="display:none;margin-top:6px;padding:6px;width:100%;">
+      </div>
+
+      <!-- Techniker 2 -->
+      <div>
+        <label for="techniker2" style="font-weight:bold;">Techniker 2 (optional)</label>
+        <select id="techniker2" name="techniker2" style="padding:6px;width:100%;">
+          <option value="">Bitte auswählen</option>
+          <option value="Sonstige">Sonstige</option>
+        </select>
+        <input id="sonstiger_techniker2" type="text" placeholder="Bitte angeben…"
+               style="display:none;margin-top:6px;padding:6px;width:100%;">
+      </div>
+
+    </div>
+  </div>
+
 
 <script>
 /* 👇 Basisliste deiner Techniker – einfach erweiterbar */
