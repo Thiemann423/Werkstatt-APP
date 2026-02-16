@@ -3911,16 +3911,22 @@ doc.write(`<!doctype html>
     padding-right:12px !important;
   }
   .print-value{
+    display:block !important;              /* ✅ wichtig */
     white-space:pre-wrap !important;
     overflow-wrap:anywhere !important;
     word-break:break-word !important;
     hyphens:auto !important;
-    line-height:1.4 !important;
+
+    line-height:1.6 !important;            /* ✅ überschreibt #root * */
+    padding-bottom:2px !important;         /* ✅ kleiner Puffer */
+    min-height:1.2em !important;           /* ✅ Notbremse gegen “0-Höhe”-Glitch */
+
     margin-bottom:6px !important;
     min-width:0 !important;
     flex:1 1 62% !important;
     max-width:62% !important;
   }
+
 
   .print-field > * { min-width:0; }
   .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
@@ -3974,6 +3980,38 @@ doc.close();
   clone.style.margin = '0';
   clone.style.padding = '20px';
   clone.style.background = '#ffffff';
+
+  // ✅ E) Clone in den Iframe-DOM einsetzen (WICHTIG für Layout/scrollHeight)
+const root = doc.getElementById('root');
+if (!root) { alert("PDF-Root (#root) im Iframe fehlt."); return; }
+
+root.innerHTML = "";          // Root leeren (falls vorher was drin war)
+root.appendChild(clone);      // ✅ jetzt ist der Clone "wirklich" im Iframe
+
+// ✅ optional: Formfelder in Text umwandeln (nur falls Funktion existiert)
+try { 
+  if (typeof convertFormElementsToStaticText === "function") {
+    convertFormElementsToStaticText(clone);
+  }
+} catch(e) { console.warn("convertFormElementsToStaticText:", e); }
+
+// ✅ Layout “settlen” lassen (Fonts + Reflow + kleine Pause)
+if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+
+// 2 Frames warten (damit Font + Layout sicher angewendet sind)
+await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
+  frame.contentWindow.requestAnimationFrame(r)
+));
+
+// Reflow erzwingen
+root.offsetHeight;
+
+// Mini-Puffer (hilft gegen sporadische Overlap-Heisenbugs)
+await new Promise(r => setTimeout(r, 80));
+
+// ✅ jetzt erst messen (mit Puffer)
+const height = root.scrollHeight + 200;
+
 
   // --- 🆕 Wartungsblock nur ins PDF, wenn ausgefüllt ---
   function wartungHasUserInput() {
