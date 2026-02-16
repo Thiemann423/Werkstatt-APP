@@ -7774,68 +7774,63 @@ function wpSyncImageButton(task){
 })();
 </script>
 <script>
-(function initApp() {
+document.addEventListener("DOMContentLoaded", () => {
 
-  // 🛠️ Wartung Toggle + Wartungsplan-Bereich im Formular aufklappen
+  // 🛠️ Wartung: Wartungsplan-Panel + Formularbereich öffnen
   const wartungBtn = document.getElementById("wartungToggleHead");
-  const wartungsplanSection = document.getElementById("wartungsplanSection");
+  const panel      = document.getElementById("wartungsplanPanel");
+  const section    = document.getElementById("wartungsplanSection");
 
   if (wartungBtn) {
-    wartungBtn.addEventListener("click", () => {
+    // Alte / doppelte Listener zuverlässig überschreiben
+    wartungBtn.onclick = (e) => {
+      e.preventDefault();
 
-      // 1) Wartungs-Dashboard (Log-Panel) toggeln (falls vorhanden)
-      if (typeof window.__toggleWpLogPanel === "function") {
-        window.__toggleWpLogPanel();
-      } else if (typeof window.wpToggle === "function") {
-        // fallback, falls du mal einen anderen Namen hattest
-        window.wpToggle();
+      if (!panel) {
+        console.warn("wartungsplanPanel nicht gefunden");
+        return;
       }
 
-      // 2) Formular-Wartungsbereich (markierter Block) sichtbar machen
-      if (wartungsplanSection) {
-        // falls per display:none versteckt
-        wartungsplanSection.style.display = "block";
+      // ✅ zuverlässig bei inline style="display:none"
+      const isOpen = (panel.style.display === "block");
+      panel.style.display = isOpen ? "none" : "block";
 
-        // falls zusätzlich "hidden" verwendet wird
-        wartungsplanSection.hidden = false;
-
-        // optional: falls eine Klasse zum Einklappen genutzt wird
-        wartungsplanSection.classList.remove("collapsed");
-        wartungsplanSection.classList.add("open");
-
-        // 3) dahin scrollen (kleine Verzögerung damit Layout/Toggle greift)
+      // Beim Öffnen: zum Formularbereich scrollen
+      if (!isOpen && section) {
         setTimeout(() => {
           try {
-            wartungsplanSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            section.scrollIntoView({ behavior: "smooth", block: "start" });
           } catch (_) {}
-        }, 50);
+        }, 80);
       }
-    });
+    };
   }
 
   // 📊 Dashboard Toggle
   const dashBtn = document.getElementById("toggleDashBtn");
   const dashPanel = document.getElementById("dashPanel");
   if (dashBtn && dashPanel) {
-    dashBtn.addEventListener("click", () => {
-      const open = dashPanel.style.display !== "block";
-      dashPanel.style.display = open ? "block" : "none";
-    });
+    dashBtn.onclick = () => {
+      dashPanel.style.display =
+        dashPanel.style.display === "block" ? "none" : "block";
+    };
   }
 
   // 📝 Entwürfe-Dashboard Toggle
   const draftBtn = document.getElementById("toggleDraftDashBtn");
   const draftPanel = document.getElementById("draftDashPanel");
   if (draftBtn && draftPanel) {
-    draftBtn.addEventListener("click", () => {
-      const open = draftPanel.style.display !== "block";
-      draftPanel.style.display = open ? "block" : "none";
-    });
+    draftBtn.onclick = () => {
+      draftPanel.style.display =
+        draftPanel.style.display === "block" ? "none" : "block";
+    };
   }
 
-  console.log("✅ App initialisiert");
-})();
+  console.log("✅ UI-Initialisierung abgeschlossen");
+});
 </script>
+
+
 
   <script>
 function confirmUpdate() {
