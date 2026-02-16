@@ -7773,6 +7773,47 @@ function wpSyncImageButton(task){
   window.wpOpenMachineFromName = openMaintenance;
 })();
 </script>
+<script>
+(function initApp() {
+  // 🛠️ Wartung Toggle
+  const wartungBtn = document.getElementById("wartungToggleHead");
+  if (wartungBtn && window.__toggleWpLogPanel) {
+    wartungBtn.addEventListener("click", window.__toggleWpLogPanel);
+  }
+
+  // 📊 Dashboard Toggle
+  const dashBtn = document.getElementById("toggleDashBtn");
+  const dashPanel = document.getElementById("dashPanel");
+  if (dashBtn && dashPanel) {
+    dashBtn.addEventListener("click", () => {
+      const open = dashPanel.style.display !== "block";
+      dashPanel.style.display = open ? "block" : "none";
+    });
+  }
+
+  // 📝 Entwürfe-Dashboard Toggle
+  const draftBtn = document.getElementById("toggleDraftDashBtn");
+  const draftPanel = document.getElementById("draftDashPanel");
+  if (draftBtn && draftPanel) {
+    draftBtn.addEventListener("click", () => {
+      const open = draftPanel.style.display !== "block";
+      draftPanel.style.display = open ? "block" : "none";
+    });
+  }
+
+  console.log("✅ App initialisiert");
+})();
+</script>
+  <script>
+function confirmUpdate() {
+  const modal = document.getElementById("updateModal");
+  if (modal) modal.style.display = "none";
+
+  // Hard-Reload (wichtig bei PWA / Cache)
+  location.reload(true);
+}
+</script>
+
 
 
 
