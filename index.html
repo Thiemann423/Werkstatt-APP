@@ -7775,10 +7775,42 @@ function wpSyncImageButton(task){
 </script>
 <script>
 (function initApp() {
-  // 🛠️ Wartung Toggle
+
+  // 🛠️ Wartung Toggle + Wartungsplan-Bereich im Formular aufklappen
   const wartungBtn = document.getElementById("wartungToggleHead");
-  if (wartungBtn && window.__toggleWpLogPanel) {
-    wartungBtn.addEventListener("click", window.__toggleWpLogPanel);
+  const wartungsplanSection = document.getElementById("wartungsplanSection");
+
+  if (wartungBtn) {
+    wartungBtn.addEventListener("click", () => {
+
+      // 1) Wartungs-Dashboard (Log-Panel) toggeln (falls vorhanden)
+      if (typeof window.__toggleWpLogPanel === "function") {
+        window.__toggleWpLogPanel();
+      } else if (typeof window.wpToggle === "function") {
+        // fallback, falls du mal einen anderen Namen hattest
+        window.wpToggle();
+      }
+
+      // 2) Formular-Wartungsbereich (markierter Block) sichtbar machen
+      if (wartungsplanSection) {
+        // falls per display:none versteckt
+        wartungsplanSection.style.display = "block";
+
+        // falls zusätzlich "hidden" verwendet wird
+        wartungsplanSection.hidden = false;
+
+        // optional: falls eine Klasse zum Einklappen genutzt wird
+        wartungsplanSection.classList.remove("collapsed");
+        wartungsplanSection.classList.add("open");
+
+        // 3) dahin scrollen (kleine Verzögerung damit Layout/Toggle greift)
+        setTimeout(() => {
+          try {
+            wartungsplanSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (_) {}
+        }, 50);
+      }
+    });
   }
 
   // 📊 Dashboard Toggle
@@ -7804,6 +7836,7 @@ function wpSyncImageButton(task){
   console.log("✅ App initialisiert");
 })();
 </script>
+
   <script>
 function confirmUpdate() {
   const modal = document.getElementById("updateModal");
