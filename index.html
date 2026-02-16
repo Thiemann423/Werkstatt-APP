@@ -4083,35 +4083,38 @@ const height = root.scrollHeight + 200;
     c.parentNode.replaceChild(img, c);
   });
 
-  // In iFrame einfügen & in statischen Inhalt wandeln
-  doc.getElementById('root').appendChild(clone);
-  convertFormElementsToStaticText(clone);
-  clone.querySelectorAll('.preview-container img').forEach(img => {
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '';
-    img.style.border = '0';
-    img.style.display = 'block';
-  });
+// In iFrame einfügen & in statischen Inhalt wandeln
+doc.getElementById('root').appendChild(clone);
+convertFormElementsToStaticText(clone);
+...
 
-  try {
-    // E) Laden abwarten
-    if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
-    const imgs = doc.images;
-    await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
-      : new Promise(res => { img.onload = img.onerror = res; })));
+try {
+  // E) Laden abwarten
+  if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
+  const imgs = doc.images;
+  await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
+    : new Promise(res => { img.onload = img.onerror = res; })));
+  // ✅ Layout settle (entscheidend gegen sporadische Overlaps)
+await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
+  frame.contentWindow.requestAnimationFrame(r)
+));
+// Reflow erzwingen
+doc.getElementById('root')?.offsetHeight;
+// Mini-Puffer
+await new Promise(r => setTimeout(r, 80));
 
-    // F) Dateiname
-    const auftragIdField = document.getElementById("auftrag_id");
-    let auftragId = auftragIdField?.value?.trim();
-    if (!auftragId) {
-      const datePart = new Date().toISOString().split("T")[0].replace(/-/g, "");
-      auftragId = `REP-${datePart}-${crypto.randomUUID().slice(0,4).toUpperCase()}`;
-      if (auftragIdField) auftragIdField.value = auftragId;
-    }
-    const filename = `${auftragId}.pdf`;
 
-    // G) html2pdf-Optionen
-    const height = doc.getElementById('root').scrollHeight;
+  // ✅ Layout settle (entscheidend gegen Overlap)
+  await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
+    frame.contentWindow.requestAnimationFrame(r)
+  ));
+  doc.getElementById('root')?.offsetHeight;
+  await new Promise(r => setTimeout(r, 80));
+
+  // G) html2pdf-Optionen
+  const height = doc.getElementById('root').scrollHeight + 200; // ✅ Puffer
+
+
     const opt = {
       margin: 0,
       filename,
