@@ -3247,7 +3247,86 @@ async function signInAndAcquireToken(
   }
 }
 
+// ==========================================
+// ✅ Zentrale Cloud-Initialisierung
+// ==========================================
+window.ensureCloudReady = async function ensureCloudReady(
+  { interactive = false, rebuild = false } = {}
+) {
+  // 1) Token sicherstellen
+  if (typeof signInAndAcquireToken === "function") {
+    await signInAndAcquireToken(interactive, { rebuild });
+  }
 
+  // Wenn LoginRedirect gestartet wurde, ist (noch) kein Token da → sauber abbrechen
+  if (!window.accessToken) {
+    return { ok: false, reason: "no_token" };
+  }
+
+  // 2) TARGET sicherstellen (Drive + Ordner)
+  try {
+    if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+      await resolveShareLinkToFolder();
+    }
+  } catch (e) {
+    console.warn("ensureCloudReady: resolveShareLinkToFolder failed:", e);
+    return { ok: false, reason: "no_target", error: e };
+  }
+
+  if (!window.TARGET || !TARGET.driveId || !TARGET.parentItemId) {
+    return { ok: false, reason: "no_target" };
+  }
+
+  // 3) optional: Wartungslog nachziehen (damit Badge/Listen stimmen)
+  try {
+    if (typeof wpLogLoad === "function") await wpLogLoad();
+  } catch (e) {
+    console.warn("ensureCloudReady: wpLogLoad failed:", e);
+  }
+
+  return {
+    ok: true,
+    driveId: TARGET.driveId,
+    parentItemId: TARGET.parentItemId,
+    draftsItemId: window.TARGET_DRAFTS_ITEM_ID || null,
+    metaItemId: window.TARGET_META_ITEM_ID || null
+  };
+};
+
+// ==========================================
+// 🔄 Alles neu laden (je nach offenen Panels)
+// ==========================================
+window.refreshAllPanels = async function refreshAllPanels({ interactive = false } = {}) {
+  const ready = await ensureCloudReady({ interactive, rebuild: false });
+  if (!ready.ok) return ready;
+
+  // Reparatur-Dashboard
+  try {
+    const dashPanel = document.getElementById("dashPanel");
+    if (dashPanel && dashPanel.style.display === "block" && typeof loadDashboard === "function") {
+      await loadDashboard();
+    }
+  } catch (e) { console.warn("refreshAllPanels: loadDashboard", e); }
+
+  // Entwürfe-Dashboard
+  try {
+    const dPanel = document.getElementById("draftDashPanel");
+    if (dPanel && dPanel.style.display === "block" && typeof loadDraftDashboard === "function") {
+      await loadDraftDashboard();
+    }
+  } catch (e) { console.warn("refreshAllPanels: loadDraftDashboard", e); }
+
+  // Wartungs-Dashboard
+  try {
+    const wPanel = document.getElementById("wpLogPanel");
+    if (wPanel && wPanel.style.display === "block") {
+      if (typeof wpLogLoad === "function") await wpLogLoad();
+      if (typeof renderWpLogTable === "function") renderWpLogTable();
+    }
+  } catch (e) { console.warn("refreshAllPanels: wartung", e); }
+
+  return ready;
+};
 
 
   async function signOut() {
@@ -4642,7 +4721,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!panel) return;
       var show = (panel.style.display === 'none' || !panel.style.display);
       panel.style.display = show ? 'block' : 'none';
-      if (show) loadDashboard();
+     if (show) refreshAllPanels({ interactive: true });
+
     });
   }
 
@@ -4725,7 +4805,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!draftPanel) return;
       var show2 = (draftPanel.style.display === 'none' || !draftPanel.style.display);
       draftPanel.style.display = show2 ? 'block' : 'none';
-      if (show2) loadDraftDashboard();
+if (show2) refreshAllPanels({ interactive: true });
+
     });
   }
 
@@ -4815,8 +4896,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 async function loadDashboard(){
-  const tbody = document.querySelector('#dashTable tbody');
-  const empty = document.getElementById('dashEmpty');
+  const tbody   = document.querySelector('#dashTable tbody');
+  const empty   = document.getElementById('dashEmpty');
   const dashBox = document.getElementById('dashAnalytics');
   if (!tbody) return;
 
@@ -4824,9 +4905,21 @@ async function loadDashboard(){
   if (empty) empty.style.display = 'none';
   if (dashBox) dashBox.style.display = 'none';
 
+  // ✅ NEU: Cloud + Login sicherstellen
+  const ready = await ensureCloudReady({ interactive: true, rebuild: false });
+  if (!ready.ok) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="padding:8px;color:#b02a37;">' +
+      'Bitte zuerst mit Microsoft anmelden.' +
+      '</td></tr>';
+    return;
+  }
+
   // Helpers
   const metaSuffixLower = String(META_SUFFIX || ".meta.json").toLowerCase();
-  const isMetaFile = (name) => (name || "").toLowerCase().endsWith(metaSuffixLower);
+  const isMetaFile = (name) =>
+    (name || "").toLowerCase().endsWith(metaSuffixLower);
+
 
   async function fetchJsonContent(url, headers){
     const r = await fetch(url, { headers });
@@ -7974,7 +8067,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const section    = document.getElementById("wartungsplanSection");
 
   if (wartungBtn) {
-    // Alte / doppelte Listener zuverlässig überschreiben
     wartungBtn.onclick = (e) => {
       e.preventDefault();
 
@@ -7983,11 +8075,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // ✅ zuverlässig bei inline style="display:none"
       const isOpen = (panel.style.display === "block");
       panel.style.display = isOpen ? "none" : "block";
 
-      // Beim Öffnen: zum Formularbereich scrollen
       if (!isOpen && section) {
         setTimeout(() => {
           try {
@@ -7998,29 +8088,38 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // 📊 Dashboard Toggle
+  // 📊 Dashboard Toggle (✅ + Laden)
   const dashBtn = document.getElementById("toggleDashBtn");
   const dashPanel = document.getElementById("dashPanel");
   if (dashBtn && dashPanel) {
-    dashBtn.onclick = () => {
-      dashPanel.style.display =
-        dashPanel.style.display === "block" ? "none" : "block";
+    dashBtn.onclick = async (e) => {
+      e.preventDefault();
+      const willOpen = (dashPanel.style.display !== "block");
+      dashPanel.style.display = willOpen ? "block" : "none";
+      if (willOpen && typeof refreshAllPanels === "function") {
+        await refreshAllPanels({ interactive: true });
+      }
     };
   }
 
-  // 📝 Entwürfe-Dashboard Toggle
+  // 📝 Entwürfe-Dashboard Toggle (✅ + Laden)
   const draftBtn = document.getElementById("toggleDraftDashBtn");
   const draftPanel = document.getElementById("draftDashPanel");
   if (draftBtn && draftPanel) {
-    draftBtn.onclick = () => {
-      draftPanel.style.display =
-        draftPanel.style.display === "block" ? "none" : "block";
+    draftBtn.onclick = async (e) => {
+      e.preventDefault();
+      const willOpen = (draftPanel.style.display !== "block");
+      draftPanel.style.display = willOpen ? "block" : "none";
+      if (willOpen && typeof refreshAllPanels === "function") {
+        await refreshAllPanels({ interactive: true });
+      }
     };
   }
 
   console.log("✅ UI-Initialisierung abgeschlossen");
 });
 </script>
+
 
 
 
