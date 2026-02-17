@@ -4739,30 +4739,25 @@ document.addEventListener('DOMContentLoaded', function () {
   var clearBtn = document.getElementById('dashClear');
   var rangeBtn = document.getElementById('dashRangeBtn');
 
-  // aktueller Zeitraum aus dem Button lesen (Fallback: 7 Tage)
   if (rangeBtn && rangeBtn.dataset) {
     window.dashRangeMode = rangeBtn.dataset.mode || '7';
   } else {
     window.dashRangeMode = '7';
   }
 
-  // Panel auf/zu
   if (toggle && toggle.addEventListener) {
     toggle.addEventListener('click', function () {
       if (!panel) return;
       var show = (panel.style.display === 'none' || !panel.style.display);
       panel.style.display = show ? 'block' : 'none';
-     if (show) refreshAllPanels({ interactive: true });
-
+      if (show) refreshAllPanels({ interactive: true });
     });
   }
 
-  // Reload
   if (reload && reload.addEventListener) {
     reload.addEventListener('click', function () { loadDashboard(); });
   }
 
-  // Filter löschen
   if (clearBtn && clearBtn.addEventListener) {
     clearBtn.addEventListener('click', function () {
       var ids = ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium','f_auftrag_id'];
@@ -4780,7 +4775,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Zeitraum: 7 Tage -> 30 Tage -> Alle -> 7 Tage ...
   if (rangeBtn && rangeBtn.addEventListener) {
     rangeBtn.addEventListener('click', function () {
       var current = (rangeBtn.dataset && rangeBtn.dataset.mode) ? rangeBtn.dataset.mode : (window.dashRangeMode || '7');
@@ -4806,7 +4800,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Filter-Inputs
   var inputIds = ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_auftrag_id'];
   for (var j=0; j<inputIds.length; j++){
     (function(id){
@@ -4815,7 +4808,6 @@ document.addEventListener('DOMContentLoaded', function () {
     })(inputIds[j]);
   }
 
-  // Select reagiert auf change
   var provSel = document.getElementById('f_provisorium');
   if (provSel && provSel.addEventListener) {
     provSel.addEventListener('change', function(){ applyFiltersToDashboard(); });
@@ -4830,23 +4822,19 @@ document.addEventListener('DOMContentLoaded', function () {
   var draftClearBtn = document.getElementById('draftDashClear');
   var draftRangeBtn = document.getElementById('draftDashRangeBtn');
 
-  // Panel auf/zu
   if (draftToggle && draftToggle.addEventListener) {
     draftToggle.addEventListener('click', function () {
       if (!draftPanel) return;
       var show2 = (draftPanel.style.display === 'none' || !draftPanel.style.display);
       draftPanel.style.display = show2 ? 'block' : 'none';
-if (show2) refreshAllPanels({ interactive: true });
-
+      if (show2) refreshAllPanels({ interactive: true });
     });
   }
 
-  // Reload
   if (draftReload && draftReload.addEventListener) {
     draftReload.addEventListener('click', function () { loadDraftDashboard(); });
   }
 
-  // Filter löschen
   if (draftClearBtn && draftClearBtn.addEventListener) {
     draftClearBtn.addEventListener('click', function () {
       var dids = ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil','df_provisorium'];
@@ -4864,7 +4852,6 @@ if (show2) refreshAllPanels({ interactive: true });
     });
   }
 
-  // Letzte 30 Tage / alle Entwürfe
   if (draftRangeBtn && draftRangeBtn.addEventListener) {
     draftRangeBtn.addEventListener('click', function () {
       var mode = (draftRangeBtn.dataset && draftRangeBtn.dataset.mode) ? draftRangeBtn.dataset.mode : '30';
@@ -4882,7 +4869,6 @@ if (show2) refreshAllPanels({ interactive: true });
     });
   }
 
-  // Filter-Inputs der Entwürfe
   var dinp = ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil'];
   for (var m=0; m<dinp.length; m++){
     (function(id){
@@ -4895,33 +4881,32 @@ if (show2) refreshAllPanels({ interactive: true });
   if (provSel2 && provSel2.addEventListener) {
     provSel2.addEventListener('change', function(){ applyFiltersToDraftDashboard(); });
   }
-});
-
-
 
   // ==============================
   // 🛠️ Wartungsbereich im Kopf
   // ==============================
-  const wartungHeadBtn = document.getElementById('wartungToggleHead');
-  if (wartungHeadBtn) {
-    wartungHeadBtn.addEventListener('click', () => {
-      const panel   = document.getElementById('wartungsplanPanel');    // Panel aus dem Wartungsplan-HTML
-      const section = document.getElementById('wartungsplanSection');  // Umrahmende Section
+  var wartungHeadBtn = document.getElementById('wartungToggleHead');
+  if (wartungHeadBtn && wartungHeadBtn.addEventListener) {
+    wartungHeadBtn.addEventListener('click', function () {
+      var p   = document.getElementById('wartungsplanPanel');
+      var sec = document.getElementById('wartungsplanSection');
 
-      if (!panel || !section) {
+      if (!p || !sec) {
         alert('Wartungsbereich ist noch nicht eingebaut.');
         return;
       }
-      const willShow = panel.style.display === 'none' || !panel.style.display;
-      panel.style.display = willShow ? 'block' : 'none';
+
+      var willShow = (p.style.display === 'none' || !p.style.display);
+      p.style.display = willShow ? 'block' : 'none';
       wartungHeadBtn.textContent = willShow ? '🛠️ Wartung (zu)' : '🛠️ Wartung';
 
-      if (willShow) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (willShow && sec.scrollIntoView) {
+        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
   }
 });
+
 
 
 
