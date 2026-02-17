@@ -511,6 +511,12 @@ async function getShareRootEndpoint() {
             border-radius:6px; font-size:14px;">
   <!-- Inhalt wird per JS gesetzt -->
 </div>
+<!-- Einzeilige Wartungs-Zusammenfassung -->
+<div id="wpDueLine" class="no-print"
+     style="display:none;margin:10px 0 14px 0;padding:10px 12px;
+            border:1px solid #dc3545;background:#f8d7da;color:#842029;
+            border-radius:6px;font-size:14px;line-height:1.35;">
+</div>
 
 <!-- 🔐 Login-Hinweis (einmalig; keine doppelte id) -->
 <div id="loginHint" class="no-print"
@@ -830,6 +836,97 @@ function renderGlobalOverdueUI(due) {
     }
   }
 }
+function daysOverdue(nextDueISO){
+  // nextDueISO: "YYYY-MM-DD"
+  if (!nextDueISO) return 0;
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const due = new Date(nextDueISO + "T00:00:00");
+  if (isNaN(due)) return 0;
+
+  const diffMs = today - due;              // >0 = überfällig
+  const days = Math.floor(diffMs / 86400000);
+  return Math.max(0, days);
+}
+
+function renderDueLine(due){
+  const box = document.getElementById("wpDueLine");
+  if (!box) return;
+
+  if (!due || !due.length){
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  const total = due.length;
+  const overdueCount = due.filter(d => d.status === "overdue").length;
+  const todayCount   = due.filter(d => d.status === "today").length;
+
+  // Sortierung: erst überfällig (höchste Tage zuerst), dann heute
+  const sorted = due.slice().sort((a,b) => {
+    const ao = (a.status === "overdue") ? daysOverdue(a.nextDue) : -1;
+    const bo = (b.status === "overdue") ? daysOverdue(b.nextDue) : -1;
+    if (a.status !== b.status) return (a.status === "overdue") ? -1 : 1;
+    return bo - ao;
+  });
+
+  // nur die ersten N Chips zeigen (Rest als "+X")
+  const N = 8;
+  const shown = sorted.slice(0, N);
+  const rest  = Math.max(0, total - shown.length);
+
+  const chips = shown.map(d => {
+    const labelBase = [d.machine || "", d.task || ""].filter(Boolean).join(" – ");
+    let badge = "";
+    if (d.status === "today") badge = "heute";
+    if (d.status === "overdue"){
+      const od = daysOverdue(d.nextDue);
+      badge = od === 1 ? "1T" : (od + "T");
+    }
+
+    // Chip-Button: klickt wie bei euch auf wpOpenMachineFromName(machine, task)
+    return `
+      <button type="button"
+        data-machine="${String(d.machine||"").replace(/"/g,"&quot;")}"
+        data-task="${String(d.task||"").replace(/"/g,"&quot;")}"
+        title="${d.status === "overdue" ? ("seit " + daysOverdue(d.nextDue) + " Tagen überfällig") : "heute fällig"}"
+        style="border:0;border-radius:999px;background:#fff;color:#842029;
+               padding:4px 10px;margin:4px 6px 0 0;cursor:pointer;
+               box-shadow:0 0 0 1px rgba(132,32,41,.25) inset;">
+        ${labelBase} <strong style="margin-left:6px;">(${badge})</strong>
+      </button>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <strong>⚠️ ${total} Wartungen fällig</strong>
+    ${overdueCount ? ` (davon <strong>${overdueCount} überfällig</strong>)` : ""}
+    ${todayCount ? ` (heute: <strong>${todayCount}</strong>)` : ""}
+    <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;">
+      ${chips}
+      ${rest ? `<span style="margin-top:4px;color:#842029;">+${rest} weitere…</span>` : ""}
+    </div>
+  `;
+  box.style.display = "block";
+
+  // Klick-Handler
+  box.querySelectorAll("button[data-machine]").forEach(btn => {
+    btn.addEventListener("click", function(){
+      const m = this.getAttribute("data-machine") || "";
+      const t = this.getAttribute("data-task") || "";
+      if (typeof window.wpOpenMachineFromName === "function") {
+        window.wpOpenMachineFromName(m, t);
+      } else {
+        // Fallback: Wartungs-Dashboard öffnen
+        const tgl = document.getElementById("toggleWpLogBtn");
+        if (tgl) tgl.click();
+      }
+    });
+  });
+}
 
 
 
@@ -844,11 +941,15 @@ function renderGlobalOverdueUI(due) {
           }
         }
 
-        const due = await getDueList();
-        if (typeof window.setWartungBadge === "function") {
-          window.setWartungBadge(!!(due && due.length));
-        }
-        renderGlobalOverdueUI(due);
+     const due = await getDueList();
+
+if (typeof window.setWartungBadge === "function") {
+  window.setWartungBadge(!!(due && due.length));
+}
+
+renderGlobalOverdueUI(due);
+renderDueLine(due); // 👈 genau hier
+
       } catch (e) {
         console.warn("Globaler Wartungs-Check:", e);
       }
