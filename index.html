@@ -3054,7 +3054,7 @@ window.addEventListener('load', function() {
     return "u!" + b64;
   }
 
-  // Freigabelink auflösen, Unterordner anlegen, Cache schreiben
+// Freigabelink auflösen, Unterordner anlegen, Cache schreiben
 async function resolveShareLinkToFolder() {
   if (!accessToken) throw new Error("Kein Access Token");
 
@@ -3068,8 +3068,9 @@ async function resolveShareLinkToFolder() {
 
     // Wenn alles bekannt ist → fertig
     if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) {
-      window.TARGET = TARGET;
-      window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
+      window.TARGET               = TARGET;
+      window.TARGET_DRAFTS_ITEM_ID = TARGET_DRAFTS_ITEM_ID;
+      window.TARGET_META_ITEM_ID   = TARGET_META_ITEM_ID;
       return;
     }
   } else {
@@ -3092,20 +3093,26 @@ async function resolveShareLinkToFolder() {
     TARGET.parentItemId = folderItemId;
   }
 
-  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
-  const listUrl =
-    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-    `/children?$select=id,name,folder`;
-  const listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
-  let children = (await listRes.json()).value || [];
+  // --- Helper: children laden ---
+  async function listChildren() {
+    const listUrl =
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+      `/children?$top=999&$select=id,name,folder`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!listRes.ok) throw new Error(`children list failed: ${listRes.status} ${await listRes.text()}`);
+    return (await listRes.json()).value || [];
+  }
 
-  // Entwürfe
-  let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-  if (!drafts) {
-    const createDrafts = await fetch(
+  // --- Helper: Ordner sicherstellen (create -> fallback re-list) ---
+  async function ensureFolder(folderName) {
+    let children = await listChildren();
+    let found = children.find(x => x?.name === folderName && x?.folder);
+
+    if (found) return found;
+
+    const createRes = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
       {
         method: "POST",
@@ -3114,53 +3121,54 @@ async function resolveShareLinkToFolder() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          name: DRAFTS_FOLDER_NAME,
+          name: folderName,
           folder: {},
           "@microsoft.graph.conflictBehavior": "ignore"
         })
       }
     );
-    if (createDrafts.ok) drafts = await createDrafts.json();
+
+    // Wenn wir ein Item zurückbekommen: super
+    if (createRes.ok) {
+      try {
+        const created = await createRes.json();
+        if (created?.id) return created;
+      } catch (_) {
+        // ignorieren -> fallback re-list
+      }
+    }
+
+    // Fallback: nochmal listen und suchen
+    children = await listChildren();
+    found = children.find(x => x?.name === folderName && x?.folder);
+    return found || null;
   }
+
+  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
+  const drafts = await ensureFolder(DRAFTS_FOLDER_NAME);
   TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
 
-  // Meta
-  let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
-  if (!meta) {
-    const createMeta = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: META_FOLDER_NAME,
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "ignore"
-        })
-      }
-    );
-    if (createMeta.ok) meta = await createMeta.json();
-  }
-
-  // ✅ DAS HAT GEFEHLT:
+  const meta = await ensureFolder(META_FOLDER_NAME);
   TARGET_META_ITEM_ID = meta?.id || null;
 
-  // Cache schreiben (jetzt mit gesetzter Meta-ID)
-  localStorage.setItem("TARGET_CACHE", JSON.stringify({
-    shareUrl:      SHARE_URL,
-    driveId:       TARGET.driveId,
-    parentItemId:  TARGET.parentItemId,
-    draftsItemId:  TARGET_DRAFTS_ITEM_ID,
-    metaItemId:    TARGET_META_ITEM_ID
-  }));
+  // Cache schreiben (JETZT mit korrekt gesetzter metaItemId)
+  localStorage.setItem(
+    "TARGET_CACHE",
+    JSON.stringify({
+      shareUrl:     SHARE_URL,
+      driveId:      TARGET.driveId,
+      parentItemId: TARGET.parentItemId,
+      draftsItemId: TARGET_DRAFTS_ITEM_ID,
+      metaItemId:   TARGET_META_ITEM_ID
+    })
+  );
 
-  // Globale Variablen für alle anderen Module setzen
-  window.TARGET = TARGET;
-  window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
+  // ➕ WICHTIG: Globale Variablen für alle anderen Module setzen
+  window.TARGET                = TARGET;
+  window.TARGET_DRAFTS_ITEM_ID = TARGET_DRAFTS_ITEM_ID;
+  window.TARGET_META_ITEM_ID   = TARGET_META_ITEM_ID;
 }
+
 
 
 
