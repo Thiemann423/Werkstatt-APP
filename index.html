@@ -3214,7 +3214,10 @@ async function signInAndAcquireToken(
     if (rebuild) {
       try {
         await loadMasterData();
-        window.rebuildDropdownsFromMaster?.();
+       if (typeof window.rebuildDropdownsFromMaster === "function") {
+  window.rebuildDropdownsFromMaster();
+}
+
       } catch (e) {
         console.warn("Reload master after sign-in failed:", e);
       }
@@ -3502,8 +3505,11 @@ function validateBeforeFinish(){
   _checkSignature('unterschrift_technik', 'Unterschrift MA Technik');
 
   if (!ok) {
-    document.querySelector('.field-error')
-      ?.scrollIntoView({ behavior:'smooth', block:'center' });
+   var fe = document.querySelector(".field-error");
+if (fe && fe.scrollIntoView) {
+  fe.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
     alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
   }
 
@@ -3812,7 +3818,10 @@ window.rebuildDropdownsFromMaster = function () {
 
   const keep = (sel) => sel ? {
     value: sel.value,
-    text:  sel.options[sel.selectedIndex]?.textContent?.trim() || ""
+    text: (sel && sel.selectedIndex >= 0 && sel.options[sel.selectedIndex] &&
+       (sel.options[sel.selectedIndex].textContent || "") ?
+       (sel.options[sel.selectedIndex].textContent || "").trim() : "")
+
   } : null;
 
   const restore = (sel, kept) => {
