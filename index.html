@@ -3402,7 +3402,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   function _showFieldError(el, msg){
     if (!el) return;
     el.classList.add('field-error');
-    if (el.nextElementSibling && el.nextElementSibling.classList?.contains('error-text')) {
+    if (el.nextElementSibling &&
+        el.nextElementSibling.classList &&
+        el.nextElementSibling.classList.contains('error-text')) {
       el.nextElementSibling.remove();
     }
     const m = document.createElement('div');
@@ -3422,7 +3424,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!el) return;
     el.addEventListener(evt, () => {
       el.classList.remove('field-error');
-      if (el.nextElementSibling && el.nextElementSibling.classList?.contains('error-text')) {
+      if (el.nextElementSibling &&
+          el.nextElementSibling.classList &&
+          el.nextElementSibling.classList.contains('error-text')) {
         el.nextElementSibling.remove();
       }
     });
@@ -3440,83 +3444,85 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Pflichtfelder prüfen
-function validateBeforeFinish(){
-  _clearAllFieldErrors();
-  let ok = true;
+  function validateBeforeFinish(){
+    _clearAllFieldErrors();
+    let ok = true;
 
-  // 1) Bearbeitet am
-  const fDatum = _byId('bearbeitet_am');
-  if (!fDatum?.value) {
-    _showFieldError(fDatum, '„Bearbeitet am“ ist ein Pflichtfeld.');
-    ok = false;
-  }
-
-  // 2) Techniker 1
-  const fTech1 = _byId('techniker1');
-  if (!fTech1?.value) {
-    _showFieldError(fTech1, '„Techniker 1“ ist ein Pflichtfeld.');
-    ok = false;
-  }
-
-  // 3) Maschine (+ Sonstige-Text)
-  const selM = _byId('maschine');
-  if (!selM?.value) {
-    _showFieldError(selM, '„Maschine“ ist ein Pflichtfeld.');
-    ok = false;
-  } else if (selM.value === 'Sonstige') {
-    const txtM = _byId('sonstige_maschine');
-    if (!txtM?.value.trim()) {
-      _showFieldError(txtM || selM, 'Bitte „Sonstiges (Maschine)“ angeben.');
+    // 1) Bearbeitet am
+    const fDatum = _byId('bearbeitet_am');
+    if (!fDatum || !fDatum.value) {
+      _showFieldError(fDatum, '„Bearbeitet am“ ist ein Pflichtfeld.');
       ok = false;
     }
-  }
 
-  // 4) Anlagenteil (+ Sonstige-Text)
-  const selA = _byId('anlagenteil');
-  if (!selA?.value) {
-    _showFieldError(selA, '„Anlagenteil“ ist ein Pflichtfeld.');
-    ok = false;
-  } else if (selA.value === 'Sonstige') {
-    const txtA = _byId('sonstige_anlagenteil');
-    if (!txtA?.value.trim()) {
-      _showFieldError(txtA || selA, 'Bitte „Sonstiges (Anlagenteil)“ angeben.');
+    // 2) Techniker 1
+    const fTech1 = _byId('techniker1');
+    if (!fTech1 || !fTech1.value) {
+      _showFieldError(fTech1, '„Techniker 1“ ist ein Pflichtfeld.');
       ok = false;
     }
+
+    // 3) Maschine (+ Sonstige-Text)
+    const selM = _byId('maschine');
+    if (!selM || !selM.value) {
+      _showFieldError(selM, '„Maschine“ ist ein Pflichtfeld.');
+      ok = false;
+    } else if (selM.value === 'Sonstige') {
+      const txtM = _byId('sonstige_maschine');
+      const v = (txtM && txtM.value) ? txtM.value.trim() : "";
+      if (!v) {
+        _showFieldError(txtM || selM, 'Bitte „Sonstiges (Maschine)“ angeben.');
+        ok = false;
+      }
+    }
+
+    // 4) Anlagenteil (+ Sonstige-Text)
+    const selA = _byId('anlagenteil');
+    if (!selA || !selA.value) {
+      _showFieldError(selA, '„Anlagenteil“ ist ein Pflichtfeld.');
+      ok = false;
+    } else if (selA.value === 'Sonstige') {
+      const txtA = _byId('sonstige_anlagenteil');
+      const v = (txtA && txtA.value) ? txtA.value.trim() : "";
+      if (!v) {
+        _showFieldError(txtA || selA, 'Bitte „Sonstiges (Anlagenteil)“ angeben.');
+        ok = false;
+      }
+    }
+
+    // 5) Fehlerbeschreibung
+    const fDesc = _byId('fehlerbeschreibung');
+    const desc = (fDesc && fDesc.value) ? fDesc.value.trim() : "";
+    if (!desc) {
+      _showFieldError(fDesc, '„Fehlerbeschreibung“ ist ein Pflichtfeld.');
+      ok = false;
+    }
+
+    // 6) Unterschriften (nur beim Abschließen)
+    function _checkSignature(canvasId, labelText){
+      const c = _byId(canvasId);
+      if (!c) return;                       // falls Canvas nicht existiert, nichts prüfen
+      if (c.dataset && c.dataset.signed === "1") return; // bereits unterschrieben
+
+      _showFieldError(c, `„${labelText}“ ist ein Pflichtfeld.`);
+      ok = false;
+    }
+
+    _checkSignature('unterschrift_abnahme', 'Unterschrift MA Abnahme (Produktkreisfreigabe)');
+    _checkSignature('unterschrift_technik', 'Unterschrift MA Technik');
+
+    if (!ok) {
+      var fe = document.querySelector(".field-error");
+      if (fe && fe.scrollIntoView) {
+        fe.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
+    }
+
+    return ok;
   }
-
-  // 5) Fehlerbeschreibung
-  const fDesc = _byId('fehlerbeschreibung');
-  if (!fDesc?.value.trim()) {
-    _showFieldError(fDesc, '„Fehlerbeschreibung“ ist ein Pflichtfeld.');
-    ok = false;
-  }
-
-  // 6) Unterschriften (nur beim Abschließen)
-  function _checkSignature(canvasId, labelText){
-    const c = _byId(canvasId);
-    if (!c) return;                         // falls Canvas nicht existiert, nichts prüfen
-    if (c.dataset.signed === "1") return;   // bereits unterschrieben
-
-    _showFieldError(c, `„${labelText}“ ist ein Pflichtfeld.`);
-    ok = false;
-  }
-
-  _checkSignature('unterschrift_abnahme', 'Unterschrift MA Abnahme (Produktkreisfreigabe)');
-  _checkSignature('unterschrift_technik', 'Unterschrift MA Technik');
-
-  if (!ok) {
-   var fe = document.querySelector(".field-error");
-if (fe && fe.scrollIntoView) {
-  fe.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-    alert('Bitte füllen Sie alle rot markierten Pflichtfelder aus.');
-  }
-
-  return ok;
-}
-
 </script>
+
 
 
 
@@ -3980,14 +3986,30 @@ container.querySelectorAll('select').forEach(sel => {
   const label = container.querySelector(`label[for="${sel.id}"]`);
   const row   = d.createElement('div'); 
   row.className = 'print-field';
-  row.classList.add('avoid-break');                 // ← hinzugefügt
-  const l     = d.createElement('div'); l.className = 'print-label';
-  const v     = d.createElement('div'); v.className = 'print-value';
-  l.textContent = label?.textContent?.trim() || sel.name || '';
+  row.classList.add('avoid-break');
+
+  const l = d.createElement('div');
+  l.className = 'print-label';
+
+  const v = d.createElement('div');
+  v.className = 'print-value';
+
+  // ❌ optional chaining entfernt
+  var labelText = '';
+  if (label && label.textContent) {
+    labelText = label.textContent.trim();
+  } else if (sel.name) {
+    labelText = sel.name;
+  }
+
+  l.textContent = labelText;
   v.textContent = sel.getAttribute('data-selected-text') || sel.value || '';
-  if (label) label.remove();                        // Original-Label entfernen
-  sel.replaceWith(row); row.append(l, v);
+
+  if (label) label.remove();   // Original-Label entfernen
+  sel.replaceWith(row);
+  row.append(l, v);
 });
+
 
 
 // 4) TEXTAREA → IMMER in statischen Text umwandeln (sonst wird abgeschnitten)
