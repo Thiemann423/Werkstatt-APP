@@ -4125,6 +4125,19 @@ async function generatePDFAndFinish() {
   // ✅ Pflichtfelder NUR beim Abschluss prüfen
   if (!validateBeforeFinish()) return;
 
+  // ✅ FIX: auftragId + filename IMMER definieren (wird später für PDF + Meta gebraucht)
+  const auftragId =
+    (document.getElementById('auftrag_id')?.value || '').trim()
+    || `REP-${new Date().toISOString().slice(0, 10)}-${Date.now()}`;
+
+  const safeId = auftragId
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+  const filename = `${safeId}.pdf`;
+
   // ✅ Wartung (optional): aktuelle Wartungsaufgabe als "heute durchgeführt" markieren
   try { await window.wpMarkCurrentTaskDone?.(); }
   catch (e) { console.warn('wpMarkCurrentTaskDone:', e); }
@@ -4143,7 +4156,8 @@ async function generatePDFAndFinish() {
   const doc = frame.contentDocument || frame.contentWindow?.document;
   if (!doc) { alert("PDF-Dokumentkontext nicht verfügbar."); return; }
 
-doc.write(`<!doctype html>
+  doc.open(); // ✅ FIX: vor write sicher öffnen
+  doc.write(`<!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=794, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -4156,7 +4170,6 @@ doc.write(`<!doctype html>
   #root, #root *{ font-family:"Inter", Arial, sans-serif !important; line-height:1.35; box-sizing:border-box; }
   #pdfExportContainerClone{ width:794px; padding:20px; margin:0 auto; background:#fff; }
 
-  /* ✅ Flex statt Grid, verhindert Überlappungen bei langen Texten */
   .print-field{
     display:flex !important;
     flex-wrap:nowrap !important;
@@ -4176,22 +4189,19 @@ doc.write(`<!doctype html>
     padding-right:12px !important;
   }
   .print-value{
-    display:block !important;              /* ✅ wichtig */
+    display:block !important;
     white-space:pre-wrap !important;
     overflow-wrap:anywhere !important;
     word-break:break-word !important;
     hyphens:auto !important;
-
-    line-height:1.6 !important;            /* ✅ überschreibt #root * */
-    padding-bottom:2px !important;         /* ✅ kleiner Puffer */
-    min-height:1.2em !important;           /* ✅ Notbremse gegen “0-Höhe”-Glitch */
-
+    line-height:1.6 !important;
+    padding-bottom:2px !important;
+    min-height:1.2em !important;
     margin-bottom:6px !important;
     min-width:0 !important;
     flex:1 1 62% !important;
     max-width:62% !important;
   }
-
 
   .print-field > * { min-width:0; }
   .avoid-break{ break-inside:avoid; page-break-inside:avoid; }
@@ -4201,8 +4211,7 @@ doc.write(`<!doctype html>
   @page { size: A4; margin: 0; }
 </style>
 </head><body><div id="root"></div></body></html>`);
-doc.close();
-
+  doc.close();
 
   // C) html2pdf INS IFRAME laden (falls nötig)
   if (!frame.contentWindow.html2pdf) {
@@ -4247,36 +4256,11 @@ doc.close();
   clone.style.background = '#ffffff';
 
   // ✅ E) Clone in den Iframe-DOM einsetzen (WICHTIG für Layout/scrollHeight)
-const root = doc.getElementById('root');
-if (!root) { alert("PDF-Root (#root) im Iframe fehlt."); return; }
+  const root = doc.getElementById('root');
+  if (!root) { alert("PDF-Root (#root) im Iframe fehlt."); return; }
 
-root.innerHTML = "";          // Root leeren (falls vorher was drin war)
-root.appendChild(clone);      // ✅ jetzt ist der Clone "wirklich" im Iframe
-
-// ✅ optional: Formfelder in Text umwandeln (nur falls Funktion existiert)
-try { 
-  if (typeof convertFormElementsToStaticText === "function") {
-    convertFormElementsToStaticText(clone);
-  }
-} catch(e) { console.warn("convertFormElementsToStaticText:", e); }
-
-// ✅ Layout “settlen” lassen (Fonts + Reflow + kleine Pause)
-if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
-
-// 2 Frames warten (damit Font + Layout sicher angewendet sind)
-await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
-  frame.contentWindow.requestAnimationFrame(r)
-));
-
-// Reflow erzwingen
-root.offsetHeight;
-
-// Mini-Puffer (hilft gegen sporadische Overlap-Heisenbugs)
-await new Promise(r => setTimeout(r, 80));
-
-// ✅ jetzt erst messen (mit Puffer)
-const height = root.scrollHeight + 200;
-
+  root.innerHTML = "";
+  root.appendChild(clone);
 
   // --- 🆕 Wartungsblock nur ins PDF, wenn ausgefüllt ---
   function wartungHasUserInput() {
@@ -4289,15 +4273,12 @@ const height = root.scrollHeight + 200;
 
   const wartungSectionInClone = clone.querySelector('#wartungsplanSection');
   if (!wartungHasUserInput()) {
-    // kompletten Bereich im PDF ausblenden
     wartungSectionInClone?.remove();
   } else {
-    // Buttons/Hinweise im PDF entfernen (nur Darstellung)
     clone.querySelector('#wpHint')?.remove();
     clone.querySelectorAll('#wartungsplanPanel button').forEach(b => b.remove());
     clone.querySelector('#wpWarning')?.remove();
 
-    // --- 🆕 Werte der Wartungsfelder explizit vom Original übernehmen ---
     (function copyWartungValuesIntoClone(){
       const copyInput = (id) => {
         const o = document.getElementById(id);
@@ -4319,15 +4300,13 @@ const height = root.scrollHeight + 200;
       copyInput('wpLastDate');
       copyInput('wpNextDue');
 
-      // Status-Pill Text sichern (rein kosmetisch)
       const pillOrig  = document.getElementById('wpStatusPill');
       const pillClone = clone.querySelector('#wpStatusPill');
       if (pillOrig && pillClone) pillClone.textContent = pillOrig.textContent;
     })();
   }
-  // --- 🆕 Ende Wartungsblock-Logik ---
 
-  // Select-Werte + sichtbare Texte übernehmen (für die PDF-Umwandlung)
+  // Select-Werte + sichtbare Texte übernehmen
   clone.querySelectorAll('select').forEach(sel => {
     const orig = document.getElementById(sel.id);
     if (!orig) return;
@@ -4348,41 +4327,37 @@ const height = root.scrollHeight + 200;
     c.parentNode.replaceChild(img, c);
   });
 
-// In iFrame einfügen & in statischen Inhalt wandeln
-doc.getElementById('root').appendChild(clone);
-convertFormElementsToStaticText(clone);
+  // ✅ FIX: Formfelder nur einmal und nur wenn Funktion existiert
+  try {
+    if (typeof convertFormElementsToStaticText === "function") {
+      convertFormElementsToStaticText(clone);
+    }
+  } catch(e) {
+    console.warn("convertFormElementsToStaticText:", e);
+  }
 
+  try {
+    // Laden abwarten
+    if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
 
-try {
-  // E) Laden abwarten
-  if (doc.fonts && doc.fonts.ready) { await doc.fonts.ready; }
-  const imgs = doc.images;
-  await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
-    : new Promise(res => { img.onload = img.onerror = res; })));
-  // ✅ Layout settle (entscheidend gegen sporadische Overlaps)
-await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
-  frame.contentWindow.requestAnimationFrame(r)
-));
-// Reflow erzwingen
-doc.getElementById('root')?.offsetHeight;
-// Mini-Puffer
-await new Promise(r => setTimeout(r, 80));
+    const imgs = doc.images;
+    await Promise.all([...imgs].map(img => img.complete ? Promise.resolve()
+      : new Promise(res => { img.onload = img.onerror = res; })));
 
+    // Layout settle
+    await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
+      frame.contentWindow.requestAnimationFrame(r)
+    ));
+    root.offsetHeight;
+    await new Promise(r => setTimeout(r, 80));
 
-  // ✅ Layout settle (entscheidend gegen Overlap)
-  await new Promise(r => frame.contentWindow.requestAnimationFrame(() =>
-    frame.contentWindow.requestAnimationFrame(r)
-  ));
-  doc.getElementById('root')?.offsetHeight;
-  await new Promise(r => setTimeout(r, 80));
+    // ✅ Höhe jetzt zuverlässig bestimmen
+    const height = root.scrollHeight + 200;
 
-  // G) html2pdf-Optionen
-  const height = doc.getElementById('root').scrollHeight + 200; // ✅ Puffer
-
-
+    // html2pdf-Optionen
     const opt = {
       margin: 0,
-      filename,
+      filename, // ✅ FIX: jetzt definiert
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
         scale: 2,
@@ -4398,65 +4373,60 @@ await new Promise(r => setTimeout(r, 80));
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
-    // H) Rendern
+    // Rendern
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const h2p = frame.contentWindow.html2pdf;
-    const worker  = h2p().set(opt).from(doc.getElementById('root')).toPdf();
+    const worker  = h2p().set(opt).from(root).toPdf();
     const pdfBlob = await worker.get('pdf').then(pdf => pdf.output('blob'));
 
-// I) Upload & UI
-const success = await uploadToOneDrive(filename, pdfBlob);
-if (success) {
-  // ---- META-Datei für das Dashboard mitschreiben ----
-  const meta = {
-    auftrags_id:        auftragId,
-    pdfName:            filename,
-    bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
-    techniker1:         selectedText("techniker1"),
-    techniker2:         (selectedText("techniker2") || "").replace(/^–$/, ""),
-    maschine_value:     document.getElementById("maschine")?.value || "",
-    maschine_text:      selectedText("maschine"),
-    anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
-    anlagenteil_text:   selectedText("anlagenteil"),
+    // Upload & UI
+    const success = await uploadToOneDrive(filename, pdfBlob);
 
-    // 🔼 NEU: Provisorium wandert mit in die Meta-Datei
-    provisorium_aktiv:  document.getElementById("provisorium_aktiv")?.value || "",
-    provisorium_art:    document.getElementById("provisorium_art")?.value || "",
-    provisorium_von:    document.getElementById("provisorium_von")?.value || "",
-    provisorium_bis:    document.getElementById("provisorium_bis")?.value || "",
-    provisorium_bezug_auftrag_id:
-      document.getElementById("provisorium_bezug_auftrag_id")?.value || "",
-  };
+    if (success) {
+      const meta = {
+        auftrags_id:        auftragId,
+        pdfName:            filename,
+        bearbeitet_am:      document.getElementById("bearbeitet_am")?.value || "",
+        techniker1:         selectedText("techniker1"),
+        techniker2:         (selectedText("techniker2") || "").replace(/^–$/, ""),
+        maschine_value:     document.getElementById("maschine")?.value || "",
+        maschine_text:      selectedText("maschine"),
+        anlagenteil_value:  document.getElementById("anlagenteil")?.value || "",
+        anlagenteil_text:   selectedText("anlagenteil"),
 
-  // ⬇️ sicherstellen, dass der Meta-Ordner existiert/aufgelöst ist
-  if (!TARGET_META_ITEM_ID) {
-    try { await resolveShareLinkToFolder(); }
-    catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
-  }
+        provisorium_aktiv:  document.getElementById("provisorium_aktiv")?.value || "",
+        provisorium_art:    document.getElementById("provisorium_art")?.value || "",
+        provisorium_von:    document.getElementById("provisorium_von")?.value || "",
+        provisorium_bis:    document.getElementById("provisorium_bis")?.value || "",
+        provisorium_bezug_auftrag_id:
+          document.getElementById("provisorium_bezug_auftrag_id")?.value || "",
+      };
 
-  const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+      if (!TARGET_META_ITEM_ID) {
+        try { await resolveShareLinkToFolder(); }
+        catch(e){ console.warn("resolveShareLinkToFolder (Meta) fehlgeschlagen:", e); }
+      }
 
-  // bevorzugt in den Meta-Ordner, sonst Fallback Hauptordner
-  const metaOk = await uploadToOneDrive(
-    `${auftragId}.meta.json`,
-    metaBlob,
-    "application/json",
-    TARGET_META_ITEM_ID || TARGET.parentItemId
-  );
-  if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
+      const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
 
-  // 🆕 NACH erfolgreichem Abschluss: Signaturen leeren (Canvas + SIG_CACHE_)
-  // Voraussetzung: clearAllSignatures() existiert bei dir (aus Schritt 2)
-  try { clearAllSignatures(); } catch (e) { console.warn("clearAllSignatures fehlgeschlagen:", e); }
+      const metaOk = await uploadToOneDrive(
+        `${auftragId}.meta.json`,
+        metaBlob,
+        "application/json",
+        TARGET_META_ITEM_ID || TARGET.parentItemId
+      );
+      if (!metaOk) console.warn("Meta-Upload fehlgeschlagen");
 
-  alert("✅ PDF erfolgreich in OneDrive gespeichert!");
-  await deleteDraftFile?.();
-  document.getElementById("abschlussScreen").style.display = "flex";
+      try { clearAllSignatures(); } catch (e) { console.warn("clearAllSignatures fehlgeschlagen:", e); }
 
-  try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
-} else {
-  alert("⚠️ Fehler beim Hochladen in OneDrive.");
-}
+      alert("✅ PDF erfolgreich in OneDrive gespeichert!");
+      await deleteDraftFile?.();
+      document.getElementById("abschlussScreen").style.display = "flex";
+
+      try { if (document.getElementById("dashPanel")) await loadDashboard(); } catch {}
+    } else {
+      alert("⚠️ Fehler beim Hochladen in OneDrive.");
+    }
 
   } catch (err) {
     console.error("❌ Fehler bei PDF-Erstellung/Upload:", err);
@@ -4465,6 +4435,7 @@ if (success) {
     try { doc.body.innerHTML = '<div id="root"></div>'; } catch {}
   }
 }
+
 
 
 
