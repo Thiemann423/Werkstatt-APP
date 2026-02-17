@@ -8106,6 +8106,49 @@ function confirmUpdate() {
   location.reload(true);
 }
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // 📊 Dashboard Toggle + Laden
+  const dashBtn   = document.getElementById("toggleDashBtn");
+  const dashPanel = document.getElementById("dashPanel");
+
+  if (dashBtn && dashPanel) {
+    dashBtn.onclick = async (e) => {
+      e.preventDefault();
+      const willOpen = (dashPanel.style.display !== "block");
+      dashPanel.style.display = willOpen ? "block" : "none";
+
+      if (willOpen) {
+        if (typeof window.refreshAllPanels === "function") {
+          await window.refreshAllPanels({ interactive: true });
+        } else if (typeof window.loadDashboard === "function") {
+          await window.loadDashboard();
+        }
+      }
+    };
+  }
+
+  // 📝 Entwürfe Toggle + Laden
+  const draftBtn   = document.getElementById("toggleDraftDashBtn");
+  const draftPanel = document.getElementById("draftDashPanel");
+
+  if (draftBtn && draftPanel) {
+    draftBtn.onclick = async (e) => {
+      e.preventDefault();
+      const willOpen = (draftPanel.style.display !== "block");
+      draftPanel.style.display = willOpen ? "block" : "none";
+
+      if (willOpen) {
+        if (typeof window.refreshAllPanels === "function") {
+          await window.refreshAllPanels({ interactive: true });
+        } else if (typeof window.loadDraftDashboard === "function") {
+          await window.loadDraftDashboard();
+        }
+      }
+    };
+  }
+});
+</script>
 
 
 
