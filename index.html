@@ -851,9 +851,11 @@ function daysOverdue(nextDueISO){
   return Math.max(0, days);
 }
 
-function renderDueLine(due){
+function renderDueLine(due, opts = {}) {
   const box = document.getElementById("wpDueLine");
   if (!box) return;
+
+  const showAll = opts.showAll === true;
 
   if (!due || !due.length){
     box.style.display = "none";
@@ -873,8 +875,8 @@ function renderDueLine(due){
     return bo - ao;
   });
 
-  // nur die ersten N Chips zeigen (Rest als "+X")
-  const N = 8;
+  // nur die ersten N Chips zeigen (Rest als "+X") – außer showAll=true
+  const N = showAll ? sorted.length : 8;
   const shown = sorted.slice(0, N);
   const rest  = Math.max(0, total - shown.length);
 
@@ -887,7 +889,6 @@ function renderDueLine(due){
       badge = od === 1 ? "1T" : (od + "T");
     }
 
-    // Chip-Button: klickt wie bei euch auf wpOpenMachineFromName(machine, task)
     return `
       <button type="button"
         data-machine="${String(d.machine||"").replace(/"/g,"&quot;")}"
@@ -907,12 +908,19 @@ function renderDueLine(due){
     ${todayCount ? ` (heute: <strong>${todayCount}</strong>)` : ""}
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;">
       ${chips}
-      ${rest ? `<span style="margin-top:4px;color:#842029;">+${rest} weitere…</span>` : ""}
+      ${rest ? `
+        <button type="button"
+          id="wpShowAllDue"
+          style="border:0;background:none;color:#842029;
+                 cursor:pointer;margin-top:4px;font-weight:600;">
+          +${rest} weitere anzeigen
+        </button>
+      ` : ""}
     </div>
   `;
   box.style.display = "block";
 
-  // Klick-Handler
+  // Klick-Handler für Chips
   box.querySelectorAll("button[data-machine]").forEach(btn => {
     btn.addEventListener("click", function(){
       const m = this.getAttribute("data-machine") || "";
@@ -920,13 +928,21 @@ function renderDueLine(due){
       if (typeof window.wpOpenMachineFromName === "function") {
         window.wpOpenMachineFromName(m, t);
       } else {
-        // Fallback: Wartungs-Dashboard öffnen
         const tgl = document.getElementById("toggleWpLogBtn");
         if (tgl) tgl.click();
       }
     });
   });
+
+  // Klick-Handler für "+X weitere anzeigen"
+  const moreBtn = document.getElementById("wpShowAllDue");
+  if (moreBtn) {
+    moreBtn.addEventListener("click", function(){
+      renderDueLine(due, { showAll: true });
+    });
+  }
 }
+
 
 
 
