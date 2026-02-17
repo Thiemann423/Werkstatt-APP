@@ -4775,8 +4775,20 @@ async function loadDashboard(){
   const empty = document.getElementById('dashEmpty');
   if (!tbody) return;
 
-  tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Lade…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Lade…</td></tr>';
   if (empty) empty.style.display = 'none';
+
+  // Helpers
+  const metaSuffixLower = String(META_SUFFIX || ".meta.json").toLowerCase();
+  const isMetaFile = (name) => (name || "").toLowerCase().endsWith(metaSuffixLower);
+
+  async function fetchJsonContent(url, headers){
+    const r = await fetch(url, { headers });
+    if (!r.ok) throw new Error(`content fetch failed: ${r.status} ${await r.text()}`);
+    const t = await r.text();
+    const clean = t.replace(/^\uFEFF/, ""); // BOM entfernen
+    return JSON.parse(clean);
+  }
 
   try{
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -4785,12 +4797,17 @@ async function loadDashboard(){
     const listPdfUrl =
       `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
       `/children?$top=2000&$select=id,name,webUrl,file,folder`;
+
     const pdfRes = await fetch(listPdfUrl, { headers });
+    if (!pdfRes.ok) {
+      throw new Error(`PDF-Liste konnte nicht geladen werden: ${pdfRes.status} ${await pdfRes.text()}`);
+    }
     const mainItems = (await pdfRes.json()).value || [];
 
     const pdfMap = new Map(
-      mainItems.filter(i => i.file && /\.pdf$/i.test(i.name))
-               .map(i => [i.name, i.webUrl])
+      mainItems
+        .filter(i => i.file && /\.pdf$/i.test(i.name))
+        .map(i => [i.name, i.webUrl])
     );
 
     // META-Dateien zuerst im Meta-Ordner suchen
@@ -4799,29 +4816,37 @@ async function loadDashboard(){
       const listMetaUrl =
         `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET_META_ITEM_ID}` +
         `/children?$top=2000&$select=id,name,file`;
+
       const metaRes = await fetch(listMetaUrl, { headers });
       if (metaRes.ok){
         const data = await metaRes.json();
-        metaItems = (data.value || []).filter(i => i.file && i.name.endsWith(META_SUFFIX));
+        metaItems = (data.value || []).filter(i => i.file && isMetaFile(i.name));
+      } else {
+        console.warn("Meta-Ordner Listing fehlgeschlagen:", metaRes.status, await metaRes.text());
       }
     }
 
     // Fallback in Hauptordner
     if (!metaItems.length){
-      metaItems = mainItems.filter(i => i.file && i.name.endsWith(META_SUFFIX));
+      metaItems = mainItems.filter(i => i.file && isMetaFile(i.name));
     }
 
     const rows = [];
 
     for (const m of metaItems){
-      const mres = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
-        { headers }
-      );
-      if (!mres.ok) continue;
-      const meta = await mres.json();
+      let meta;
+      try {
+        meta = await fetchJsonContent(
+          `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${m.id}/content`,
+          headers
+        );
+      } catch (e) {
+        console.warn("Meta JSON konnte nicht gelesen werden:", m.name, e);
+        continue;
+      }
 
-      const auftragsId = (meta.auftrags_id || m.name.replace(META_SUFFIX,'')).trim();
+      // Achtung: replace ohne Regex ersetzt nur 1:1; wir machen es robust
+      const auftragsId = String((meta.auftrags_id || m.name.replace(new RegExp(metaSuffixLower.replace(/\./g, "\\.") + "$", "i"), "")) || "").trim();
       const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
       // --- PROVISORIEN-Status bestimmen ---
@@ -4843,7 +4868,7 @@ async function loadDashboard(){
           provStatus = "open"; // aktiv, kein Enddatum
           statusText = "⚠ aktiv";
         } else {
-          const bisIso      = bisStr.slice(0,10);
+          const bisIso      = String(bisStr).slice(0,10);
           const bisDateDisp = new Date(bisStr).toLocaleDateString("de-DE");
 
           if (bisIso >= todayIso) {
@@ -4857,20 +4882,21 @@ async function loadDashboard(){
 
         provText = (art ? art + " – " : "") + statusText;
       }
-    const provRef = (meta.provisorium_bezug_auftrag_id || "").trim();
 
-    // Falls dieser Auftrag selbst kein Provisorium setzt,
-    // aber ein anderes aufhebt, trotzdem Text anzeigen
-    if (!provText && provRef) {
-      provText = "Auflösung Provisorium " + provRef;
-    }
+      const provRef = (meta.provisorium_bezug_auftrag_id || "").trim();
+
+      // Falls dieser Auftrag selbst kein Provisorium setzt,
+      // aber ein anderes aufhebt, trotzdem Text anzeigen
+      if (!provText && provRef) {
+        provText = "Auflösung Provisorium " + provRef;
+      }
 
       rows.push({
-        dateIso:  meta.bearbeitet_am || '',
-        dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
-        tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
-        maschine: meta.maschine_text || meta.maschine_value || '',
-        teil:     meta.anlagenteil_text || meta.anlagenteil_value || '',
+        dateIso:   meta.bearbeitet_am || '',
+        dateDisp:  meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
+        tech:      [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
+        maschine:  meta.maschine_text || meta.maschine_value || '',
+        teil:      meta.anlagenteil_text || meta.anlagenteil_value || '',
 
         provText,
         provFlag,
@@ -4880,13 +4906,12 @@ async function loadDashboard(){
         url: pdfMap.get(pdfName) || null
       });
     }
+
     // ---------------------------------------------
     // Verknüpfungen: welches Provisorium wurde durch
     // welchen Auftrag aufgelöst?
     // ---------------------------------------------
     const resolvedByMap = {};
-
-    // 1) Map aufbauen: Provisorium-ID -> [Auftrags-IDs, die es auflösen]
     rows.forEach(r => {
       const ref = (r.provRef || "").trim();
       if (!ref) return;
@@ -4894,11 +4919,9 @@ async function loadDashboard(){
       resolvedByMap[ref].push(r.id);
     });
 
-    // 2) Bei den Ursprungs-Provisorien Text anhängen
     rows.forEach(r => {
       const resolvers = resolvedByMap[r.id];
       if (!resolvers || !resolvers.length) return;
-
       const listStr = resolvers.join(", ");
       r.provText =
         (r.provText ? r.provText + " – " : "") +
@@ -4939,11 +4962,12 @@ async function loadDashboard(){
 
   } catch(e){
     console.error('Dashboard:', e);
-    tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">Fehler beim Laden.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Fehler beim Laden.</td></tr>';
     const dashBox = document.getElementById('dashAnalytics');
     if (dashBox) dashBox.style.display = 'none';
   }
 }
+
 
 /* 🔎 NEU: Balkenliste rendern */
 function renderTop(map, targetId){
