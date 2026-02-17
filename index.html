@@ -3055,103 +3055,113 @@ window.addEventListener('load', function() {
   }
 
   // Freigabelink auflösen, Unterordner anlegen, Cache schreiben
-  async function resolveShareLinkToFolder() {
-    if (!accessToken) throw new Error("Kein Access Token");
+async function resolveShareLinkToFolder() {
+  if (!accessToken) throw new Error("Kein Access Token");
 
-    // --- Cache lesen ---
-    const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
-    if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId) {
-      TARGET.driveId        = cache.driveId;
-      TARGET.parentItemId   = cache.parentItemId;
-      TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
-      TARGET_META_ITEM_ID   = cache.metaItemId   || null;
+  // --- Cache lesen ---
+  const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
+  if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId) {
+    TARGET.driveId        = cache.driveId;
+    TARGET.parentItemId   = cache.parentItemId;
+    TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
+    TARGET_META_ITEM_ID   = cache.metaItemId   || null;
 
-      // Wenn alles bekannt ist → fertig
-      if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) return;
-    } else {
-      // --- Share-Link → Drive & Ordner auflösen ---
-      const encoded = _b64Url(SHARE_URL);
-      const res = await fetch(
-        `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      if (!res.ok) {
-        throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
-      }
-      const item = await res.json();
-      const folderItemId = item.folder ? item.id : item.parentReference?.id;
-      const driveId      = item.parentReference?.driveId;
-      if (!driveId || !folderItemId) {
-        throw new Error("Zielordner konnte nicht bestimmt werden.");
-      }
-      TARGET.driveId      = driveId;
-      TARGET.parentItemId = folderItemId;
+    // Wenn alles bekannt ist → fertig
+    if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) {
+      window.TARGET = TARGET;
+      window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
+      return;
     }
-
-    // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
-    const listUrl =
-      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
-      `/children?$select=id,name,folder`;
-    const listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
-    const children = (await listRes.json()).value || [];
-
-    // Entwürfe
-    let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
-    if (!drafts) {
-      const createDrafts = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            name: DRAFTS_FOLDER_NAME,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "ignore"
-          })
-        }
-      );
-      if (createDrafts.ok) drafts = await createDrafts.json();
+  } else {
+    // --- Share-Link → Drive & Ordner auflösen ---
+    const encoded = _b64Url(SHARE_URL);
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) {
+      throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
     }
-    TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
-
-    // Meta
-    let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
-    if (!meta) {
-      const createMeta = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            name: META_FOLDER_NAME,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "ignore"
-          })
-        }
-      );
-      if (createMeta.ok) meta = await createMeta.json();
+    const item = await res.json();
+    const folderItemId = item.folder ? item.id : item.parentReference?.id;
+    const driveId      = item.parentReference?.driveId;
+    if (!driveId || !folderItemId) {
+      throw new Error("Zielordner konnte nicht bestimmt werden.");
     }
-    localStorage.setItem("TARGET_CACHE", JSON.stringify({
-      shareUrl:      SHARE_URL,
-      driveId:       TARGET.driveId,
-      parentItemId:  TARGET.parentItemId,
-      draftsItemId:  TARGET_DRAFTS_ITEM_ID,
-      metaItemId:    TARGET_META_ITEM_ID
-    }));
-
-    // ➕ WICHTIG: Globale Variablen für alle anderen Module setzen
-    window.TARGET             = TARGET;
-    window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
+    TARGET.driveId      = driveId;
+    TARGET.parentItemId = folderItemId;
   }
+
+  // --- Unterordner (Entwürfe + Meta) ermitteln/erstellen ---
+  const listUrl =
+    `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}` +
+    `/children?$select=id,name,folder`;
+  const listRes = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!listRes.ok) throw new Error(`children list failed: ${listRes.status}`);
+  let children = (await listRes.json()).value || [];
+
+  // Entwürfe
+  let drafts = children.find(x => x.name === DRAFTS_FOLDER_NAME && x.folder);
+  if (!drafts) {
+    const createDrafts = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: DRAFTS_FOLDER_NAME,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "ignore"
+        })
+      }
+    );
+    if (createDrafts.ok) drafts = await createDrafts.json();
+  }
+  TARGET_DRAFTS_ITEM_ID = drafts?.id || null;
+
+  // Meta
+  let meta = children.find(x => x.name === META_FOLDER_NAME && x.folder);
+  if (!meta) {
+    const createMeta = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${TARGET.driveId}/items/${TARGET.parentItemId}/children`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: META_FOLDER_NAME,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "ignore"
+        })
+      }
+    );
+    if (createMeta.ok) meta = await createMeta.json();
+  }
+
+  // ✅ DAS HAT GEFEHLT:
+  TARGET_META_ITEM_ID = meta?.id || null;
+
+  // Cache schreiben (jetzt mit gesetzter Meta-ID)
+  localStorage.setItem("TARGET_CACHE", JSON.stringify({
+    shareUrl:      SHARE_URL,
+    driveId:       TARGET.driveId,
+    parentItemId:  TARGET.parentItemId,
+    draftsItemId:  TARGET_DRAFTS_ITEM_ID,
+    metaItemId:    TARGET_META_ITEM_ID
+  }));
+
+  // Globale Variablen für alle anderen Module setzen
+  window.TARGET = TARGET;
+  window.TARGET_META_ITEM_ID = TARGET_META_ITEM_ID;
+}
+
 
 
 // 3) Login/Token nur per Redirect
