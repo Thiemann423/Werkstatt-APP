@@ -4619,125 +4619,172 @@ window.showAllOrders = false;
 window.dashRangeMode = '7';
 
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function () {
   // ==============================
   // 📊 Normales Reparatur-Dashboard
   // ==============================
-  const panel    = document.getElementById('dashPanel');
-  const toggle   = document.getElementById('toggleDashBtn');
-  const reload   = document.getElementById('dashReload');
-  const clearBtn = document.getElementById('dashClear');
-  const rangeBtn = document.getElementById('dashRangeBtn');
+  var panel    = document.getElementById('dashPanel');
+  var toggle   = document.getElementById('toggleDashBtn');
+  var reload   = document.getElementById('dashReload');
+  var clearBtn = document.getElementById('dashClear');
+  var rangeBtn = document.getElementById('dashRangeBtn');
 
   // aktueller Zeitraum aus dem Button lesen (Fallback: 7 Tage)
-  if (rangeBtn) {
+  if (rangeBtn && rangeBtn.dataset) {
     window.dashRangeMode = rangeBtn.dataset.mode || '7';
+  } else {
+    window.dashRangeMode = '7';
   }
 
-  toggle?.addEventListener('click', () => {
-    const show = panel.style.display === 'none' || !panel.style.display;
-    panel.style.display = show ? 'block' : 'none';
-    if (show) loadDashboard();
-  });
-
-  reload?.addEventListener('click', loadDashboard);
-
-  clearBtn?.addEventListener('click', () => {
-    ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium','f_auftrag_id'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.value = '';
+  // Panel auf/zu
+  if (toggle && toggle.addEventListener) {
+    toggle.addEventListener('click', function () {
+      if (!panel) return;
+      var show = (panel.style.display === 'none' || !panel.style.display);
+      panel.style.display = show ? 'block' : 'none';
+      if (show) loadDashboard();
     });
-    window.dashRangeMode = '7';
-    if (rangeBtn){
-      rangeBtn.dataset.mode = '7';
-      rangeBtn.textContent  = '🗓️ Letzte 7 Tage';
-    }
-    applyFiltersToDashboard();
-  });
+  }
+
+  // Reload
+  if (reload && reload.addEventListener) {
+    reload.addEventListener('click', function () { loadDashboard(); });
+  }
+
+  // Filter löschen
+  if (clearBtn && clearBtn.addEventListener) {
+    clearBtn.addEventListener('click', function () {
+      var ids = ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_provisorium','f_auftrag_id'];
+      for (var i=0; i<ids.length; i++){
+        var el = document.getElementById(ids[i]);
+        if (el) el.value = '';
+      }
+
+      window.dashRangeMode = '7';
+      if (rangeBtn && rangeBtn.dataset){
+        rangeBtn.dataset.mode = '7';
+        rangeBtn.textContent  = '🗓️ Letzte 7 Tage';
+      }
+      applyFiltersToDashboard();
+    });
+  }
 
   // Zeitraum: 7 Tage -> 30 Tage -> Alle -> 7 Tage ...
-  rangeBtn?.addEventListener('click', () => {
-    const current = rangeBtn.dataset.mode || window.dashRangeMode || '7';
-    let next  = '7';
-    let label = '🗓️ Letzte 7 Tage';
+  if (rangeBtn && rangeBtn.addEventListener) {
+    rangeBtn.addEventListener('click', function () {
+      var current = (rangeBtn.dataset && rangeBtn.dataset.mode) ? rangeBtn.dataset.mode : (window.dashRangeMode || '7');
+      var next  = '7';
+      var label = '🗓️ Letzte 7 Tage';
 
-    if (current === '7') {
-      next  = '30';
-      label = '🗓️ Letzte 30 Tage';
-    } else if (current === '30') {
-      next  = 'all';
-      label = '🗓️ Alle Aufträge';
-      const d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
-    } else {
-      next  = '7';
-      label = '🗓️ Letzte 7 Tage';
-    }
+      if (current === '7') {
+        next  = '30';
+        label = '🗓️ Letzte 30 Tage';
+      } else if (current === '30') {
+        next  = 'all';
+        label = '🗓️ Alle Aufträge';
+        var d = document.getElementById('f_bearbeitet_am'); if (d) d.value = '';
+      } else {
+        next  = '7';
+        label = '🗓️ Letzte 7 Tage';
+      }
 
-    window.dashRangeMode = next;
-    rangeBtn.dataset.mode = next;
-    rangeBtn.textContent  = label;
-    applyFiltersToDashboard();
-  });
+      window.dashRangeMode = next;
+      if (rangeBtn.dataset) rangeBtn.dataset.mode = next;
+      rangeBtn.textContent  = label;
+      applyFiltersToDashboard();
+    });
+  }
 
   // Filter-Inputs
-  ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_auftrag_id'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', applyFiltersToDashboard);
-  });
+  var inputIds = ['f_bearbeitet_am','f_techniker','f_maschine','f_anlagenteil','f_auftrag_id'];
+  for (var j=0; j<inputIds.length; j++){
+    (function(id){
+      var inp = document.getElementById(id);
+      if (inp && inp.addEventListener) inp.addEventListener('input', function(){ applyFiltersToDashboard(); });
+    })(inputIds[j]);
+  }
 
   // Select reagiert auf change
-  document.getElementById('f_provisorium')?.addEventListener('change', applyFiltersToDashboard);
-
-
+  var provSel = document.getElementById('f_provisorium');
+  if (provSel && provSel.addEventListener) {
+    provSel.addEventListener('change', function(){ applyFiltersToDashboard(); });
+  }
 
   // ==============================
   // 📝 Entwürfe-Dashboard
   // ==============================
-  const draftPanel    = document.getElementById('draftDashPanel');
-  const draftToggle   = document.getElementById('toggleDraftDashBtn');
-  const draftReload   = document.getElementById('draftDashReload');
-  const draftClearBtn = document.getElementById('draftDashClear');
-  const draftRangeBtn = document.getElementById('draftDashRangeBtn');
+  var draftPanel    = document.getElementById('draftDashPanel');
+  var draftToggle   = document.getElementById('toggleDraftDashBtn');
+  var draftReload   = document.getElementById('draftDashReload');
+  var draftClearBtn = document.getElementById('draftDashClear');
+  var draftRangeBtn = document.getElementById('draftDashRangeBtn');
 
   // Panel auf/zu
-  draftToggle?.addEventListener('click', () => {
-    const show = draftPanel.style.display === 'none' || !draftPanel.style.display;
-    draftPanel.style.display = show ? 'block' : 'none';
-    if (show) loadDraftDashboard();       // <- liest Entwürfe aus OneDrive
-  });
+  if (draftToggle && draftToggle.addEventListener) {
+    draftToggle.addEventListener('click', function () {
+      if (!draftPanel) return;
+      var show2 = (draftPanel.style.display === 'none' || !draftPanel.style.display);
+      draftPanel.style.display = show2 ? 'block' : 'none';
+      if (show2) loadDraftDashboard();
+    });
+  }
 
   // Reload
-  draftReload?.addEventListener('click', loadDraftDashboard);
+  if (draftReload && draftReload.addEventListener) {
+    draftReload.addEventListener('click', function () { loadDraftDashboard(); });
+  }
 
   // Filter löschen
-  draftClearBtn?.addEventListener('click', () => {
-    ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil','df_provisorium'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.value = '';
+  if (draftClearBtn && draftClearBtn.addEventListener) {
+    draftClearBtn.addEventListener('click', function () {
+      var dids = ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil','df_provisorium'];
+      for (var k=0; k<dids.length; k++){
+        var el2 = document.getElementById(dids[k]);
+        if (el2) el2.value = '';
+      }
+
+      window.showAllDrafts = false;
+      if (draftRangeBtn && draftRangeBtn.dataset){
+        draftRangeBtn.dataset.mode = '30';
+        draftRangeBtn.textContent = '🗓️ Letzte 30 Tage';
+      }
+      applyFiltersToDraftDashboard();
     });
-    window.showAllDrafts = false;
-    if (draftRangeBtn){ draftRangeBtn.dataset.mode = '30'; draftRangeBtn.textContent = '🗓️ Letzte 30 Tage'; }
-    applyFiltersToDraftDashboard();
-  });
+  }
 
   // Letzte 30 Tage / alle Entwürfe
-  draftRangeBtn?.addEventListener('click', () => {
-    const mode = draftRangeBtn.dataset.mode || '30';
-    if (mode === '30') {
-      window.showAllDrafts = true;
-      draftRangeBtn.dataset.mode = 'all';
-      draftRangeBtn.textContent  = '🗓️ Alle Entwürfe';
-      const d = document.getElementById('df_bearbeitet_am'); if (d) d.value = '';
-    } else {
-      window.showAllDrafts = false;
-      draftRangeBtn.dataset.mode = '30';
-      draftRangeBtn.textContent  = '🗓️ Letzte 30 Tage';
-    }
-    applyFiltersToDraftDashboard();
-  });
+  if (draftRangeBtn && draftRangeBtn.addEventListener) {
+    draftRangeBtn.addEventListener('click', function () {
+      var mode = (draftRangeBtn.dataset && draftRangeBtn.dataset.mode) ? draftRangeBtn.dataset.mode : '30';
+      if (mode === '30') {
+        window.showAllDrafts = true;
+        if (draftRangeBtn.dataset) draftRangeBtn.dataset.mode = 'all';
+        draftRangeBtn.textContent  = '🗓️ Alle Entwürfe';
+        var d2 = document.getElementById('df_bearbeitet_am'); if (d2) d2.value = '';
+      } else {
+        window.showAllDrafts = false;
+        if (draftRangeBtn.dataset) draftRangeBtn.dataset.mode = '30';
+        draftRangeBtn.textContent  = '🗓️ Letzte 30 Tage';
+      }
+      applyFiltersToDraftDashboard();
+    });
+  }
 
   // Filter-Inputs der Entwürfe
-  ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', applyFiltersToDraftDashboard);
-  });
-  document.getElementById('df_provisorium')?.addEventListener('change', applyFiltersToDraftDashboard);
+  var dinp = ['df_bearbeitet_am','df_techniker','df_maschine','df_anlagenteil'];
+  for (var m=0; m<dinp.length; m++){
+    (function(id){
+      var inp2 = document.getElementById(id);
+      if (inp2 && inp2.addEventListener) inp2.addEventListener('input', function(){ applyFiltersToDraftDashboard(); });
+    })(dinp[m]);
+  }
+
+  var provSel2 = document.getElementById('df_provisorium');
+  if (provSel2 && provSel2.addEventListener) {
+    provSel2.addEventListener('change', function(){ applyFiltersToDraftDashboard(); });
+  }
+});
+
 
 
   // ==============================
