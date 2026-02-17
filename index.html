@@ -855,7 +855,13 @@ function renderDueLine(due, opts = {}) {
   const box = document.getElementById("wpDueLine");
   if (!box) return;
 
-  const showAll = opts.showAll === true;
+  // globaler Zustand fürs Toggle (bleibt zwischen Re-Renders erhalten)
+  if (typeof window.__wpDueShowAll !== "boolean") window.__wpDueShowAll = false;
+
+  // opts kann den Zustand setzen (z.B. beim Klick)
+  if (typeof opts.showAll === "boolean") window.__wpDueShowAll = opts.showAll;
+
+  const showAll = window.__wpDueShowAll;
 
   if (!due || !due.length){
     box.style.display = "none";
@@ -875,9 +881,8 @@ function renderDueLine(due, opts = {}) {
     return bo - ao;
   });
 
-  // nur die ersten N Chips zeigen (Rest als "+X") – außer showAll=true
-  const N = showAll ? sorted.length : 8;
-  const shown = sorted.slice(0, N);
+  const LIMIT = 8;
+  const shown = showAll ? sorted : sorted.slice(0, LIMIT);
   const rest  = Math.max(0, total - shown.length);
 
   const chips = shown.map(d => {
@@ -902,20 +907,23 @@ function renderDueLine(due, opts = {}) {
     `;
   }).join("");
 
+  // Toggle-Button Text
+  const toggleHtml = (total > LIMIT) ? `
+    <button type="button"
+      id="wpToggleDue"
+      style="border:0;background:none;color:#842029;
+             cursor:pointer;margin-top:4px;font-weight:600;">
+      ${showAll ? "Weniger anzeigen" : ("+" + rest + " weitere anzeigen")}
+    </button>
+  ` : "";
+
   box.innerHTML = `
     <strong>⚠️ ${total} Wartungen fällig</strong>
     ${overdueCount ? ` (davon <strong>${overdueCount} überfällig</strong>)` : ""}
     ${todayCount ? ` (heute: <strong>${todayCount}</strong>)` : ""}
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;">
       ${chips}
-      ${rest ? `
-        <button type="button"
-          id="wpShowAllDue"
-          style="border:0;background:none;color:#842029;
-                 cursor:pointer;margin-top:4px;font-weight:600;">
-          +${rest} weitere anzeigen
-        </button>
-      ` : ""}
+      ${toggleHtml}
     </div>
   `;
   box.style.display = "block";
@@ -934,11 +942,11 @@ function renderDueLine(due, opts = {}) {
     });
   });
 
-  // Klick-Handler für "+X weitere anzeigen"
-  const moreBtn = document.getElementById("wpShowAllDue");
-  if (moreBtn) {
-    moreBtn.addEventListener("click", function(){
-      renderDueLine(due, { showAll: true });
+  // Toggle-Handler
+  const tglBtn = document.getElementById("wpToggleDue");
+  if (tglBtn) {
+    tglBtn.addEventListener("click", function(){
+      renderDueLine(due, { showAll: !showAll });
     });
   }
 }
