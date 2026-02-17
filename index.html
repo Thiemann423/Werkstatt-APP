@@ -3056,42 +3056,46 @@ window.addEventListener('load', function() {
 
 // Freigabelink auflösen, Unterordner anlegen, Cache schreiben
 async function resolveShareLinkToFolder() {
-  if (!accessToken) throw new Error("Kein Access Token");
+  // ⛔ Schutz: nicht ohne Token ausführen
+  if (!window.accessToken && !accessToken) {
+    console.warn("resolveShareLinkToFolder: Kein Access Token");
+    return;
+  }
+  const token = window.accessToken || accessToken;
 
   // --- Cache lesen ---
   const cache = JSON.parse(localStorage.getItem("TARGET_CACHE") || "null");
-  if (cache?.shareUrl === SHARE_URL && cache?.driveId && cache?.parentItemId) {
+  if (cache && cache.shareUrl === SHARE_URL && cache.driveId && cache.parentItemId) {
     TARGET.driveId        = cache.driveId;
     TARGET.parentItemId   = cache.parentItemId;
     TARGET_DRAFTS_ITEM_ID = cache.draftsItemId || null;
     TARGET_META_ITEM_ID   = cache.metaItemId   || null;
 
-    // Wenn alles bekannt ist → fertig
     if (TARGET_DRAFTS_ITEM_ID && TARGET_META_ITEM_ID) {
-      window.TARGET               = TARGET;
+      window.TARGET                = TARGET;
       window.TARGET_DRAFTS_ITEM_ID = TARGET_DRAFTS_ITEM_ID;
       window.TARGET_META_ITEM_ID   = TARGET_META_ITEM_ID;
       return;
     }
   } else {
-    // --- Share-Link → Drive & Ordner auflösen ---
     const encoded = _b64Url(SHARE_URL);
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,parentReference,folder,file`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) {
       throw new Error(`shares/driveItem: ${res.status} ${await res.text()}`);
     }
     const item = await res.json();
-    const folderItemId = item.folder ? item.id : item.parentReference?.id;
-    const driveId      = item.parentReference?.driveId;
+    const folderItemId = item.folder ? item.id : (item.parentReference ? item.parentReference.id : null);
+    const driveId      = item.parentReference ? item.parentReference.driveId : null;
     if (!driveId || !folderItemId) {
       throw new Error("Zielordner konnte nicht bestimmt werden.");
     }
     TARGET.driveId      = driveId;
     TARGET.parentItemId = folderItemId;
   }
+
 
   // --- Helper: children laden ---
   async function listChildren() {
@@ -3173,82 +3177,88 @@ async function resolveShareLinkToFolder() {
 
 
 // 3) Login/Token nur per Redirect
-async function signInAndAcquireToken(
-  interactive = false,
-  { rebuild = true } = {}
-) {
-  try {
-    let account =
-      msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+async function signInAndAcquireToken(interactive = false, { rebuild = true } = {}) {
 
-    // noch kein Account -> ggf. interaktiv einloggen
-    if (!account && interactive) {
-      await msalInstance.loginRedirect({ scopes });
-      return; // kommt nach Redirect zurück
-    }
-    if (!account) {
-      showLoginHint();
-      return;
-    }
+  // ✅ verhindert parallele Auth-Aufrufe
+  if (window.__authPromise) return window.__authPromise;
 
-    // Token holen
+  window.__authPromise = (async () => {
     try {
-      const t = await msalInstance.acquireTokenSilent({ scopes, account });
-      accessToken = t.accessToken;
-      window.accessToken = accessToken;
-    } catch (e) {
-      await msalInstance.acquireTokenRedirect({ scopes });
-      return;
-    }
+      let account =
+        msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
 
-    // OneDrive-Zielordner ermitteln
-    try {
-      await resolveShareLinkToFolder();
-    } catch (e) {
-      console.warn("resolveShareLinkToFolder:", e);
-    }
+      // noch kein Account -> ggf. interaktiv einloggen
+      if (!account && interactive) {
+        // ✅ wenn eine Interaktion schon läuft: nicht nochmal starten
+        if (sessionStorage.getItem("msal.interaction.status")) return;
+        await msalInstance.loginRedirect({ scopes });
+        return;
+      }
+      if (!account) {
+        showLoginHint();
+        return;
+      }
 
-    hideLoginHint();
-
-    // Reparatur-Stammdaten (wie bisher)
-    if (rebuild) {
+      // Token holen
       try {
-        await loadMasterData();
-       if (typeof window.rebuildDropdownsFromMaster === "function") {
-  window.rebuildDropdownsFromMaster();
-}
-
+        const t = await msalInstance.acquireTokenSilent({ scopes, account });
+        accessToken = t.accessToken;
+        window.accessToken = accessToken;
       } catch (e) {
-        console.warn("Reload master after sign-in failed:", e);
+        if (sessionStorage.getItem("msal.interaction.status")) return;
+        await msalInstance.acquireTokenRedirect({ scopes });
+        return;
       }
-    }
 
-    // ➕ NEU: Wartungslog aus der Cloud holen + Tabelle aktualisieren
-    try {
-      if (typeof wpLogLoad === "function") {
-        await wpLogLoad();
-      }
-    } catch (e) {
-      console.warn("wpLogLoad nach Sign-In:", e);
-    }
+      // ✅ nur wenn Token da ist
+      if (!window.accessToken) return;
 
-    try {
-      const panel = document.getElementById("wpLogPanel");
-      if (
-        panel &&
-        panel.style.display === "block" &&
-        typeof renderWpLogTable === "function"
-      ) {
-        renderWpLogTable();
+      // OneDrive-Zielordner ermitteln
+      try {
+        await resolveShareLinkToFolder();
+      } catch (e) {
+        console.warn("resolveShareLinkToFolder:", e);
       }
+
+      hideLoginHint();
+
+      if (rebuild) {
+        try {
+          await loadMasterData();
+          if (typeof window.rebuildDropdownsFromMaster === "function") {
+            window.rebuildDropdownsFromMaster();
+          }
+        } catch (e) {
+          console.warn("Reload master after sign-in failed:", e);
+        }
+      }
+
+      try {
+        if (typeof wpLogLoad === "function") await wpLogLoad();
+      } catch (e) {
+        console.warn("wpLogLoad nach Sign-In:", e);
+      }
+
+      try {
+        const panel = document.getElementById("wpLogPanel");
+        if (panel && panel.style.display === "block" && typeof renderWpLogTable === "function") {
+          renderWpLogTable();
+        }
+      } catch (e) {
+        console.warn("renderWpLogTable nach Sign-In:", e);
+      }
+
     } catch (e) {
-      console.warn("renderWpLogTable nach Sign-In:", e);
+      console.error("signInAndAcquireToken:", e);
+      showLoginHint();
+    } finally {
+      window.__authPromise = null;
     }
-  } catch (e) {
-    console.error("signInAndAcquireToken:", e);
-    showLoginHint();
-  }
+  })();
+
+  return window.__authPromise;
 }
+
 
 // ==========================================
 // ✅ Zentrale Cloud-Initialisierung
