@@ -4768,15 +4768,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 async function loadDashboard(){
-  await signInAndAcquireToken(true);
-  await resolveShareLinkToFolder();
-
   const tbody = document.querySelector('#dashTable tbody');
   const empty = document.getElementById('dashEmpty');
+  const dashBox = document.getElementById('dashAnalytics');
   if (!tbody) return;
 
   tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Lade…</td></tr>';
   if (empty) empty.style.display = 'none';
+  if (dashBox) dashBox.style.display = 'none';
 
   // Helpers
   const metaSuffixLower = String(META_SUFFIX || ".meta.json").toLowerCase();
@@ -4791,6 +4790,21 @@ async function loadDashboard(){
   }
 
   try{
+    // ✅ WICHTIG: alles, was werfen kann, muss im try liegen
+    await signInAndAcquireToken(true);
+
+    // Wenn signIn einen Redirect gestartet hat, kommt kein Token → hier sauber abbrechen
+    if (!accessToken) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Bitte zuerst anmelden.</td></tr>';
+      return;
+    }
+
+    await resolveShareLinkToFolder();
+
+    if (!TARGET?.driveId || !TARGET?.parentItemId) {
+      throw new Error("TARGET nicht gesetzt (driveId/parentItemId fehlen).");
+    }
+
     const headers = { Authorization: `Bearer ${accessToken}` };
 
     // PDFs im Hauptordner
@@ -4845,8 +4859,7 @@ async function loadDashboard(){
         continue;
       }
 
-      // Achtung: replace ohne Regex ersetzt nur 1:1; wir machen es robust
-      const auftragsId = String((meta.auftrags_id || m.name.replace(new RegExp(metaSuffixLower.replace(/\./g, "\\.") + "$", "i"), "")) || "").trim();
+      const auftragsId = String((meta.auftrags_id || meta.auftrag_id || m.name.replace(new RegExp(metaSuffixLower + '$','i'), '')) || "").trim();
       const pdfName    = meta.pdfName || `${auftragsId}.pdf`;
 
       // --- PROVISORIEN-Status bestimmen ---
@@ -4858,14 +4871,13 @@ async function loadDashboard(){
         provFlag = 1;
 
         const art    = meta.provisorium_art || "";
-        const vonStr = meta.provisorium_von || "";
         const bisStr = meta.provisorium_bis || "";
 
         const todayIso = new Date().toISOString().slice(0,10);
         let statusText = "";
 
         if (!bisStr) {
-          provStatus = "open"; // aktiv, kein Enddatum
+          provStatus = "open";
           statusText = "⚠ aktiv";
         } else {
           const bisIso      = String(bisStr).slice(0,10);
@@ -4883,21 +4895,15 @@ async function loadDashboard(){
         provText = (art ? art + " – " : "") + statusText;
       }
 
-      const provRef = (meta.provisorium_bezug_auftrag_id || "").trim();
-
-      // Falls dieser Auftrag selbst kein Provisorium setzt,
-      // aber ein anderes aufhebt, trotzdem Text anzeigen
-      if (!provText && provRef) {
-        provText = "Auflösung Provisorium " + provRef;
-      }
+      const provRef = String(meta.provisorium_bezug_auftrag_id || "").trim();
+      if (!provText && provRef) provText = "Auflösung Provisorium " + provRef;
 
       rows.push({
-        dateIso:   meta.bearbeitet_am || '',
-        dateDisp:  meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
-        tech:      [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
-        maschine:  meta.maschine_text || meta.maschine_value || '',
-        teil:      meta.anlagenteil_text || meta.anlagenteil_value || '',
-
+        dateIso:  meta.bearbeitet_am || '',
+        dateDisp: meta.bearbeitet_am ? new Date(meta.bearbeitet_am).toLocaleDateString('de-DE') : '',
+        tech:     [meta.techniker1, meta.techniker2].filter(Boolean).join(', '),
+        maschine: meta.maschine_text || meta.maschine_value || '',
+        teil:     meta.anlagenteil_text || meta.anlagenteil_value || '',
         provText,
         provFlag,
         provStatus,
@@ -4907,25 +4913,17 @@ async function loadDashboard(){
       });
     }
 
-    // ---------------------------------------------
-    // Verknüpfungen: welches Provisorium wurde durch
-    // welchen Auftrag aufgelöst?
-    // ---------------------------------------------
+    // Verknüpfungen "aufgelöst durch ..."
     const resolvedByMap = {};
     rows.forEach(r => {
       const ref = (r.provRef || "").trim();
       if (!ref) return;
-      if (!resolvedByMap[ref]) resolvedByMap[ref] = [];
-      resolvedByMap[ref].push(r.id);
+      (resolvedByMap[ref] ||= []).push(r.id);
     });
-
     rows.forEach(r => {
       const resolvers = resolvedByMap[r.id];
-      if (!resolvers || !resolvers.length) return;
-      const listStr = resolvers.join(", ");
-      r.provText =
-        (r.provText ? r.provText + " – " : "") +
-        "aufgelöst durch " + listStr;
+      if (!resolvers?.length) return;
+      r.provText = (r.provText ? r.provText + " – " : "") + "aufgelöst durch " + resolvers.join(", ");
     });
 
     // Sortieren nach Datum
@@ -4934,12 +4932,11 @@ async function loadDashboard(){
     if (!rows.length){
       tbody.innerHTML = '';
       if (empty) empty.style.display = 'block';
-      const dashBox = document.getElementById('dashAnalytics');
       if (dashBox) dashBox.style.display = 'none';
       return;
     }
 
-    // Tabellenzeilen rendern
+    // Rendern
     tbody.innerHTML = rows.map(r => {
       const idCell = r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.id}</a>` : r.id;
 
@@ -4958,15 +4955,19 @@ async function loadDashboard(){
       </tr>`;
     }).join('');
 
-    applyFiltersToDashboard(); // löst auch Analytics & Provisorium-Statistik aus
+    applyFiltersToDashboard();
+
+    if (dashBox) dashBox.style.display = 'block';
 
   } catch(e){
     console.error('Dashboard:', e);
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:8px;">Fehler beim Laden.</td></tr>';
-    const dashBox = document.getElementById('dashAnalytics');
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:8px;">
+      Fehler beim Laden: ${String(e?.message || e)}
+    </td></tr>`;
     if (dashBox) dashBox.style.display = 'none';
   }
 }
+
 
 
 /* 🔎 NEU: Balkenliste rendern */
