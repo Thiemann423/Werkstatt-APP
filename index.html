@@ -4925,13 +4925,15 @@ if (wartungHeadBtn && wartungHeadBtn.addEventListener) {
     p.style.display = willShow ? 'block' : 'none';
     wartungHeadBtn.textContent = willShow ? '🛠️ Wartung (zu)' : '🛠️ Wartung';
 
-    // ✅ Scroll nur wenn Section existiert
-    if (willShow && sec && sec.scrollIntoView) {
-      setTimeout(function () {
-        try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-        catch (_) { sec.scrollIntoView(true); }
-      }, 50);
-    }
+// ✅ Scroll: erst Section, sonst Panel
+var target = (sec && sec.scrollIntoView) ? sec : p;
+if (willShow && target && target.scrollIntoView) {
+  setTimeout(function () {
+    try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    catch (_) { target.scrollIntoView(true); }
+  }, 50);
+}
+
 
     console.log("Wartung Toggle:", { willShow: willShow, display: p.style.display });
   });
@@ -8106,41 +8108,7 @@ function wpSyncImageButton(task){
   window.wpOpenMachineFromName = openMaintenance;
 })();
 </script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
 
-  // 🛠️ Wartung: Wartungsplan-Panel + Formularbereich öffnen
-  const wartungBtn = document.getElementById("wartungToggleHead");
-  const panel      = document.getElementById("wartungsplanPanel");
-  const section    = document.getElementById("wartungsplanSection");
-
-  if (wartungBtn) {
-    wartungBtn.onclick = (e) => {
-      e.preventDefault();
-
-      if (!panel) {
-        console.warn("wartungsplanPanel nicht gefunden");
-        return;
-      }
-
-      const isOpen = (panel.style.display === "block");
-      panel.style.display = isOpen ? "none" : "block";
-
-      if (!isOpen && section) {
-        setTimeout(() => {
-          try {
-            section.scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch (_) {}
-        }, 80);
-      }
-    };
-  }
-
-
-
-  console.log("✅ UI-Initialisierung abgeschlossen");
-});
-</script>
 
 
 
