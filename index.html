@@ -4893,29 +4893,50 @@ document.addEventListener('DOMContentLoaded', function () {
     provSel2.addEventListener('change', function(){ applyFiltersToDraftDashboard(); });
   }
 
-  // ==============================
-  // 🛠️ Wartungsbereich im Kopf
-  // ==============================
-  var wartungHeadBtn = document.getElementById('wartungToggleHead');
-  if (wartungHeadBtn && wartungHeadBtn.addEventListener) {
-    wartungHeadBtn.addEventListener('click', function () {
-      var p   = document.getElementById('wartungsplanPanel');
-      var sec = document.getElementById('wartungsplanSection');
+// ==============================
+// 🛠️ Wartungsbereich im Kopf (robust)
+// ==============================
+var wartungHeadBtn = document.getElementById('wartungToggleHead');
+if (wartungHeadBtn && wartungHeadBtn.addEventListener) {
 
-      if (!p || !sec) {
-        alert('Wartungsbereich ist noch nicht eingebaut.');
-        return;
-      }
+  // wichtig: keine Doppel-Handler
+  wartungHeadBtn.onclick = null;
 
-      var willShow = (p.style.display === 'none' || !p.style.display);
-      p.style.display = willShow ? 'block' : 'none';
-      wartungHeadBtn.textContent = willShow ? '🛠️ Wartung (zu)' : '🛠️ Wartung';
+  wartungHeadBtn.addEventListener('click', function (e) {
+    if (e && e.preventDefault) e.preventDefault();
 
-      if (willShow && sec.scrollIntoView) {
-        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-  }
+    var p   = document.getElementById('wartungsplanPanel');
+    var sec = document.getElementById('wartungsplanSection');
+
+    if (!p) {
+      console.warn("wartungsplanPanel nicht gefunden");
+      return;
+    }
+
+    // ✅ robust: display auch über CSS erkennen (nicht nur inline style)
+    var isOpen = false;
+    try {
+      isOpen = (window.getComputedStyle(p).display !== 'none');
+    } catch (_) {
+      isOpen = (p.style.display === 'block');
+    }
+
+    var willShow = !isOpen;
+    p.style.display = willShow ? 'block' : 'none';
+    wartungHeadBtn.textContent = willShow ? '🛠️ Wartung (zu)' : '🛠️ Wartung';
+
+    // ✅ Scroll nur wenn Section existiert
+    if (willShow && sec && sec.scrollIntoView) {
+      setTimeout(function () {
+        try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch (_) { sec.scrollIntoView(true); }
+      }, 50);
+    }
+
+    console.log("Wartung Toggle:", { willShow: willShow, display: p.style.display });
+  });
+}
+
 });
 
 
